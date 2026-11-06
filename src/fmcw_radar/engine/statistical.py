@@ -186,7 +186,24 @@ def nonlinearity_profile(cfg: RadarConfig, chirp: ChirpResult, k: int | None = N
     return {"axis_m": axis_rel, "profile_db": prof_rel, "width_3db_m": rp["width_3db"],
             "width_rayleigh_m": rp["width_rayleigh"], "peak_sidelobe_db": rp["peak_sidelobe_db"],
             "islr_db": 10.0 * math.log10(max(side, 1e-300) / main), "ramp": k,
-            "phase_rms_rad": float(np.std(dpsi)), "phase_peak_rad": float(np.max(np.abs(dpsi - dpsi.mean())))}
+            "phase_rms_rad": float(np.std(dpsi)), "phase_peak_rad": float(np.max(np.abs(dpsi - dpsi.mean()))),
+            "ghosts": ghost_targets(axis_rel, prof_rel, 15 * cfg.range_resolution_m)}
+
+
+def ghost_targets(axis_m: np.ndarray, profile_db: np.ndarray, exclude_m: float, floor_db: float = -70.0,
+                  n_max: int = 6) -> list[tuple[float, float]]:
+    """Deterministic spurs of the chirp's frequency error as the range FFT
+    shows them: the local maxima of the profile farther than ``exclude_m``
+    from the target (the window's own sidelobes live inside) and above
+    ``floor_db``, as ``(range offset [m], level [dBc])``, strongest first.
+    A TDC quantisation ghost (cairn/chirp-engine.md) sits here at a fixed
+    offset; the time engine finds the same one on its map.  Only a
+    cycle-accurate curve can vouch for these (invariant #6)."""
+    far = np.abs(axis_m) > exclude_m
+    idx = [i for i in range(1, profile_db.size - 1)
+           if far[i] and profile_db[i] > floor_db and profile_db[i] > profile_db[i - 1] and profile_db[i] >= profile_db[i + 1]]
+    idx.sort(key=lambda i: -profile_db[i])
+    return [(float(axis_m[i]), float(profile_db[i])) for i in idx[:n_max]]
 
 
 def ideal_profile(cfg: RadarConfig, name: str | None = None) -> dict:
@@ -253,11 +270,12 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
                      "dp_cal_passes": [p["eps_hat"] for p in chirp.dp_cal_passes]}
         nl = nonlinearity_profile(cfg, chirp, k)
         res.nonlinearity = {key: nl[key] for key in ("width_3db_m", "width_rayleigh_m", "peak_sidelobe_db", "islr_db",
-                                                      "phase_rms_rad", "phase_peak_rad", "ramp")}
+                                                      "phase_rms_rad", "phase_peak_rad", "ramp", "ghosts")}
         res.nonlinearity["engine"] = chirp.engine
+        res.nonlinearity["ghosts_vouched"] = chirp.vouches_for_spurs
         res.extras["nonlinearity_profile"] = (nl["axis_m"], nl["profile_db"])
     return res
 
 
-__all__ = ["StatResult", "run_statistical", "pn_floor_table", "nonlinearity_profile", "ideal_profile",
+__all__ = ["StatResult", "run_statistical", "pn_floor_table", "nonlinearity_profile", "ideal_profile", "ghost_targets",
            "rd_cell_pn_offset_db", "scalloping_loss_db", "pn_floor_mean_cell", "beat_sideband", "REPORT_OFFSETS_M"]

@@ -31,7 +31,7 @@ cases = [("matched, event (loop + quantisation)", {"lo.dp_gain": 1.0, "lo.dp_cal
          ("5 % mismatch, event, no cal", {"lo.dp_gain": 1.05, "lo.dp_cal": "none"}),
          ("5 % mismatch, response (linearised)", {"lo.dp_gain": 1.05, "lo.dp_cal": "none", "lo.engine": "response"}),
          ("5 % mismatch, event, offline cal x2", {"lo.dp_gain": 1.05, "lo.dp_cal": "offline"}),
-         ("5 % mismatch, event, online cal", {"lo.dp_gain": 1.05, "lo.dp_cal": "online", "lo.dp_cal_mu": 1e-4})]
+         ("5 % mismatch, event, online cal", {"lo.dp_gain": 1.05, "lo.dp_cal": "online"})]
 curves = {}
 for label, ov in cases:
     cfg = load_config(CONFIG, {"chirp.n_chirps": 4, **ov})
@@ -43,13 +43,17 @@ for label, ov in cases:
     if c.dp_cal_passes:
         extra = " passes eps=" + ",".join(f"{p['eps_hat']:.4f}" for p in c.dp_cal_passes)
     if c.dp_cal_trace is not None:
-        extra = f" online gain 1.05 -> {c.dp_gain_used:.4f} after 4 chirps"
+        extra = (" online gain 1.05 -> " + " -> ".join(f"{c.dp_cal_trace[k * c.n_ramp - 1]:.4f}" for k in (1, 2, 3, 4))
+                 + " over 4 chirps (post-flyback LMS)")
     print(f"\n{label} [{c.engine}, {c.cpu_s:.2f} s]{extra}")
     print(f"  ramp 2: initial error {m['initial_error_hz'] / 1e6:.3f} MHz settled to +-{m['settle_band_hz'] / 1e3:.0f} kHz "
           f"in {m['settle_s'] * 1e9:.0f} ns; peak {m['peak_hz'] / 1e6:.3f} MHz, RMS {m['rms_hz'] / 1e3:.1f} kHz, "
           f"floor {m['floor_rms_hz'] / 1e3:.1f} kHz RMS (carrier)")
     print(f"  range response: -3 dB width {nl['width_3db_m'] * 100:.2f} cm, peak sidelobe {nl['peak_sidelobe_db']:.1f} dB, "
           f"ISLR {nl['islr_db']:.1f} dB, beat phase perturbation {nl['phase_rms_rad'] * 1e3:.1f} mrad RMS")
+    if nl["ghosts"]:
+        print("  ghost targets (offset m, dBc): " + ", ".join(f"{dr:+.2f} / {lvl:.1f}" for dr, lvl in nl["ghosts"][:4])
+              + ("" if c.vouches_for_spurs else "  [linearised curve: not vouched for]"))
     rows.append((label, m, nl))
 
 # event vs response on the mismatch transient, cycle by cycle

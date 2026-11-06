@@ -17,16 +17,13 @@
 
 ## P1 — 结论的可信度
 
-1. **TDC 量化的鬼目标在真噪声下不消失,但统计引擎不知道它**。32 chirp 帧、5 m 目标:无噪声 event 引擎 9.87 m 处 −45.5 dBc(5 ps TDC;2 ps 时 −55.8 dBc),
-   开环路噪声后 2.2 / 7.81 m 处 −49 … −50 dBc(两个 seed 同位置)。机制与数字见 `cairn/chirp-engine.md`。统计引擎的非线性剖面只拿一个 ramp 的曲线,
-   看得到它在距离维的位置,但 CFAR / Pd 的闭式里没有这一项;示例 00 的 CFAR 因此在主瓣外报 12 格。
-   要做:(a) 在统计引擎里把 event 曲线的鬼目标当确定性杂散列表报出(距离、电平),与窗旁瓣、相噪底并列;(b) TDC dither(pllsim 没有,报回 pll_simulator);
-   (c) chirp 引擎带噪声时与 `LOProfile` 的分工(环内由逐周期引擎、环外由剖面)以免重复计相噪。
-   复现:`run_time(cfg, ChirpEngine(cfg).run(noise=False, n_chirps=32), phase_noise=False, noise=False, quantise=False)`,看 rd_db 离目标 ±40 格外的最大值。
-2. **在线 dp_cal 收敛慢**:差分 sign-sign(`ChirpSignSignCal`)1.05 → 1.006 要 20 个 chirp(2 ms),从 0.96 一侧 6 个 chirp 只到 0.97;
-   polar_tx 原版 SignSignLMS 在锯齿上发散(1.05 → 1.066)。要做:gear shift(大 mu 粗调后小 mu)、只在飞回后固定窗口内更新、或 LMS 全精度。
-   默认是离线 LS(一次到 1e-4),足够里程碑 1。复现:示例 02 最后一组。
-3. **polar_tx 的 event 有效域指标在 chirp 上读 495 %**,本库的判断是指标不适用(见 `cairn/chirp-engine.md`)。这是本库的读法,
+1. **TDC 量化的鬼目标:统计引擎现在报它,但 CFAR / Pd 的闭式仍不含它**。32 chirp 帧、5 m 目标:无噪声 event 引擎 9.87 m 处 −45.5 dBc(5 ps TDC;2 ps 时 −55.8 dBc),
+   开环路噪声后 2.2 / 7.81 m 处 −49 … −50 dBc(两个 seed 同位置)。机制与数字见 `cairn/chirp-engine.md`。0.1.1 起 `StatResult.nonlinearity["ghosts"]`
+   从单 ramp 的曲线列出它(±4.85 m,−45.3 dBc,与距离–多普勒图 3 dB 内一致),报表有一张表;示例 00 的 CFAR 仍在主瓣外报 12 格,因为 Pd / Pfa 的闭式只认高斯噪底。
+   要做:(a) TDC dither(pllsim 没有,报回 pll_simulator);(b) chirp 引擎带噪声时与 `LOProfile` 的分工(环内由逐周期引擎、环外由剖面)以免重复计相噪;
+   (c) 多目标 / CFAR 曲线(里程碑 2)把确定性杂散算进虚警。
+   复现:`run_statistical(cfg).nonlinearity["ghosts"]`;时域对照 `run_time(cfg, ..., phase_noise=False, noise=False, quantise=False)` 看 rd_db 离目标 ±40 格外的最大值。
+2. **polar_tx 的 event 有效域指标在 chirp 上读 495 %**,本库的判断是指标不适用(见 `cairn/chirp-engine.md`)。这是本库的读法,
    应报回 polar_tx ROADMAP B1:指标按"亚周期相位轨迹"与"频率斜坡"分开。没有报之前,`ChirpResult.ui_per_ref_cycle_p99` 和报表都把数打出来。
 
 ## P2 — 一致性与能力

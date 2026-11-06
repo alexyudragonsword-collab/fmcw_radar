@@ -3,13 +3,23 @@
 本文件按倒序记录实质性进展 —— 最新条目在本行正下方。每条保持简短(数字原值、被推翻的判断、下一步),
 结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-11-06 · 0.1.1:鬼目标进统计引擎、在线校准定型(ccr-dd350ddf-xv24an)
+
+- `nonlinearity_profile` 从单 ramp 曲线提鬼目标(主瓣外 15 格、−70 dBc 以上的局部极大):5 ps TDC ±4.85 m −45.3 dBc,2 ps −54.9 dBc;
+  与时域图 3 dB 内一致;报表加表,`ghosts_vouched` 跟 event 引擎走。
+- 在线校准走了四条弯路后定型为飞回后 20 周期的幅值加权 LMS(`ChirpFlybackLMS`,mu 1e-2):±5 % 四个 chirp 内到 ±0.05 %。
+  被推翻的判断:"gear shift 能救 sign-sign"——问题不在步长而在更新的位置(信息只在飞回后 25 个周期里),大 mu 反而让它乱走。
+  被推翻的判断 2:窗口里的 sign-sign 停在 0.995 不是失配,是 TDC 锯齿的符号不对称,换幅值加权就无偏。
+- 新 config 字段 `lo.dp_cal_window_cycles`(20);`lo.dp_cal_mu` 含义改为窗口内 LMS 增益(默认 1e-2)。指纹:在线用例与新 ghost 键动了,其余逐位不变。
+- 下一步:ROADMAP P1 #1(a)–(c);里程碑 2。
+
 ## 2026-11-06 · CI 首轮修复与 TDC 鬼目标判定(ccr-dd350ddf-xv24an)
 
 - CI 红两处:fingerprint 作业在单提交历史上 `git rev-parse HEAD^` 把字面量 "HEAD^" 当 base(改 `--verify -q`);
   test-floor 作业的 numpy 1.26 没有 `np.trapezoid`(测试改用 conftest 的 shim;源码本来就有 shim)。
 - ROADMAP P1 #1 判定:杂散随 TDC 分辨率变(5 ps −45.5 dBc @ 9.87 m,2 ps −55.8 dBc @ 10.07 m)、不随 Kdco 变、开环路噪声后不消失
   (2.2 / 7.81 m 处 −49 dBc)→ TDC 量化的鬼目标,物理,不是 `noise=False` 的产物。被推翻的判断:原以为是 dither 限环。
-- 下一步:把鬼目标作为确定性杂散列表进统计引擎(ROADMAP P1 #1a);在线 dp_cal 的 gear shift(P1 #2)。
+- 下一步:把鬼目标作为确定性杂散列表进统计引擎(ROADMAP P1 #1a);在线 dp_cal(P1 #2)。
 
 ## 2026-11-06 · 里程碑 1:单 chirp、单目标(ccr-dd350ddf-xv24an,0.1.0)
 

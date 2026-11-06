@@ -103,6 +103,29 @@ def test_mismatch_widens_nothing_but_raises_the_sidelobes_and_calibration_restor
     assert cal.chirp["dp_gain_used"] == pytest.approx(1.0, abs=0.002)
 
 
+def test_tdc_ghost_targets_are_reported_and_scale_with_the_tdc():
+    """ROADMAP P1 #1a: the TDC's quantisation puts a ghost at a fixed range
+    offset (+-4.9 m for the 5 ps default, about -45 dBc); a 2 ps TDC puts
+    it 8 dB and more lower; the time engine's map shows the same one."""
+    base = run_statistical(apply_overrides(RadarConfig(), {"chirp.n_chirps": 3}))
+    ghosts = base.nonlinearity["ghosts"]
+    assert ghosts and base.nonlinearity["ghosts_vouched"]
+    off, lvl = ghosts[0]
+    assert 4.0 < abs(off) < 6.0 and -50.0 < lvl < -40.0
+    assert any(abs(o + off) < 0.1 for o, _ in ghosts)                     # a symmetric pair
+    fine = run_statistical(apply_overrides(RadarConfig(), {"chirp.n_chirps": 3, "lo.tdc_res_s": 2e-12}))
+    assert fine.nonlinearity["ghosts"][0][1] < lvl - 8.0
+    cfg = apply_overrides(RadarConfig(), {"chirp.n_chirps": 8, "target.velocity_mps": 0.0})
+    tm = run_time(cfg, noise=False, phase_noise=False, quantise=False)
+    half = tm.rd_db.shape[1] // 2
+    i, j = tm.extras["peak_rc"]
+    row = tm.rd_db[i, :half] - tm.rd_db[i, j]
+    jj = int(np.argmin(np.abs(tm.range_axis_m[:half] - (cfg.target.range_m + off))))
+    assert np.max(row[jj - 8:jj + 9]) == pytest.approx(lvl, abs=3.0)
+    lin = run_statistical(apply_overrides(RadarConfig(), {"chirp.n_chirps": 3, "lo.engine": "response"}))
+    assert not lin.nonlinearity["ghosts_vouched"]
+
+
 def test_statistical_result_reports_what_the_report_prints(cfg60):
     st = run_statistical(apply_overrides(cfg60, {"chirp.n_chirps": 3}))
     assert st.range_bin == pytest.approx(cfg60.beat_hz() * cfg60.chirp.duration_s)

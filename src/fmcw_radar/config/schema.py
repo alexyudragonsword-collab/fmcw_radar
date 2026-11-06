@@ -148,7 +148,8 @@ class LOConfig:
     dp_gain: float = 1.0                # direct-path gain as built: 1 + eps is a two-point mismatch of eps
     dp_cal: Literal["none", "offline", "online"] = "offline"   # two-point gain calibration (chirp linearity)
     dp_cal_iterations: int = 2          # offline: least-squares passes, one chirp each
-    dp_cal_mu: float = 1.0e-4           # online: sign-sign step per reference cycle
+    dp_cal_mu: float = 1.0e-2           # online: LMS gain in the post-flyback window [1 / UI]
+    dp_cal_window_cycles: int = 20      # online: reference cycles after each flyback the LMS updates on
     settle_cycles: int = 40_000         # event engine: cycles before the first chirp
     engine: Literal["event", "response", "ideal"] = "event"
     profile: Optional[str] = None       # a pll_simulator clock profile (YAML) for the LO phase noise instead of
@@ -176,6 +177,7 @@ class LOConfig:
         _require_in(self.dp_cal, {"none", "offline", "online"}, "lo.dp_cal")
         _require(self.dp_cal_iterations >= 1, "lo.dp_cal_iterations must be >= 1")
         _finite_pos(self.dp_cal_mu, "lo.dp_cal_mu")
+        _require(self.dp_cal_window_cycles >= 1, "lo.dp_cal_window_cycles must be >= 1")
         _require(self.settle_cycles >= 1000, "lo.settle_cycles must be >= 1000 (the loop has to lock first)")
         _require_in(self.engine, {"event", "response", "ideal"}, "lo.engine")
         _finite(self.profile_shift_db, "lo.profile_shift_db")

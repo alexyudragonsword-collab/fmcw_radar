@@ -4,6 +4,16 @@
 
 ---
 
+## [0.1.1] — 2026-11-06 — 鬼目标与在线校准(里程碑 1 的 P1 余项)
+
+- `StatResult.nonlinearity["ghosts"]`:chirp 频率误差曲线的确定性杂散,从单 ramp 的距离响应里提(主瓣外、−70 dBc 以上的局部极大),
+  `ghosts_vouched` 只在 event 引擎下为真(铁律 6);报表多一张表。默认 5 ps TDC 在 ±4.85 m 处 −45.3 dBc,2 ps 时 −54.9 dBc,与时域图 3 dB 内一致。
+- 在线两点校准换成飞回后 20 周期的幅值加权 LMS(`ChirpFlybackLMS`):±5 % 四个 chirp 内到 ±0.05 %,无偏;新字段 `lo.dp_cal_window_cycles`,
+  `lo.dp_cal_mu` 改为窗口内增益(默认 1e-2)。四条弯路记在 `cairn/chirp-engine.md`。
+- CI:单提交历史上的 fingerprint base、依赖下限的 `np.trapezoid`。指纹:在线用例与新 ghost 键动了,其余逐位不变(numbers-move)。
+
+---
+
 ## [0.1.0] — 2026-11-06 — 里程碑 1:单 chirp、单目标
 
 - **配置层**(`fmcw_radar.config`):frozen `RadarConfig`(频段 / chirp / LO / 前端 / 信道 / 目标 / 接收 / 处理 / 仿真),YAML 严格加载、

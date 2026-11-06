@@ -10,7 +10,7 @@ way; the ideal engine has no error; the quadratic is a reference, not an engine.
 import numpy as np
 import pytest
 
-from fmcw_radar.chirp import ChirpEngine, ChirpSignSignCal, command_train, quadratic_reference, ui_per_ref_cycle_p99
+from fmcw_radar.chirp import ChirpEngine, ChirpFlybackLMS, command_train, quadratic_reference, ui_per_ref_cycle_p99
 from fmcw_radar.config import RadarConfig, apply_overrides
 
 
@@ -94,20 +94,27 @@ def test_offline_calibration_removes_the_mismatch():
     assert rr.dp_cal_passes[0]["eps_hat"] == pytest.approx(0.05, rel=0.01)
 
 
-def test_online_calibration_moves_the_right_way_from_both_sides():
+def test_online_calibration_converges_in_a_few_chirps_from_both_sides():
+    """The post-flyback LMS (ROADMAP P1 #2, closed): 5 % either way to within
+    0.3 % of 1 after six chirps, with the loop's noise on, no bias."""
     for g in (1.05, 0.96):
-        r = ChirpEngine(_cfg(**{"lo.dp_gain": g, "lo.dp_cal": "online", "lo.dp_cal_mu": 1e-4, "chirp.n_chirps": 6})).run()
+        r = ChirpEngine(_cfg(**{"lo.dp_gain": g, "lo.dp_cal": "online", "chirp.n_chirps": 6})).run(noise=True)
         assert r.dp_cal_trace is not None and r.dp_cal_trace.size == 6 * r.n_ramp
-        assert abs(r.dp_gain_used - 1.0) < abs(g - 1.0)
+        assert abs(r.dp_gain_used - 1.0) < 0.003, (g, r.dp_gain_used)
+        assert abs(r.dp_cal_trace[2 * r.n_ramp] - 1.0) < abs(g - 1.0) / 2      # halfway by the third chirp
 
 
-def test_sign_sign_cal_contract():
-    cal = ChirpSignSignCal(1.0, 1e-3)
+def test_flyback_lms_contract():
+    cal = ChirpFlybackLMS(1.0, 1e-2, window_cycles=2, step_threshold=0.5)
     cal.step(0.0, 0.0)
-    cal.step(-1.0, 1.0)      # error falls on a positive step: the gain is high
-    assert cal.value == pytest.approx(1.0 - 1e-3) and len(cal.trace) == 2
-    cal.step(-1.0, 1.0)      # no change in either: no update
-    assert cal.value == pytest.approx(1.0 - 1e-3)
+    cal.step(0.0, 0.1)       # a ramp step below the threshold: no window, no update
+    assert cal.value == 1.0 and cal.flybacks == 0
+    cal.step(0.0, -1.0)      # the flyback opens the window
+    cal.step(0.4, -0.9)      # the error rises on a negative step: the gain is high
+    assert cal.flybacks == 1 and cal.value == pytest.approx(1.0 - 1e-2 * 0.4)
+    cal.step(0.6, -0.8)
+    cal.step(1.0, -0.7)      # the window has closed
+    assert cal.value == pytest.approx(1.0 - 1e-2 * 0.6) and len(cal.trace) == 6
 
 
 def test_quadratic_reference_is_labelled_and_scaled():

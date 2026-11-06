@@ -74,6 +74,8 @@ def stat_values(s) -> dict:
     for k, v in s.nonlinearity.items():
         if isinstance(v, (int, float)):
             out["nl." + k] = _scalar(v)
+    for i, (dr, lvl) in enumerate(s.nonlinearity.get("ghosts") or []):
+        out[f"nl.ghost.{i}"] = f"{dr!r},{lvl!r}"
     if "nonlinearity_profile" in s.extras:
         out["nl.profile"] = digest(s.extras["nonlinearity_profile"][1])
     return out

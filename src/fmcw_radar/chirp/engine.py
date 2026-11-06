@@ -53,7 +53,7 @@ import numpy as np
 from ..config.schema import RadarConfig
 from ..lo import build_adpll
 from ..vendor.polartx.phasemod import ADPLLTwoPoint
-from .dp_cal import ChirpSignSignCal, offline_dp_gain
+from .dp_cal import ChirpFlybackLMS, offline_dp_gain
 
 TWOPI = 2.0 * np.pi
 
@@ -237,7 +237,8 @@ class ChirpEngine:
     def _event(self, f_cmd, nc, n_ramp, n_idle, noise, seed, ui99) -> ChirpResult:
         cfg = self.cfg
         dp_gain, passes = self._calibrate_offline(f_cmd[:n_ramp + n_idle], "event")
-        cal = ChirpSignSignCal(dp_gain, cfg.lo.dp_cal_mu) if cfg.lo.dp_cal == "online" else None
+        cal = (ChirpFlybackLMS(dp_gain, cfg.lo.dp_cal_mu, cfg.lo.dp_cal_window_cycles, 0.3 * cfg.dco_sweep_hz)
+               if cfg.lo.dp_cal == "online" else None)
         f_err, sim = self._simulate(f_cmd, dp_gain, noise, seed, cal)
         trace = None
         if cal is not None:

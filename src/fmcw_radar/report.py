@@ -87,6 +87,14 @@ def to_markdown(rep: dict) -> str:
                   f"(window alone {R['range_res_m'] * 100:.2f} cm), peak sidelobe {N['peak_sidelobe_db']:.1f} dB "
                   f"(window alone {R['window_sidelobe_db']:.1f} dB), ISLR {N['islr_db']:.1f} dB, beat phase "
                   f"perturbation {N['phase_rms_rad'] * 1e3:.1f} mrad RMS."]
+        ghosts = N.get("ghosts") or []
+        if ghosts:
+            lines += ["", "Ghost targets of the chirp's frequency error (local maxima of that response beyond the "
+                      "window's sidelobes; "
+                      + ("the cycle-accurate engine vouches for them" if N.get("ghosts_vouched") else
+                         "from a linearised curve: NOT vouched for, invariant #6") + "):", "",
+                      "| offset from the target [m] | level [dBc] |", "|---:|---:|"]
+            lines += [f"| {dr:+.2f} | {lvl:.1f} |" for dr, lvl in ghosts]
     return "\n".join(lines) + "\n"
 
 
