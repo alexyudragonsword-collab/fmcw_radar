@@ -1,0 +1,29 @@
+60 GHz sensing radar: 4 GHz sweep, 100 us chirps x 64, 10 MS/s, hann windows
+  TX 10 (source: assumed) dBm + 10 (source: assumed) dBi; RX 10 (source: assumed) dBi, NF 10 (source: assumed) dB
+  target: human at 5 m, +2 m/s, RCS -10 dBsm (source: survey)
+radar equation:
+  EIRP                                                 20.00 dBm
+  free-space path loss (4pi)^3 R^4 / lambda^2         106.96 dB
+  oxygen over 2R                                        0.15 dB
+  extra two-way loss                                    0.00 dB
+  RCS                                                 -10.00 dBsm
+  received power P_r                                  -87.11 dBm
+  signal at the ADC                                   -47.11 dBm
+  thermal noise density at the antenna k T0 F        -163.98 dBm/Hz
+  thermal noise density at the ADC                   -123.98 dBm/Hz
+  ADC quantisation noise density                     -140.00 dBm/Hz
+  total noise density at the ADC                     -123.87 dBm/Hz
+  C/N0                                                 76.76 dBHz
+  SNR, one chirp, one range bin                        35.00 dB
+  SNR, one range-Doppler cell                          51.30 dB
+  SNR, rectangular windows (matched filter)            54.82 dB
+  window loss                                           3.52 dB
+  P1dB margin (input, target only)                     67.11 dB
+  beat 1334.3 kHz = range bin 133.43; Doppler +800.6 Hz = bin +5.12
+  Pd 1.0000 at Pfa 0.0001 (Swerling 0, cell SNR 51.30 dB)
+time engine (64 chirps, 5 GS/s envelope, 500000 samples per chirp):
+  peak at 5.012 m (interpolated 5.016 m), +1.952 m/s; configured 5 m, +2 m/s
+  measured cell SNR 51.06 dB vs statistical 51.06 dB expected on the grid (scalloping 0.03 + 0.09 dB, LO noise -69.3 dBc per cell over the band): difference -0.00 dB
+  -3 dB width of the range response 5.37 cm (window theory 5.34 cm, c/2B 3.75 cm)
+  CA-CFAR (guard 2, train 8, Pfa 0.0001): 33 cells over threshold, 21 in the target's lobe (the zero-padded grid's neighbours), 12 elsewhere: 8.63 m / -9.76 m/s, 8.64 m / -5.46 m/s, 8.65 m / -5.46 m/s, 1.53 m / +3.12 m/s -- the cycle-accurate engine's quantisation spur (ROADMAP P1 #1)
+  wrote examples/output/00_single_target_rd_map.png

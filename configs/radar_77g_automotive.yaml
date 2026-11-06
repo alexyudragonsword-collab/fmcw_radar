@@ -1,0 +1,46 @@
+# 77 GHz automotive tier: the same structure, other numbers.  76.5-78.5 GHz
+# (B = 2 GHz), 50 us chirps x 128, a 19.25 GHz ADPLL x4, a car at 25 m
+# closing at 10 m/s.  Front-end placeholders: source: assumed, all of them.
+schema_version: 1
+band:
+  kind: 77g_automotive
+  center_hz: 77.5e9
+  sweep_hz: 2.0e9
+chirp:
+  shape: sawtooth
+  duration_s: 50.0e-6
+  idle_s: 5.0e-6
+  n_chirps: 128
+lo:
+  fref_hz: 100.0e6
+  loop_bw_hz: 1.0e6
+  phase_margin_deg: 60.0
+  kdco_hz: 50.0e3
+  dp_gain: 1.0
+  dp_cal: offline
+  dp_cal_iterations: 2
+  engine: event
+frontend: {}
+channel:
+  extra_loss_db: 1.0
+target:
+  kind: car
+  range_m: 25.0
+  velocity_mps: -10.0
+rx:
+  if_bw_hz: 10.0e6
+  adc_fs_hz: 25.0e6
+  adc_bits: 12
+  adc_fullscale_dbm: 4.0
+processing:
+  window_range: hann
+  window_doppler: hann
+  range_pad: 4
+  doppler_pad: 1
+  cfar_guard: 2
+  cfar_train: 8
+  cfar_pfa: 1.0e-4
+sim:
+  seed: 1
+  engine: statistical
+  time_osr: 1.25

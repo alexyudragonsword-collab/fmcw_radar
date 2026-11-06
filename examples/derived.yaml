@@ -1,0 +1,8 @@
+# Derived numbers the docs quote (tools/example_drift.py derived): each operand is a
+# number printed by an example; a quote is doc text with {expr} where the result is.
+- name: ex00 window loss
+  values:
+    rect: {example: "00", line: "SNR, rectangular windows (matched filter) {} dB"}
+    cell: {example: "00", line: "SNR, one range-Doppler cell {} dB"}
+  quotes:
+    - {doc: README.md, text: "格点 SNR {cell} dB(矩形窗 {rect},窗损失 {rect - cell} dB)"}

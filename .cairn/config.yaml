@@ -1,0 +1,20 @@
+version: 0.1
+project:
+  name: "fmcw_radar"
+  summary: "60 GHz 宽带 FMCW 雷达的行为级仿真框架:ADPLL chirp 发生、TX / RX 共用 LO 的 range correlation、雷达方程、距离–多普勒处理、统计 / 时域双引擎;mmw60_trx 的姊妹库。"
+cairn:
+  knowledge_dir: "cairn"
+  # Date of the skill spec this instance was initialized against (stamped by
+  # init from references/upgrade.md's "Current spec date"; not a user decision).
+  skill_spec_date: "2026-08-07"
+  # git_policy: track | ignore | private_sync
+  git_policy: "track"
+  # language: en | zh | ...
+  language: "zh"
+graduation:
+  # (c) Deferred — no knowledge base connected yet; provider decisions are
+  #     collected at the first graduation (references/graduation.md).
+  provider: none
+history:
+  # migration_mode: start_fresh | inventory_only | selective_migrate
+  migration_mode: "start_fresh"

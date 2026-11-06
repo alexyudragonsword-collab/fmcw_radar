@@ -1,0 +1,20 @@
+window | -3 dB width [bins] (own spectrum) | Harris 1978 (source: survey) | peak sidelobe [dB]
+  rect     |  0.884 |  0.89 |  -13.3
+  hann     |  1.438 |  1.44 |  -31.5
+  hamming  |  1.301 |  1.30 |  -42.7
+  blackman |  1.641 |  1.68 |  -58.1
+
+range resolution [cm], -3 dB width of the point-target response (statistical: window spectrum):
+  sweep [GHz] | c/2B [cm] | rect     | hann     | hamming  | blackman
+            1 |     14.99 |    12.69 |    21.37 |    19.10 |    24.36
+            2 |      7.49 |     6.35 |    10.69 |     9.55 |    12.18
+            4 |      3.75 |     3.17 |     5.34 |     4.77 |     6.09
+            7 |      2.14 |     1.81 |     3.05 |     2.73 |     3.48
+
+measured on the time engine (ideal chirp, no noise, no phase noise), 4 GHz sweep:
+  window   | Rayleigh width [cm] | c/2B [cm] | -3 dB width [cm] | theory [cm] | peak sidelobe [dB]
+  rect     |                3.73 |      3.75 |             3.28 |        3.27 |              -13.3
+  hann     |                6.11 |      3.75 |             5.37 |        5.37 |              -31.5
+  hamming  |                5.54 |      3.75 |             4.86 |        4.86 |              -42.7
+  blackman |                6.99 |      3.75 |             6.13 |        6.13 |              -58.2
+  wrote examples/output/03_bandwidth_window_resolution.png

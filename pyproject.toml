@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fmcw-radar"
+version = "0.1.0"
+description = "Behavioural simulation of 60 GHz wideband FMCW radar: ADPLL chirp generation, range-correlated LO phase noise, range-Doppler processing, statistical and time-domain engines"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+plot = ["matplotlib>=3.7"]
+test = ["pytest>=7.0", "ruff>=0.4"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+# the source table travels with the package (configs and examples read it by key)
+fmcw_radar = ["data/*.yaml", "data/clock_profiles/*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+# vendored copies are checked against upstream, not re-linted here (polar_tx CONTRIBUTING 3)
+extend-exclude = ["src/fmcw_radar/vendor"]
+
+[tool.ruff.lint]
+# Gate on real defects (pyflakes: undefined names, unused imports/vars) and
+# syntax errors -- not stylistic churn, same as d2d_link and Halo_Serdes.
+select = ["E9", "F"]

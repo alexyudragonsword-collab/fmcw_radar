@@ -1,0 +1,27 @@
+window alone (hann): -3 dB width 5.34 cm, peak sidelobe -32.2 dB; c/2B = 3.75 cm
+DCO 15 GHz x4, ramp 1000 MHz at the DCO in 100 us, fref 100 MHz, loop 1 MHz
+
+matched, event (loop + quantisation) [event, 0.16 s]
+  ramp 2: initial error 0.200 MHz settled to +-2680 kHz in 0 ns; peak 1.400 MHz, RMS 513.2 kHz, floor 536.0 kHz RMS (carrier)
+  range response: -3 dB width 5.34 cm, peak sidelobe -31.5 dB, ISLR -28.6 dB, beat phase perturbation 56.1 mrad RMS
+
+5 % mismatch, event, no cal [event, 0.16 s]
+  ramp 2: initial error 199.401 MHz settled to +-3988 kHz in 1470 ns; peak 199.400 MHz, RMS 6187.8 kHz, floor 544.2 kHz RMS (carrier)
+  range response: -3 dB width 5.34 cm, peak sidelobe -31.5 dB, ISLR -29.0 dB, beat phase perturbation 1070.0 mrad RMS
+
+5 % mismatch, response (linearised) [response, 0.00 s]
+  ramp 2: initial error 200.000 MHz settled to +-4000 kHz in 1100 ns; peak 200.000 MHz, RMS 6147.3 kHz, floor 0.0 kHz RMS (carrier)
+  range response: -3 dB width 5.34 cm, peak sidelobe -31.5 dB, ISLR -33.0 dB, beat phase perturbation 1064.4 mrad RMS
+
+5 % mismatch, event, offline cal x2 [event, 0.49 s] passes eps=0.0500,0.0001
+  ramp 2: initial error 0.200 MHz settled to +-2702 kHz in 0 ns; peak 1.400 MHz, RMS 514.1 kHz, floor 540.5 kHz RMS (carrier)
+  range response: -3 dB width 5.34 cm, peak sidelobe -31.5 dB, ISLR -28.4 dB, beat phase perturbation 57.1 mrad RMS
+
+5 % mismatch, event, online cal [event, 0.28 s] online gain 1.05 -> 1.0336 after 4 chirps
+  ramp 2: initial error 164.198 MHz settled to +-4630 kHz in 1670 ns; peak 164.200 MHz, RMS 5245.5 kHz, floor 926.0 kHz RMS (carrier)
+  range response: -3 dB width 5.35 cm, peak sidelobe -30.5 dB, ISLR -24.3 dB, beat phase perturbation 919.3 mrad RMS
+
+event / response on the first 40 cycles after the flyback: ratio 1.0053 +- 0.0455 (event floor 544 kHz RMS, response floor 0: the quantisation)
+
+reference group: analytic quadratic of the same RMS (6188 kHz at the carrier): -3 dB width 7.53 cm, peak sidelobe -58.2 dB, ISLR -56.9 dB -- the loop's step-and-decay puts its energy elsewhere than a parabola would
+  wrote examples/output/02_chirp_nonlinearity.png

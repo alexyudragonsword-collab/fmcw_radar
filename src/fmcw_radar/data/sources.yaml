@@ -1,0 +1,196 @@
+# 外部来源与占位数字表 —— 本库里每一个不是用户在 config 里定的数都在这里，一条一个，带来源标签。
+#
+#   assumed  前端占位值:mmw60_trx 的前端模块到位之前先用一个数(增益、NF、P1dB、LO 相噪剖面),
+#            到位后换成它的前端对象并重新 pin。没有任何实测或文献依据,只是量级合理。
+#   survey   外部文献 / 标准的数,只读到二手转述或摘要,未核对原文(note 里写"未核实")。
+#   spec     已对照原文的数(需要 quote 与 section)。目前没有。
+#
+# 用 grep 数标签行(README 里写的那条命令,tests/test_sources.py 跑它)得到的数必须等于表里的条目数:
+# 所以文件头里不出现"标签名 + 冒号"这个字串。
+# 频段、扫频、chirp、ADC、目标距离 / 速度是用户的设计决定,写在 configs/*.yaml,不在这里。
+
+entries:
+
+  # ---------------------------------------------------------------- 60 GHz 感知雷达前端占位(全部 assumed)
+  60g_sensing.tx_power_dbm:
+    value: 10.0
+    unit: dBm
+    source: assumed
+    cite: "placeholder for the mmw60_trx PA / front end (not born yet); a 60 GHz CMOS PA at a few mW per element"
+    note: "占位:mmw60_trx 前端到位后由它的 PA 对象给出。"
+  60g_sensing.tx_gain_dbi:
+    value: 10.0
+    unit: dBi
+    source: assumed
+    cite: "placeholder: a small in-package antenna / sub-array at 60 GHz"
+    note: "占位:mmw60_trx 的阵列 / 封装模块到位后替换。"
+  60g_sensing.rx_gain_dbi:
+    value: 10.0
+    unit: dBi
+    source: assumed
+    cite: "placeholder: same aperture as the transmit side"
+    note: "占位。"
+  60g_sensing.rx_gain_db:
+    value: 40.0
+    unit: dB
+    source: assumed
+    cite: "placeholder: LNA + mixer + IF amplifier to the ADC"
+    note: "占位:只影响 ADC 量化噪声与 P1dB 裕量的折算,不影响热噪声 SNR。"
+  60g_sensing.nf_db:
+    value: 10.0
+    unit: dB
+    source: assumed
+    cite: "placeholder: 60 GHz CMOS LNA + mixer receiver noise figure"
+    note: "占位:mmw60_trx 的 LNA 对象到位后替换。"
+  60g_sensing.p1db_dbm:
+    value: -20.0
+    unit: dBm
+    source: assumed
+    cite: "placeholder: receiver input-referred 1 dB compression"
+    note: "占位:里程碑 1 只报裕量;TX 泄漏 / 自干扰在里程碑 2。"
+  60g_sensing.lo_mult:
+    value: 4
+    unit: ""
+    source: assumed
+    cite: "placeholder LO plan: a 15 GHz ADPLL followed by an ideal x4 multiplier (phase noise +12 dB, no added floor)"
+    note: "占位:mmw60_trx 的 LO xN 模块到位后替换(含倍频器自身底噪)。"
+  60g_sensing.dco_pn_dbchz:
+    value: -95.0
+    unit: dBc/Hz
+    source: assumed
+    cite: "placeholder: 15 GHz DCO spot phase noise at 1 MHz offset (the 1/f^2 region), -83 dBc/Hz at 60 GHz behind x4"
+    note: "占位:只定量级;mmw60_trx 的 LO 剖面到位后替换。"
+  60g_sensing.dco_pn_floor_dbchz:
+    value: -140.0
+    unit: dBc/Hz
+    source: assumed
+    cite: "placeholder: 15 GHz DCO far-out floor"
+    note: "占位。"
+  60g_sensing.tdc_res_s:
+    value: 5.0e-12
+    unit: s
+    source: assumed
+    cite: "placeholder: TDC resolution of a mmWave ADPLL (a 15 GHz DCO period is 66.7 ps, so ~13 codes per period)"
+    note: "占位:TDC 量化经环路是匹配两点增益时 chirp 频率误差的主项(cairn/chirp-engine.md)。"
+
+  # ---------------------------------------------------------------- 77 GHz 车载一档(结构相同,只换数;全部 assumed)
+  77g_automotive.tx_power_dbm:
+    value: 12.0
+    unit: dBm
+    source: assumed
+    cite: "placeholder: 77 GHz automotive transmitter per channel"
+    note: "占位。"
+  77g_automotive.tx_gain_dbi:
+    value: 12.0
+    unit: dBi
+    source: assumed
+    cite: "placeholder"
+    note: "占位。"
+  77g_automotive.rx_gain_dbi:
+    value: 12.0
+    unit: dBi
+    source: assumed
+    cite: "placeholder"
+    note: "占位。"
+  77g_automotive.rx_gain_db:
+    value: 40.0
+    unit: dB
+    source: assumed
+    cite: "placeholder"
+    note: "占位。"
+  77g_automotive.nf_db:
+    value: 12.0
+    unit: dB
+    source: assumed
+    cite: "placeholder"
+    note: "占位。"
+  77g_automotive.p1db_dbm:
+    value: -20.0
+    unit: dBm
+    source: assumed
+    cite: "placeholder"
+    note: "占位。"
+  77g_automotive.lo_mult:
+    value: 4
+    unit: ""
+    source: assumed
+    cite: "placeholder LO plan: a ~19.4 GHz ADPLL behind an ideal x4"
+    note: "占位。"
+  77g_automotive.dco_pn_dbchz:
+    value: -93.0
+    unit: dBc/Hz
+    source: assumed
+    cite: "placeholder: ~19.4 GHz DCO spot phase noise at 1 MHz offset"
+    note: "占位。"
+  77g_automotive.dco_pn_floor_dbchz:
+    value: -140.0
+    unit: dBc/Hz
+    source: assumed
+    cite: "placeholder"
+    note: "占位。"
+  77g_automotive.tdc_res_s:
+    value: 5.0e-12
+    unit: s
+    source: assumed
+    cite: "placeholder"
+    note: "占位。"
+
+  # ---------------------------------------------------------------- 大气(survey)
+  oxygen.60g_db_per_km:
+    value: 15.0
+    unit: dB/km
+    source: survey
+    cite: "ITU-R P.676: specific attenuation by atmospheric oxygen peaks at ~15 dB/km around 60 GHz at sea level (summaries of the recommendation's Figure 1; original text not read)"
+    note: "未核实:只读到转述;本库按往返距离 2R 计,10 m 处 0.3 dB。"
+  oxygen.77g_db_per_km:
+    value: 0.4
+    unit: dB/km
+    source: survey
+    cite: "ITU-R P.676: oxygen attenuation falls to a few tenths of a dB/km by 77 GHz (summaries; original text not read)"
+    note: "未核实。"
+
+  # ---------------------------------------------------------------- 目标 RCS 典型值(survey)
+  rcs.human_dbsm:
+    value: -10.0
+    unit: dBsm
+    source: survey
+    cite: "human body RCS at mmWave quoted as 0.1-1 m^2 depending on aspect (radar handbooks and 60 / 77 GHz sensing papers; no single original read)"
+    note: "未核实:取区间低端 0.1 m^2;对 SNR 是线性的 1 dB 对 1 dB。"
+  rcs.car_dbsm:
+    value: 10.0
+    unit: dBsm
+    source: survey
+    cite: "passenger car RCS at 77 GHz quoted as ~10 dBsm (automotive radar literature surveys; original measurements not read)"
+    note: "未核实。"
+  rcs.corner_reflector_dbsm:
+    value: 20.0
+    unit: dBsm
+    source: survey
+    cite: "a trihedral corner reflector of ~10 cm edge at 60 GHz: sigma = 4 pi a^4 / (3 lambda^2) ~ 10^2 m^2 (textbook formula; a convenient test target, not a measurement)"
+    note: "未核实:按公式量级,未对照实物。"
+
+  # ---------------------------------------------------------------- 窗函数主瓣宽度(survey,Harris 1978 表)
+  window.rect_3db_bins:
+    value: 0.89
+    unit: bins
+    source: survey
+    cite: "F. J. Harris, 'On the use of windows for harmonic analysis with the DFT', Proc. IEEE 1978, Table I: -3 dB mainlobe width of the rectangular window (two-digit table value; original table not re-read)"
+    note: "未核实:两位有效数字;示例 03 与 tests/test_processing.py 用它做 5 % 以内的对照。"
+  window.hann_3db_bins:
+    value: 1.44
+    unit: bins
+    source: survey
+    cite: "Harris 1978, Table I: Hanning (alpha = 2) -3 dB width"
+    note: "未核实。"
+  window.hamming_3db_bins:
+    value: 1.30
+    unit: bins
+    source: survey
+    cite: "Harris 1978, Table I: Hamming -3 dB width"
+    note: "未核实。"
+  window.blackman_3db_bins:
+    value: 1.68
+    unit: bins
+    source: survey
+    cite: "Harris 1978, Table I: exact Blackman -3 dB width"
+    note: "未核实。"

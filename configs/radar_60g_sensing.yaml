@@ -1,0 +1,48 @@
+# 60 GHz sensing radar: 58-62 GHz (B = 4 GHz) sawtooth, 100 us chirps x 64,
+# a 15 GHz ADPLL x4 as the one LO, a human at 5 m receding at 2 m/s.
+# Every front-end number is left empty: the band's placeholder from
+# src/fmcw_radar/data/sources.yaml (source: assumed) is used until mmw60_trx's
+# front end exists.  The band / chirp / ADC numbers are the design's own.
+schema_version: 1
+band:
+  kind: 60g_sensing
+  center_hz: 60.0e9
+  sweep_hz: 4.0e9
+chirp:
+  shape: sawtooth
+  duration_s: 100.0e-6
+  idle_s: 0.0
+  n_chirps: 64
+lo:
+  fref_hz: 100.0e6
+  loop_bw_hz: 1.0e6
+  phase_margin_deg: 60.0
+  kdco_hz: 50.0e3
+  dp_gain: 1.0
+  dp_cal: offline
+  dp_cal_iterations: 2
+  engine: event
+frontend: {}
+channel:
+  extra_loss_db: 0.0
+target:
+  kind: human
+  range_m: 5.0
+  velocity_mps: 2.0
+rx:
+  if_bw_hz: 4.0e6
+  adc_fs_hz: 10.0e6
+  adc_bits: 12
+  adc_fullscale_dbm: 4.0
+processing:
+  window_range: hann
+  window_doppler: hann
+  range_pad: 4
+  doppler_pad: 1
+  cfar_guard: 2
+  cfar_train: 8
+  cfar_pfa: 1.0e-4
+sim:
+  seed: 1
+  engine: statistical
+  time_osr: 1.25
