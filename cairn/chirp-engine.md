@@ -48,6 +48,9 @@ LTE-20 的 29 % 不行,polar_tx ROADMAP B1)。任务要求先量一次这个指�
 
 - 一个 chirp 的 event 仿真 = settle 40k + 10k 周期 ≈ 0.1 s(纯 Python 逐周期);64 chirp 一帧 0.7 s。够用,不需要 numba。
 - 时域引擎用 chirp 误差相位时在参考网格上线性插值 t 与 t − τ:频率逐周期恒定,相位分段线性,插值是精确的。
-- 无噪声的逐周期引擎会给出确定性的量化杂散:16 chirp 帧在 8.29 m / −10.9 m/s 处 −35 dBc、9.87 m / 1.56 m/s 处 −45 dBc;
-  开 DCO / 参考噪声后后者变 −49.6 dBc。这是 dither 限环一类的东西,按铁律 6 只能由 event 引擎说;哪些是物理、哪些是 noise=False 的产物待分
-  (ROADMAP)。
+- **TDC 量化的"鬼目标"**(32 chirp 帧,5 m 目标,只开 chirp 误差):无噪声逐周期引擎在 9.87 m / 2.34 m/s(目标的多普勒行)处 −45.5 dBc;
+  TDC 从 5 ps 改 2 ps 后降到 −55.8 dBc 并移到 10.07 m;Kdco 从 50 改 20 kHz 不动它(−46.2 dBc,9.87 m)。开 DCO / 参考噪声(`noise=True`,
+  两个 seed)后变成 2.2 m 与 7.81 m 处 −48.6 … −50.2 dBc,位置不随 seed 变。
+  判断:这是 TDC 量化的物理 —— 斜坡让每参考周期的小数相位以线性增长的速率转过 TDC 码,量化误差是一个二次相位的锯齿,其谐波本身是 chirp,
+  与延迟副本混频后落在固定拍频上,即固定距离处的鬼目标(FMCW ADPLL 文献里的 DTC / TDC 鬼目标机制);不是 `noise=False` 的产物,
+  噪声只把它打散到别的距离。按铁律 6 由 event 引擎背书,引擎里 TDC 没有 dither(pllsim `TDCConfig` 只有 INL / 抖动),所以是悲观一侧。

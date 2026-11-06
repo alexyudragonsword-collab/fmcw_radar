@@ -122,7 +122,8 @@ jobs:
           else
             git fetch --no-tags origin main >/dev/null 2>&1 || true
             sha="$(git merge-base HEAD origin/main 2>/dev/null || true)"
-            if [ "$sha" = "$(git rev-parse HEAD)" ] || [ -z "$sha" ]; then sha="$(git rev-parse HEAD^ 2>/dev/null || true)"; fi
+            # --verify -q: a plain rev-parse echoes an unknown "HEAD^" to stdout on a one-commit history
+            if [ "$sha" = "$(git rev-parse HEAD)" ] || [ -z "$sha" ]; then sha="$(git rev-parse --verify -q HEAD^ || true)"; fi
             echo "::notice::no previous head for this push; comparing with ${sha:-nothing}"
           fi
           if [ -z "$sha" ]; then echo "::notice::no base to compare the fingerprint with (first commit)"; fi

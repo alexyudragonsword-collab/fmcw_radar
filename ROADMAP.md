@@ -17,10 +17,12 @@
 
 ## P1 — 结论的可信度
 
-1. **逐周期引擎的确定性量化杂散待分物理与产物**。无噪声 event 引擎、16 chirp 帧:8.29 m / −10.9 m/s 处 −35 dBc(比噪底高 10 dB),
-   9.87 m / 1.56 m/s 处 −45 dBc;开 DCO / 参考噪声后后者 −49.6 dBc。dither 限环一类;按铁律 6 只能由 event 引擎说,
-   但 `noise=False` 是为了不与 `LOProfile` 重复计相噪 —— 要么让 chirp 引擎带噪声而 LOProfile 只补环外部分,要么证明这些杂散在真噪声下消失。
-   复现:`run_time(cfg, ChirpEngine(cfg).run(noise=False, n_chirps=16), phase_noise=False, noise=False, quantise=False)`,看 rd_db 离目标 ±40 格外的最大值。
+1. **TDC 量化的鬼目标在真噪声下不消失,但统计引擎不知道它**。32 chirp 帧、5 m 目标:无噪声 event 引擎 9.87 m 处 −45.5 dBc(5 ps TDC;2 ps 时 −55.8 dBc),
+   开环路噪声后 2.2 / 7.81 m 处 −49 … −50 dBc(两个 seed 同位置)。机制与数字见 `cairn/chirp-engine.md`。统计引擎的非线性剖面只拿一个 ramp 的曲线,
+   看得到它在距离维的位置,但 CFAR / Pd 的闭式里没有这一项;示例 00 的 CFAR 因此在主瓣外报 12 格。
+   要做:(a) 在统计引擎里把 event 曲线的鬼目标当确定性杂散列表报出(距离、电平),与窗旁瓣、相噪底并列;(b) TDC dither(pllsim 没有,报回 pll_simulator);
+   (c) chirp 引擎带噪声时与 `LOProfile` 的分工(环内由逐周期引擎、环外由剖面)以免重复计相噪。
+   复现:`run_time(cfg, ChirpEngine(cfg).run(noise=False, n_chirps=32), phase_noise=False, noise=False, quantise=False)`,看 rd_db 离目标 ±40 格外的最大值。
 2. **在线 dp_cal 收敛慢**:差分 sign-sign(`ChirpSignSignCal`)1.05 → 1.006 要 20 个 chirp(2 ms),从 0.96 一侧 6 个 chirp 只到 0.97;
    polar_tx 原版 SignSignLMS 在锯齿上发散(1.05 → 1.066)。要做:gear shift(大 mu 粗调后小 mu)、只在飞回后固定窗口内更新、或 LMS 全精度。
    默认是离线 LS(一次到 1e-4),足够里程碑 1。复现:示例 02 最后一组。

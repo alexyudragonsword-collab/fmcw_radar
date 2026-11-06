@@ -7,6 +7,7 @@ sequences (band-averaged); the same equation as d2d_link's tree-delay leak.
 
 import numpy as np
 import pytest
+from conftest import trapz
 
 from fmcw_radar.config import RadarConfig, apply_overrides
 from fmcw_radar.lo import LOProfile
@@ -39,7 +40,7 @@ def test_large_tau_tends_to_twice_the_single_sided(prof):
     f = np.linspace(1e4, 4e6, 2_000_001)            # 2 Hz steps: the cosine's 1 kHz period is resolved
     s = prof.psd(f)
     for tau in (1e-3, 1e-2):
-        ratio = np.trapezoid(RangeCorrelation(prof, tau).residual_psd(f), f) / np.trapezoid(s, f)
+        ratio = trapz(RangeCorrelation(prof, tau).residual_psd(f), f) / trapz(s, f)
         assert ratio == pytest.approx(2.0, rel=0.01)
     assert np.mean(correlation_factor(np.linspace(1e4, 4e6, 100_001), 1e-2)) == pytest.approx(2.0, rel=1e-3)
 
