@@ -3,6 +3,17 @@
 本文件按倒序记录实质性进展 —— 最新条目在本行正下方。每条保持简短(数字原值、被推翻的判断、下一步),
 结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-11-07 · ROADMAP 结构:上游消费清单与报回条目,分支改 feat/* + PR(feat/roadmap-upstream)
+
+- mmw60_trx main@caebcde6552ee6f621cdbe5846616266958a02dd 的 `Frontend60` 逐项对照本库 12 项 × 2 频段的 `assumed`:供 3(PA Psat / P1dB / Rapp,LO 剖面形状,
+  `tx_leak_dbc` 可作泄漏第三项)、部分 2(天线增益字段无来源,AGC 档位表)、缺 7(RX NF、输入 P1dB、RX 天线增益、×N、TDC、TX→RX 隔离、互耦)。
+  清单写成 mmw60_trx ROADMAP D 节可贴格式;本库不换占位,等它补面后按完整 SHA pin。
+- ROADMAP 新节"报回上游(等用户转)":polar_tx B1(495 % 指标 vs 逐周期一致 1.005 ± 0.046;附 SignSignLMS 1.05 → 1.066 的观察与"回归量须零均值"的建议)、
+  pll_simulator(TDC dither:±4.85 m −45.3 / −54.9 dBc;倍频器 ×N 底噪,两个消费方)。里程碑 2 的分支策略:`main` 默认,工作在 `feat/*` 开 PR;
+  `ccr-dd350ddf-xv24an` 与 main 同提交,不再推。
+- 保持的判断:dp_cal 不是 chirp 线性度校准——离线 LS 为主、`ChirpFlybackLMS` 在线(用户确认)。
+- 下一步:P2 #0(飞回 blanking、测角 RMS 归因、CFAR 有效格数)→ P1 #1(a)–(c)。
+
 ## 2026-11-07 · 0.2.0:里程碑 2 —— TDM-MIMO 测角、TX 泄漏、多目标与 CFAR 曲线(ccr-dd350ddf-xv24an)
 
 - vendor array_tx@e897c159e5fc5b2e26af6336cf9f6164461ff7f5(geometry / beam / coupling / touchstone,coupling 改编);`mimo.py` 虚拟阵列 2 × 4 → 8 元 20 mm,
@@ -16,6 +27,8 @@
 - **被推翻的判断 4**:`found_targets` 的 ±3 格窗 —— 12 cm 外的 −20 dBsm 点"找到"的是车的主瓣(+30 dB);分格 + 距离维局部极大后 5.434 m −28.3 dB 对统计 −30.4 dB。
 - CFAR 损失 Pd 0.9:N = 16 1.35 dB,N = 32 0.73 dB;Swerling 1 闭式与蒙卡 0.02 内;时域纯噪声帧 64000 格 4 个虚警(格相关)。
 - 指纹 691 → 1235 值,旧值逐位不变;示例 00 / 01 / 03 / 04 的全量输出逐字节不变(02 只有计时行)。mmw60_trx 仍空,占位未换。
+  **更正(2026-11-07,用户指出)**:mmw60_trx 不是空仓——main@caebcde(0.1.0)已有 `Frontend60`;本会话的 checkout 是空克隆,没拉。
+  它是通信前端,24 条占位里只供 PA / LO 泄漏 / LO 剖面形状,消费清单见 ROADMAP"等上游"。
 - 结论与坑在 `cairn/mimo-angle.md`;下一步:ROADMAP P2 #0(飞回 blanking、测角 RMS 归因、CFAR 有效格数)、P1 #1(a)–(c)。
 
 ## 2026-11-06 · 0.1.1:鬼目标进统计引擎、在线校准定型(ccr-dd350ddf-xv24an)

@@ -47,7 +47,8 @@ polar_tx 的 event 有效域指标(每参考周期相位推进)在 chirp 上读 
 
 ## 5. 提交
 
-- `main` 是默认分支(2026-11-07 起),只收 CI 全绿的工作;开发在 `ccr-dd350ddf-xv24an` 或新的特性分支上,合进 `main` 由人决定。
+- `main` 是默认分支(2026-11-07 起),只收 CI 全绿的工作;工作在 `feat/*` 分支上开 PR 合进 `main`,合并由人决定。
+  `ccr-dd350ddf-xv24an` 是里程碑 1–2 的历史分支,与 main 同提交,不再往它推。
   CI 的 fingerprint 作业拿与 `origin/main` 的 merge-base 当 base(没有 main 时退回 `HEAD^`)。
 - 提交前:`pytest -q` 全绿、`ruff check src/ tests/ examples/ tools/` 干净;碰过示例就重跑并用
   `tools/run_examples.py --save new/` + `tools/example_drift.py compare new/` 看哪些数动了,文档改完 `accept`。
