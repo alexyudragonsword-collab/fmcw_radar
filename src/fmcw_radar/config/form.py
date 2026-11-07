@@ -116,6 +116,7 @@ SECTIONS: list[tuple[str, str, list[dict]]] = [
         _f("rx.adc_fullscale_dbm", "ADC full scale [dBm]", "float"),
         _f("rx.hpf_corner_hz", "IF high-pass corner [kHz] (0 = none)", "float", scale=1e3),
         _f("rx.hpf_order", "IF high-pass order", "int"),
+        _f("rx.blank_s", "blanked at each chirp's start [us] (0 = none)", "float", scale=1e-6),
     ]),
     ("processing", "Processing", [
         _f("processing.window_range", "Range window", "enum", options=["rect", "hann", "hamming", "blackman"]),

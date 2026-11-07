@@ -15,7 +15,8 @@ cfg2 = apply_overrides(RadarConfig(), {"band.sweep_hz": 7e9, "band.center_hz": 6
 `beat_hz(R)`、`doppler_hz(v)`、`tau_s(R)`。
 
 里程碑 2 的段:`extra_targets`(目标列表,`cfg.targets` 把主目标排在前面)、`mimo.*`(`n_tx` / `n_rx` / 间距 / 元方向图 / 角窗 / `tdm_doppler_compensation` /
-`coupling.{source, c1_db, calibrated, touchstone}`)、`leakage.*`(`enabled` / `isolation_db` / `path_delay_s` / 反射体)、`rx.hpf_corner_hz` / `rx.hpf_order`。
+`coupling.{source, c1_db, calibrated, touchstone}`)、`leakage.*`(`enabled` / `isolation_db` / `path_delay_s` / 反射体)、`rx.hpf_corner_hz` / `rx.hpf_order`、`rx.blank_s`(每个 chirp 开头
+blanking 的时长,0.2.1:距离窗按剩下的样本重配,`cfg.n_blank` 是样本数;预算里 `LeakageBudget.blank_recommended_s` 给推荐值)。
 `configs/radar_60g_mimo.yaml` 把它们都打开了。
 
 ## 引擎
@@ -29,7 +30,7 @@ cfg2 = apply_overrides(RadarConfig(), {"band.sweep_hz": 7e9, "band.center_hz": 6
   MIMO 时 `frame` 是 (chirp, RX, 样本) 立方,`extras` 多 `angle_deg`、`angle_spectrum`、`snapshot`、`doppler_fine_hz`。开关只为一致性检查,config 里没有。
 - `VirtualArray(cfg)`:`x_v`、`filled`、`snapshot(theta, doppler)`、`estimate(snapshot, doppler)`、`beamwidth_deg`、`crlb_sigma_deg`、`coupling_bias_deg`、
   `tdm_bias_deg`、`sweep_squint`。`leakage_budget(cfg)` 与 `leakage_tones(cfg)`;`cfar_pd_monte_carlo(snr_db, pfa, n_train, trials, swerling=0|1)`、
-  `cfar_pd_swerling1`、`hpf_attenuation_db` / `apply_hpf`。
+  `cfar_pd_swerling1`、`hpf_attenuation_db` / `apply_hpf`;`range_window(name, n, n_blank)` 是 blanking 后的距离窗(所有距离 FFT 与窗统计都走它)。
 - `ChirpEngine(cfg).run(noise=False, n_chirps=None)` → `ChirpResult`:`f_err_dco_hz` 整帧曲线、`ramp(k)` / `ramp_carrier(k)`、`metrics(k)`
   (峰值、RMS、底、建立时间)、`dp_cal_passes` / `dp_cal_trace`、`ui_per_ref_cycle_p99`、`vouches_for_spurs`。
 - `RangeCorrelation(profile, tau)`:`residual_psd(f)`、`sidelobe_dbc(offset_hz, enbw_hz)`、`synthesize_residual(n, fs, rng)`、`measured_residual_psd`。

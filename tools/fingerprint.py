@@ -96,7 +96,7 @@ def time_values(t) -> dict:
            "peak_range_m": _scalar(t.peak_range_m), "peak_velocity_mps": _scalar(t.peak_velocity_mps),
            "snr_cell_db": _scalar(t.snr_cell_db), "width_3db_m": _scalar(t.width_3db_m),
            "peak_sidelobe_db": _scalar(t.peak_sidelobe_db), "n_detections": repr(len(t.cfar_detections))}
-    for k in ("angle_deg", "clipped_fraction"):
+    for k in ("angle_deg", "clipped_fraction", "clipped_fraction_after_blanking"):
         if k in t.extras:
             out[k] = _scalar(t.extras[k])
     for i, d in enumerate(t.extras.get("targets_found") or []):
@@ -171,6 +171,9 @@ def record_synthetic() -> dict:
                                                                    {"kind": "human", "range_m": 9.9, "velocity_mps": -1.0}]}),
         "leakage_hpf": apply_overrides(base, {"leakage.enabled": True, "leakage.reflector_range_m": 0.02,
                                               "rx.hpf_corner_hz": 200e3, "rx.hpf_order": 2}),
+        # 0.2.1: the flyback transient blanked at every chirp's start
+        "leakage_hpf_blanked": apply_overrides(base, {"leakage.enabled": True, "leakage.reflector_range_m": 0.02,
+                                                      "rx.hpf_corner_hz": 200e3, "rx.hpf_order": 2, "rx.blank_s": 4.5e-6}),
     }
     out = {}
     for name, cfg in cases.items():

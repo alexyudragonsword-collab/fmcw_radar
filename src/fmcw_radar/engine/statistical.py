@@ -30,7 +30,7 @@ from ..mimo import VirtualArray
 from ..phase_noise import RangeCorrelation
 from ..processing.detection import pd_swerling0
 from ..processing.rd import power_db, range_axis_m, range_fft, read_peak, velocity_axis_mps
-from ..processing.windows import (coherent_gain_db, enbw_bins, mainlobe_width_bins, peak_sidelobe_db, spectrum_db,
+from ..processing.windows import (coherent_gain_db, enbw_bins, mainlobe_width_bins, peak_sidelobe_db, range_window, spectrum_db,
                                   window)
 
 TWOPI = 2.0 * np.pi
@@ -72,12 +72,12 @@ def scalloping_loss_db(cfg: RadarConfig) -> tuple[float, float]:
     1.4 dB half a bin out; the padding factors put the grid closer."""
     n, m = cfg.n_samples, cfg.chirp.n_chirps
     p = cfg.processing
-    dims = ((p.window_range, cfg.beat_hz() * cfg.chirp.duration_s, p.range_pad, n),
-            (p.window_doppler, cfg.doppler_hz() * cfg.chirp.pri_s * m, p.doppler_pad, m))
+    dims = ((p.window_range, cfg.beat_hz() * cfg.chirp.duration_s, p.range_pad, n, cfg.n_blank),
+            (p.window_doppler, cfg.doppler_hz() * cfg.chirp.pri_s * m, p.doppler_pad, m, 0))
     out = []
-    for name, bin_, pad, length in dims:
+    for name, bin_, pad, length, n_blank in dims:
         frac = bin_ * pad - round(bin_ * pad)          # offset from the nearest padded cell, in padded bins
-        w = window(name, length)
+        w = range_window(name, length, n_blank)
         k = np.arange(length)
         resp = np.abs(np.sum(w * np.exp(-2j * np.pi * (frac / pad) * k / length))) / np.sum(w)
         out.append(float(-20.0 * np.log10(max(resp, 1e-300))))
@@ -95,7 +95,7 @@ def pn_floor_mean_cell(cfg: RadarConfig, rc: RangeCorrelation, exclude_m: float)
     offs = (np.arange(n_if) - round(cfg.beat_hz() / df)) * df
     dr = np.abs(offs) / cfg.slope_hz_per_s * C0 / 2.0
     offs = offs[dr > exclude_m]
-    enbw = enbw_bins(window(cfg.processing.window_range, n)) * df
+    enbw = enbw_bins(range_window(cfg.processing.window_range, n, cfg.n_blank)) * df
     lvl = beat_sideband(cfg, rc).sidelobe_dbc(offs, enbw) + rd_cell_pn_offset_db(cfg)
     return float(np.mean(10.0 ** (lvl / 10.0)))
 
@@ -122,7 +122,7 @@ def pn_floor_table(cfg: RadarConfig, offsets_m=REPORT_OFFSETS_M, rc: RangeCorrel
     first-order ``S_res / 2``."""
     rc = RangeCorrelation.from_config(cfg) if rc is None else rc
     name = cfg.processing.window_range if window_name is None else window_name
-    enbw = enbw_bins(window(name, cfg.n_samples)) / cfg.chirp.duration_s
+    enbw = enbw_bins(range_window(name, cfg.n_samples, cfg.n_blank)) / cfg.chirp.duration_s
     cell = rd_cell_pn_offset_db(cfg)
     sb = beat_sideband(cfg, rc) if exact else None
     out = {}
@@ -169,7 +169,7 @@ def nonlinearity_profile(cfg: RadarConfig, chirp: ChirpResult, k: int | None = N
         t = np.arange(n) / fs
         dpsi = np.interp(t0 + t, t_ref, psi) - np.interp(t0 + t - tau, t_ref, psi)
         beat = np.exp(1j * (TWOPI * cfg.beat_hz() * t + dpsi))
-    prof = power_db(range_fft(beat, cfg.processing.window_range, pad))
+    prof = power_db(range_fft(beat, cfg.processing.window_range, pad, cfg.n_blank))
     m = n * pad
     # centre the profile on the target so the lobe is contiguous; the axis is
     # the range offset from the peak bin
@@ -216,7 +216,7 @@ def ideal_profile(cfg: RadarConfig, name: str | None = None) -> dict:
     config's grid (what every nonlinearity profile is compared with)."""
     name = cfg.processing.window_range if name is None else name
     n, pad = cfg.n_samples, cfg.processing.range_pad
-    bins, s = spectrum_db(window(name, n), pad)
+    bins, s = spectrum_db(range_window(name, n, cfg.n_blank), pad)
     axis = bins * cfg.range_resolution_m
     rp = read_peak(axis, s)
     return {"axis_m": axis, "profile_db": s, "width_3db_m": rp["width_3db"], "width_rayleigh_m": rp["width_rayleigh"],
@@ -238,9 +238,9 @@ def target_rows(cfg: RadarConfig, rc: RangeCorrelation, n_tx: int = 1) -> list[d
     n, m = cfg.n_samples, cfg.chirp.n_chirps // n_tx
     df = cfg.rx.adc_fs_hz / n
     dfd = 1.0 / (cfg.chirp.pri_s * n_tx * m)
-    bins_r, w_r = spectrum_db(window(cfg.processing.window_range, n), 16)
+    bins_r, w_r = spectrum_db(range_window(cfg.processing.window_range, n, cfg.n_blank), 16)
     bins_d, w_d = spectrum_db(window(cfg.processing.window_doppler, m), 16)
-    enbw = enbw_bins(window(cfg.processing.window_range, n)) * df
+    enbw = enbw_bins(range_window(cfg.processing.window_range, n, cfg.n_blank)) * df
     cell_off = -coherent_gain_db(window(cfg.processing.window_doppler, m))
     rows = []
     for t in cfg.targets:
@@ -315,11 +315,11 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
         snr_cell_db=budget.snr_cell_db, snr_chirp_db=budget.snr_chirp_db,
         pd=float(pd_swerling0(budget.snr_cell_db, cfg.processing.cfar_pfa)),
         range_res_rect_m=cfg.range_resolution_m,
-        range_res_m=mainlobe_width_bins(cfg.processing.window_range, n, -3.0, cfg.processing.range_pad) * cfg.range_resolution_m,
+        range_res_m=mainlobe_width_bins(cfg.processing.window_range, n, -3.0, cfg.processing.range_pad, cfg.n_blank) * cfg.range_resolution_m,
         range_res_rayleigh_m=mainlobe_width_bins(cfg.processing.window_range, n, 20.0 * math.log10(2.0 / math.pi),
-                                                 cfg.processing.range_pad) * cfg.range_resolution_m,
+                                                 cfg.processing.range_pad, cfg.n_blank) * cfg.range_resolution_m,
         velocity_res_mps=cfg.velocity_resolution_mps,
-        window_sidelobe_db=peak_sidelobe_db(cfg.processing.window_range, n, cfg.processing.range_pad),
+        window_sidelobe_db=peak_sidelobe_db(cfg.processing.window_range, n, cfg.processing.range_pad, cfg.n_blank),
         pn_floor=pn_floor_table(cfg, rc=rc), pn_rms_rad=rc.rms_residual_rad(f1, f2), lo_rms_rad=prof.rms_phase_rad(f1, f2))
     sc_r, sc_d = scalloping_loss_db(cfg)
     res.extras["scalloping_range_db"] = sc_r

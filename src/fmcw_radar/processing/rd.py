@@ -12,15 +12,16 @@ from __future__ import annotations
 import numpy as np
 
 from ..config.schema import C0, RadarConfig
-from .windows import peak_sidelobe_of, width_at_level, window
+from .windows import peak_sidelobe_of, range_window, width_at_level, window
 
 
-def range_fft(frame: np.ndarray, name: str, pad: int = 1) -> np.ndarray:
+def range_fft(frame: np.ndarray, name: str, pad: int = 1, n_blank: int = 0) -> np.ndarray:
     """Windowed FFT along the last axis; the window is normalised to unit
-    sum so a tone of amplitude A reads A at its bin."""
+    sum so a tone of amplitude A reads A at its bin.  ``n_blank`` leading
+    samples are blanked (``windows.range_window``)."""
     frame = np.asarray(frame)
     n = frame.shape[-1]
-    w = window(name, n)
+    w = range_window(name, n, n_blank)
     w = w / w.sum()
     return np.fft.fft(frame * w, n * pad, axis=-1)
 
@@ -39,7 +40,7 @@ def range_doppler_map(frame: np.ndarray, cfg: RadarConfig) -> np.ndarray:
     """Complex range-Doppler map ``(n_chirps x doppler_pad, n_samples x range_pad)``
     of a beat frame, the config's windows and padding."""
     p = cfg.processing
-    return doppler_fft(range_fft(frame, p.window_range, p.range_pad), p.window_doppler, p.doppler_pad)
+    return doppler_fft(range_fft(frame, p.window_range, p.range_pad, cfg.n_blank), p.window_doppler, p.doppler_pad)
 
 
 def range_axis_m(cfg: RadarConfig, n_fft: int) -> np.ndarray:
