@@ -81,11 +81,41 @@ SECTIONS: list[tuple[str, str, list[dict]]] = [
         _f("target.angle_deg", "Angle [deg] (milestone 2)", "float"),
         _f("target.rcs_dbsm", "RCS [dBsm] (empty = survey value for the kind)", "opt_float"),
     ]),
+    ("extra_targets", "More targets (milestone 2)", [
+        _f("extra_targets", "Extra point targets (table: kind, range, velocity, angle, RCS)", "table",
+           columns=["kind", "range_m", "velocity_mps", "angle_deg", "rcs_dbsm"]),
+    ]),
+    ("mimo", "TDM-MIMO (milestone 2)", [
+        _f("mimo.n_tx", "Transmitters (TDM)", "int"),
+        _f("mimo.n_rx", "Receivers", "int"),
+        _f("mimo.rx_spacing_lambda", "RX pitch [lambda]", "float"),
+        _f("mimo.tx_spacing_lambda", "TX pitch [lambda] (empty = n_rx x RX pitch)", "opt_float"),
+        _f("mimo.element_pattern", "Element pattern", "enum", options=["isotropic", "cos"]),
+        _f("mimo.angle_window", "Angle window", "enum", options=["rect", "hann", "hamming", "blackman"]),
+        _f("mimo.angle_pad", "Angle FFT zero-padding factor", "int"),
+        _f("mimo.tdm_doppler_compensation", "Compensate the TDM Doppler phase", "bool"),
+        _f("mimo.coupling.source", "RX mutual coupling", "enum", options=["none", "analytic", "survey", "touchstone"]),
+        _f("mimo.coupling.c1_db", "Adjacent coupling [dB] (empty = placeholder, source: assumed)", "opt_float"),
+        _f("mimo.coupling.c1_deg", "Adjacent coupling phase [deg]", "float"),
+        _f("mimo.coupling.c2_rel_db", "Next-adjacent relative to adjacent [dB]", "float"),
+        _f("mimo.coupling.path_delay", "Survey: phase from the pair's free-space delay", "bool"),
+        _f("mimo.coupling.touchstone", "Touchstone file (n_rx ports)", "opt_str"),
+        _f("mimo.coupling.calibrated", "Apply the known matrix's inverse before the angle estimate", "bool"),
+    ]),
+    ("leakage", "TX-RX leakage (milestone 2)", [
+        _f("leakage.enabled", "Model the leakage", "bool"),
+        _f("leakage.isolation_db", "TX-RX isolation [dB] (empty = placeholder, source: assumed)", "opt_float"),
+        _f("leakage.path_delay_s", "Direct path delay [ns]", "float", scale=1e-9),
+        _f("leakage.reflector_range_m", "Near reflector range [m] (empty = none)", "opt_float"),
+        _f("leakage.reflector_level_db", "Near reflector level rel. the direct leakage [dB]", "float"),
+    ]),
     ("rx", "Receiver", [
         _f("rx.if_bw_hz", "IF bandwidth [MHz]", "float", scale=1e6),
         _f("rx.adc_fs_hz", "ADC sample rate [MS/s]", "float", scale=1e6),
         _f("rx.adc_bits", "ADC bits", "int"),
         _f("rx.adc_fullscale_dbm", "ADC full scale [dBm]", "float"),
+        _f("rx.hpf_corner_hz", "IF high-pass corner [kHz] (0 = none)", "float", scale=1e3),
+        _f("rx.hpf_order", "IF high-pass order", "int"),
     ]),
     ("processing", "Processing", [
         _f("processing.window_range", "Range window", "enum", options=["rect", "hann", "hamming", "blackman"]),
@@ -119,6 +149,9 @@ def schema_paths(cls: type = RadarConfig, prefix: str = "") -> list[str]:
         if typing.get_origin(tp) is typing.Union:
             args = [a for a in typing.get_args(tp) if a is not type(None)]
             tp = args[0] if len(args) == 1 else tp
+        if typing.get_origin(tp) is tuple and typing.get_args(tp) and dataclasses.is_dataclass(typing.get_args(tp)[0]):
+            out.append(prefix + f.name)             # a table of sub-configs is one form row
+            continue
         if dataclasses.is_dataclass(tp):
             out.extend(schema_paths(tp, prefix + f.name + "."))
         else:

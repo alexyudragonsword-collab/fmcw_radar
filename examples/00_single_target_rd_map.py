@@ -9,7 +9,7 @@ and FFTs, and reads the peak off the map.  The two SNRs must agree within
 velocity.  Every front-end number is a placeholder (source: assumed).
 """
 
-from _common import CONFIG, OUT, SMOKE, plt_or_none, tag
+from _common import CONFIG, OUT, SMOKE, plt_or_none, tag, rel
 
 from fmcw_radar.config import apply_overrides, load_config
 from fmcw_radar.engine import run_radar
@@ -78,4 +78,4 @@ if plt is not None:
     fig.tight_layout()
     p = OUT / "00_single_target_rd_map.png"
     fig.savefig(p, dpi=120)
-    print(f"  wrote {p}")
+    print(f"  wrote {rel(p)}")

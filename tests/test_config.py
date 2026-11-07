@@ -75,6 +75,20 @@ def test_sourced_fields_resolve_with_their_source(cfg60):
     assert apply_overrides(cfg60, {"target.rcs_dbsm": 0.0}).rcs_dbsm() == (0.0, "config")
 
 
+def test_extra_targets_round_trip_and_the_targets_property(tmp_path):
+    from fmcw_radar.config import config_from_dict, config_to_dict
+
+    cfg = apply_overrides(RadarConfig(), {"extra_targets": [{"kind": "car", "range_m": 8.0, "velocity_mps": -3.0}]})
+    assert len(cfg.targets) == 2 and cfg.targets[0] is cfg.target and cfg.targets[1].kind == "car"
+    assert cfg.rcs_of(cfg.targets[1]) == (10.0, "survey")
+    out = tmp_path / "t.yaml"
+    dump_config(cfg, out)
+    assert load_config(out) == cfg
+    assert config_from_dict(config_to_dict(cfg)) == cfg
+    with pytest.raises(ValueError):
+        apply_overrides(RadarConfig(), {"extra_targets": [{"kind": "custom", "range_m": 1.0}]})   # custom needs an RCS
+
+
 def test_form_declares_every_field_and_nothing_else():
     assert sorted(form_paths()) == sorted(schema_paths())
     assert len(form_paths()) == len(set(form_paths()))

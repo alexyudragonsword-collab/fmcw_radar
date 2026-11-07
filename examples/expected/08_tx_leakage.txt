@@ -1,0 +1,27 @@
+leakage budget (TX 10 dBm, isolation 25 dB (source: assumed), reflector at 0.02 m -10 dB; high-pass order 2 at 200 kHz):
+  TX-RX isolation                                                    25.00 dB (source: assumed)
+  direct leakage: beat                                                8.00 kHz
+  direct leakage: level at the receiver                             -15.00 dBm
+  direct leakage: level at the ADC                                   25.00 dBm
+  direct leakage: high-pass attenuation                              55.92 dB
+  direct leakage: at the ADC after the high-pass                    -30.92 dBm
+  near reflector: beat                                                5.34 kHz
+  near reflector: level at the receiver                             -25.00 dBm
+  near reflector: level at the ADC                                   15.00 dBm
+  near reflector: high-pass attenuation                              62.95 dB
+  near reflector: at the ADC after the high-pass                    -47.95 dBm
+  P1dB margin (input, strongest term)                                -5.00 dB
+  ADC headroom without the high-pass                                -21.00 dB
+  ADC headroom after the high-pass                                   34.92 dB
+  high-pass attenuation still needed (6 dB below full scale)          0.00 dB
+  target at the ADC                                                 -47.11 dBm
+  leakage window sidelobe at the target's cell                     -121.82 dBc
+  high-pass at the target's beat                                      0.00 dB
+
+time engine: clipped ADC samples and the target, with and without the high-pass
+  high-pass            | clipped [%] | cell SNR [dB] | target found | at [m] | level rel. map peak [dB]
+  none                 |      100.00 |         108.6 | yes |  4.890 | -71.3
+  1st order 200 kHz    |        2.70 |          88.0 | yes |  5.003 | -46.6
+  2nd order 200 kHz    |        3.50 |          59.5 | yes |  5.003 | -18.1
+  2nd order 50 kHz     |       14.85 |          83.8 | yes |  5.003 | -42.5
+  (with the filter the clipped samples are the flyback transient at each chirp's start, which the range window weights near zero; blanking them is a ROADMAP item)

@@ -38,6 +38,11 @@ def report(cfg: RadarConfig, st: StatResult) -> dict:
         "phase_noise": {"lo_rms_rad": st.lo_rms_rad, "residual_rms_rad": st.pn_rms_rad,
                         "floor": [{"offset_m": dr, "per_bin_dbc": v[0], "per_cell_dbc": v[1]} for dr, v in st.pn_floor.items()]},
         "chirp": st.chirp, "nonlinearity": st.nonlinearity,
+        "targets": st.targets, "angle": st.angle,
+        "leakage": None if st.leakage is None else {"rows": [{"term": lab, "value": v, "unit": u} for lab, v, u in st.leakage.as_rows()],
+                                                     "adc_headroom_db": st.leakage.adc_headroom_db,
+                                                     "p1db_margin_db": st.leakage.p1db_margin_db,
+                                                     "required_hpf_atten_db": st.leakage.required_hpf_atten_db},
     }
     return out
 
@@ -95,6 +100,36 @@ def to_markdown(rep: dict) -> str:
                          "from a linearised curve: NOT vouched for, invariant #6") + "):", "",
                       "| offset from the target [m] | level [dBc] |", "|---:|---:|"]
             lines += [f"| {dr:+.2f} | {lvl:.1f} |" for dr, lvl in ghosts]
+    T2 = rep.get("targets") or []
+    if len(T2) > 1:
+        lines += ["", "## Targets (milestone 2)", "",
+                  "| # | kind | range [m] | velocity [m/s] | angle [deg] | RCS [dBsm] | cell SNR [dB] | Pd | strongest other's skirt here [dBc] | by | masked |",
+                  "|---:|---|---:|---:|---:|---:|---:|---:|---:|---|---|"]
+        for i, t in enumerate(T2):
+            lines.append(f"| {i} | {t['kind']} | {t['range_m']:g} | {t['velocity_mps']:+g} | {t['angle_deg']:g} | {t['rcs_dbsm']:g} | "
+                         f"{t['snr_cell_db']:.1f} | {t['pd']:.4f} | "
+                         + (f"{t['interference_dbc']:.1f} | {t['interference_kind']} (#{t['interferer']}) | {'yes' if t['masked'] else 'no'} |"
+                            if t["interferer"] is not None else "- | - | no |"))
+    A = rep.get("angle") or {}
+    if A:
+        lines += ["", "## Angle (TDM-MIMO virtual array)", "",
+                  f"{A['n_virtual']} virtual elements ({'a filled line' if A['filled'] else 'not a filled line'}), aperture "
+                  f"{A['aperture_m'] * 1e3:.1f} mm; beamwidth {A['beamwidth_deg']:.2f} deg at the target's {rep['target'].get('angle_deg', 0):g} deg; "
+                  f"Cramer-Rao bound {A['crlb_sigma_deg']:.3f} deg RMS at {A['snr_element_db']:.1f} dB per element; estimate "
+                  f"{A['theta_est_deg']:+.3f} deg (sidelobe {A['peak_sidelobe_db']:.1f} dB).", "",
+                  f"Biases: RX mutual coupling ({A['coupling_source']}"
+                  + (f", {A['coupling_max_offdiag_db']:.1f} dB adjacent" if A['coupling_max_offdiag_db'] is not None else "")
+                  + f", {'calibrated' if A['coupling_calibrated'] else 'uncalibrated'}) {A['coupling_bias_deg']:+.3f} deg; the TDM Doppler phase "
+                  f"would give {A['tdm_bias_uncompensated_deg']:+.3f} deg uncompensated. Unambiguous velocity under TDM "
+                  f"+-{A['max_velocity_mps']:.2f} m/s.", "",
+                  f"The sweep: the edge virtual element's beat sits {A['edge_shift_bins']:.3f} range bins off (window taper "
+                  f"{A['edge_taper_db']:.3f} dB); a phase-shifter-steered TX beam aligned at f_c would squint "
+                  f"{A['tx_beam_squint_deg'][0]:+.2f} / {A['tx_beam_squint_deg'][1]:+.2f} deg at the sweep's edges "
+                  f"(FR2 400 MHz: {A['fr2_400mhz_squint_deg'][0]:+.2f} / {A['fr2_400mhz_squint_deg'][1]:+.2f} deg)."]
+    LK = rep.get("leakage")
+    if LK:
+        lines += ["", "## TX-RX leakage", "", "| term | value | unit |", "|---|---:|---|"]
+        lines += [f"| {row['term']} | {row['value']:.2f} | {row['unit']} |" for row in LK["rows"]]
     return "\n".join(lines) + "\n"
 
 

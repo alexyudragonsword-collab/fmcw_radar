@@ -252,14 +252,18 @@ class TargetConfig:
 
 @dataclass(frozen=True)
 class RxConfig:
-    """The beat path: a brick-wall IF (anti-alias) filter of ``if_bw_hz`` and
-    a complex (I/Q) ADC at ``adc_fs_hz`` with ``adc_bits`` over the full
-    scale ``adc_fullscale_dbm`` (a full-scale sine's power into 50 ohm)."""
+    """The beat path: an optional IF high-pass (``hpf_corner_hz``, Butterworth
+    of ``hpf_order``, the leakage notch: 0 = none), a brick-wall IF
+    (anti-alias) filter of ``if_bw_hz`` and a complex (I/Q) ADC at
+    ``adc_fs_hz`` with ``adc_bits`` over the full scale ``adc_fullscale_dbm``
+    (a full-scale sine's power into 50 ohm)."""
 
     if_bw_hz: float = 4.0e6             # one-sided beat bandwidth [Hz]
     adc_fs_hz: float = 10.0e6           # complex sample rate [Hz]
     adc_bits: int = 12
     adc_fullscale_dbm: float = 4.0      # 1 Vpp into 50 ohm
+    hpf_corner_hz: float = 0.0          # IF high-pass corner [Hz]; 0 = none (milestone 2: the leakage notch)
+    hpf_order: int = 1                  # Butterworth order of that high-pass
 
     def __post_init__(self):
         _finite_pos(self.if_bw_hz, "rx.if_bw_hz")
@@ -267,6 +271,113 @@ class RxConfig:
         _require(self.if_bw_hz <= 0.5 * self.adc_fs_hz, "rx.if_bw_hz must be <= adc_fs_hz / 2 (anti-alias)")
         _require(1 <= self.adc_bits <= 24, f"rx.adc_bits must be in 1..24, got {self.adc_bits}")
         _finite(self.adc_fullscale_dbm, "rx.adc_fullscale_dbm")
+        _finite_nonneg(self.hpf_corner_hz, "rx.hpf_corner_hz")
+        _require(self.hpf_corner_hz < self.if_bw_hz, "rx.hpf_corner_hz must be below the IF bandwidth")
+        _require(1 <= self.hpf_order <= 4, f"rx.hpf_order must be in 1..4, got {self.hpf_order}")
+
+
+# ---------------------------------------------------------------------------
+# milestone 2: MIMO, leakage
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CouplingConfig:
+    """Mutual coupling of the receive array, through the vendored array_tx
+    matrix (three sources, one object): ``analytic`` (flat c1 on the
+    adjacent pair, c1 x c2_rel on the next), ``survey`` (the same magnitudes
+    with the free-space delay's linear phase), ``touchstone`` (an .sNp file
+    with n_rx ports).  ``c1_db`` None -> the band's placeholder (source:
+    assumed, like array_tx's: the papers give no mmWave patch coupling
+    phase).  ``calibrated`` applies the known matrix's inverse before the
+    angle estimate (what a factory calibration does); off, the estimate
+    carries the coupling's bias."""
+
+    source: Literal["none", "analytic", "survey", "touchstone"] = "none"
+    c1_db: Optional[float] = None
+    c1_deg: float = 180.0
+    c2_rel_db: float = -6.0
+    path_delay: bool = True             # survey: linear phase from the pair's free-space delay
+    touchstone: Optional[str] = None
+    calibrated: bool = False
+
+    def __post_init__(self):
+        _require_in(self.source, {"none", "analytic", "survey", "touchstone"}, "mimo.coupling.source")
+        if self.c1_db is not None:
+            _require(math.isfinite(self.c1_db) and self.c1_db < 0.0, "mimo.coupling.c1_db must be a negative dB figure")
+        _finite(self.c1_deg, "mimo.coupling.c1_deg")
+        _require(math.isfinite(self.c2_rel_db) and self.c2_rel_db <= 0.0, "mimo.coupling.c2_rel_db must be <= 0 dB")
+        _require(self.source != "touchstone" or bool(self.touchstone), "mimo.coupling.source touchstone needs a file")
+
+
+@dataclass(frozen=True)
+class MimoConfig:
+    """TDM-MIMO: ``n_tx`` transmitters take the chirps in turn, ``n_rx``
+    receivers sample every chirp; the virtual array is the sum of the two
+    linear arrays' positions and is a uniform line of ``n_tx x n_rx``
+    elements when the TX pitch is ``n_rx`` RX pitches (the default, None).
+    The angle is estimated by a windowed FFT across the virtual elements at
+    the target's range-Doppler cell (digital beamforming); the TX switching
+    puts a Doppler phase of ``2 pi f_d PRI`` between the TX blocks that
+    ``tdm_doppler_compensation`` removes with the estimated Doppler.  One
+    TX, one RX is the single-channel radar of milestone 1, bit for bit."""
+
+    n_tx: int = 1
+    n_rx: int = 1
+    rx_spacing_lambda: float = 0.5      # RX pitch in carrier wavelengths
+    tx_spacing_lambda: Optional[float] = None   # TX pitch; None -> n_rx x rx_spacing (a filled virtual line)
+    element_pattern: Literal["isotropic", "cos"] = "isotropic"
+    angle_window: Literal["rect", "hann", "hamming", "blackman"] = "hann"
+    angle_pad: int = 8                  # zero-padding factor of the angle FFT
+    tdm_doppler_compensation: bool = True
+    coupling: CouplingConfig = field(default_factory=CouplingConfig)
+
+    def __post_init__(self):
+        _require(self.n_tx >= 1 and self.n_rx >= 1, "mimo.n_tx and n_rx must be >= 1")
+        _finite_pos(self.rx_spacing_lambda, "mimo.rx_spacing_lambda")
+        if self.tx_spacing_lambda is not None:
+            _finite_pos(self.tx_spacing_lambda, "mimo.tx_spacing_lambda")
+            k = self.tx_spacing_lambda / self.rx_spacing_lambda
+            _require(abs(k - round(k)) < 1e-9 and round(k) >= 1,
+                     "mimo.tx_spacing_lambda must be a whole number of RX pitches (the virtual array stays a line)")
+        _require_in(self.element_pattern, {"isotropic", "cos"}, "mimo.element_pattern")
+        _require_in(self.angle_window, set(WINDOWS), "mimo.angle_window")
+        _require(self.angle_pad >= 1, "mimo.angle_pad must be >= 1")
+
+    @property
+    def n_virtual(self) -> int:
+        return self.n_tx * self.n_rx
+
+    @property
+    def tx_pitch_lambda(self) -> float:
+        return self.tx_spacing_lambda if self.tx_spacing_lambda is not None else self.n_rx * self.rx_spacing_lambda
+
+
+@dataclass(frozen=True)
+class LeakageConfig:
+    """TX-to-RX self-interference (milestone 2): the direct antenna /
+    on-chip leakage at ``isolation_db`` below the TX power (None -> the
+    band's placeholder, source: assumed) delayed by ``path_delay_s``, plus
+    an optional near reflector (radome, bumper) at ``reflector_range_m``
+    whose return is ``reflector_level_db`` relative to the direct leakage.
+    Both share the one LO, so their phase noise is range-correlated at a
+    tiny tau; what they do is sit at a beat of a few kHz with a hundred dB
+    more power than the target, which the IF high-pass (``rx.hpf_*``) has
+    to take out before the ADC."""
+
+    enabled: bool = False
+    isolation_db: Optional[float] = None
+    path_delay_s: float = 0.2e-9
+    reflector_range_m: Optional[float] = None
+    reflector_level_db: float = -10.0
+
+    def __post_init__(self):
+        if self.isolation_db is not None:
+            _finite_pos(self.isolation_db, "leakage.isolation_db")
+        _finite_nonneg(self.path_delay_s, "leakage.path_delay_s")
+        if self.reflector_range_m is not None:
+            _finite_pos(self.reflector_range_m, "leakage.reflector_range_m")
+        _finite(self.reflector_level_db, "leakage.reflector_level_db")
 
 
 @dataclass(frozen=True)
@@ -317,12 +428,19 @@ class RadarConfig:
     lo: LOConfig = field(default_factory=LOConfig)
     frontend: FrontEndConfig = field(default_factory=FrontEndConfig)
     channel: ChannelConfig = field(default_factory=ChannelConfig)
-    target: TargetConfig = field(default_factory=TargetConfig)
+    target: TargetConfig = field(default_factory=TargetConfig)          # the primary target (every milestone-1 metric)
+    extra_targets: tuple[TargetConfig, ...] = ()                         # milestone 2: more point targets, same model
+    mimo: MimoConfig = field(default_factory=MimoConfig)
+    leakage: LeakageConfig = field(default_factory=LeakageConfig)
     rx: RxConfig = field(default_factory=RxConfig)
     processing: ProcessingConfig = field(default_factory=ProcessingConfig)
     sim: SimConfig = field(default_factory=SimConfig)
 
     def __post_init__(self):
+        for i, t in enumerate(self.extra_targets):
+            _require(isinstance(t, TargetConfig), f"extra_targets[{i}] must be a target mapping")
+        _require(self.chirp.n_chirps % self.mimo.n_tx == 0,
+                 f"chirp.n_chirps ({self.chirp.n_chirps}) must be a multiple of mimo.n_tx ({self.mimo.n_tx}): TDM blocks")
         n = self.chirp.duration_s * self.rx.adc_fs_hz
         _require(abs(n - round(n)) < 1e-6 and round(n) >= 16,
                  f"chirp.duration_s x rx.adc_fs_hz = {n:g} must be a whole number of samples >= 16")
@@ -358,6 +476,36 @@ class RadarConfig:
         if v is not None:
             return float(v), "config"
         e = frontend_placeholder(self.band.kind, name)
+        return float(e.value), e.source
+
+    @property
+    def targets(self) -> tuple[TargetConfig, ...]:
+        """Every point target, the primary first."""
+        return (self.target,) + tuple(self.extra_targets)
+
+    def rcs_of(self, t: TargetConfig) -> tuple[float, str]:
+        from ..sources import number
+
+        if t.rcs_dbsm is not None:
+            return float(t.rcs_dbsm), "config"
+        e = number(f"rcs.{t.kind}_dbsm")
+        return float(e.value), e.source
+
+    def leakage_value(self, name: str) -> tuple[float, str]:
+        from ..sources import frontend_placeholder
+
+        v = getattr(self.leakage, name)
+        if v is not None:
+            return float(v), "config"
+        e = frontend_placeholder(self.band.kind, "tx_rx_isolation_db" if name == "isolation_db" else name)
+        return float(e.value), e.source
+
+    def coupling_c1(self) -> tuple[float, str]:
+        from ..sources import frontend_placeholder
+
+        if self.mimo.coupling.c1_db is not None:
+            return float(self.mimo.coupling.c1_db), "config"
+        e = frontend_placeholder(self.band.kind, "rx_coupling_c1_db")
         return float(e.value), e.source
 
     def oxygen_db_per_km(self) -> tuple[float, str]:
@@ -415,13 +563,15 @@ class RadarConfig:
 
     @property
     def velocity_resolution_mps(self) -> float:
-        """lambda / (2 N_c PRI): one Doppler bin."""
+        """lambda / (2 N_c PRI): one Doppler bin (the whole frame; with TDM
+        each transmitter's own Doppler FFT has n_chirps / n_tx chirps at
+        n_tx x PRI, the same resolution)."""
         return self.band.wavelength_m / (2.0 * self.chirp.n_chirps * self.chirp.pri_s)
 
     @property
     def max_velocity_mps(self) -> float:
-        """lambda / (4 PRI): the unambiguous radial velocity."""
-        return self.band.wavelength_m / (4.0 * self.chirp.pri_s)
+        """lambda / (4 PRI_tx): the unambiguous radial velocity, PRI_tx = n_tx x PRI under TDM."""
+        return self.band.wavelength_m / (4.0 * self.chirp.pri_s * self.mimo.n_tx)
 
     def tau_s(self, range_m: float | None = None) -> float:
         """Round-trip delay 2R / c."""
@@ -446,4 +596,4 @@ class RadarConfig:
 
 __all__ = ["SCHEMA_VERSION", "C0", "K_BOLTZMANN", "T0_K", "BANDS", "WINDOWS", "BandConfig", "ChirpConfig",
            "LOConfig", "FrontEndConfig", "ChannelConfig", "TargetConfig", "RxConfig", "ProcessingConfig",
-           "SimConfig", "RadarConfig"]
+           "SimConfig", "RadarConfig", "MimoConfig", "CouplingConfig", "LeakageConfig"]

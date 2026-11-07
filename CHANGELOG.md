@@ -4,6 +4,24 @@
 
 ---
 
+## [0.2.0] — 2026-11-07 — 里程碑 2:TDM-MIMO 测角、TX 泄漏、多目标与 CFAR 曲线
+
+- **TDM-MIMO 虚拟阵列**(`mimo.py`,config `mimo.*`,vendored array_tx@e897c15 的 geometry / beam / coupling / touchstone):TX + RX 位置之和(默认填满的线),
+  u 格点加窗 DFT 测角,TDM 多普勒相位补偿(2 m/s 不补偿偏 2.71°)、互耦三来源(analytic / survey / touchstone,相邻 −16 dB 占位 `assumed`;
+  未校准偏 −0.29°,`coupling.calibrated` 后 0.0002°)、CRLB、array_tx 的波束宽与扫频斜视(60 GHz ±2 GHz 斜视 ±0.7°,FR2 的 5 倍)。
+  时域引擎出 (chirp, RX, 样本) 立方,每 TX 块各自 FFT 后非相干合成,目标格 DBF:20° 目标 6 个 seed 均值 +0.014°、RMS 0.050°(界 0.023°)。
+- **TX 泄漏**(`link/leakage.py`,config `leakage.*`、`rx.hpf_*`,`processing/iffilter.py`):直接泄漏(隔离 25 dB 占位)+ 近端反射体经同一 LO(τ ≈ 0,
+  相噪几乎全抵消)的预算:P1dB 裕量 −5 dB、ADC 裕量 −21 dB → 2 阶 200 kHz 高通后 +35 dB;时域引擎削波 100 % → 3.5 %(飞回瞬态),
+  目标在泄漏下 −18.1 dB 处被找到(预算 −16.2 dB)。
+- **多目标与 CFAR 曲线**:`extra_targets` 列表进 config;统计引擎每目标一行(电平、SNR、最强他者的窗裙 / 相噪、遮蔽判断),
+  时域引擎 `found_targets` 分格找峰;CA-CFAR 的蒙卡(Swerling 0 / 1)对闭式:Pd 0.9 处损失 N = 16 1.35 dB、N = 32 0.73 dB,Swerling 1 闭式与蒙卡 0.02 内。
+- **修过的坑**:TDM 补偿用粗多普勒格留 −1.48° 偏差(改为相邻同 TX chirp 的相位推进);边缘波束的角旁瓣读到绕回的主瓣(谱按周期滚动);
+  邻目标的主瓣被当成本目标(分格 + 局部极大);示例输出路径按仓库相对打印。
+- 示例 05–08,`configs/radar_60g_mimo.yaml`,报表三节,`tests/` +25 项;指纹 691 → 1235 值,旧值逐位不变(numbers-move:只有新键)。
+  CI 的 vendor-drift 作业多检出 array_tx。
+
+---
+
 ## [0.1.1] — 2026-11-06 — 鬼目标与在线校准(里程碑 1 的 P1 余项)
 
 - `StatResult.nonlinearity["ghosts"]`:chirp 频率误差曲线的确定性杂散,从单 ramp 的距离响应里提(主瓣外、−70 dBc 以上的局部极大),

@@ -93,17 +93,20 @@ def peak_sidelobe_db(name: str, n: int = 1024, pad: int = 64) -> float:
 
 def peak_sidelobe_of(x: np.ndarray, y_db: np.ndarray) -> float:
     """Highest sidelobe of a lobe shape: the maximum beyond the first null on
-    either side of the peak."""
+    either side of the peak.  A side whose main lobe runs off the end of
+    ``x`` before a null (a beam steered near the edge of the u grid) has no
+    sidelobe to read and contributes nothing."""
     i0 = int(np.argmax(y_db))
 
     def first_null(step):
         i = i0
         while 0 <= i + step < y_db.size and y_db[i + step] <= y_db[i]:
             i += step
-        return i
+        return i if 0 <= i + step < y_db.size else None
 
     lo, hi = first_null(-1), first_null(+1)
-    outside = np.concatenate([y_db[:lo + 1], y_db[hi:]])
+    parts = [y_db[:lo + 1] if lo is not None else y_db[:0], y_db[hi:] if hi is not None else y_db[:0]]
+    outside = np.concatenate(parts)
     return float(outside.max() - y_db[i0]) if outside.size else float("-inf")
 
 

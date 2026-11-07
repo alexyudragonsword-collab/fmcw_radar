@@ -24,7 +24,9 @@ import numpy as np
 from ..chirp import ChirpEngine, ChirpResult
 from ..config.schema import C0, RadarConfig
 from ..link.budget import LinkBudget, link_budget
+from ..link.leakage import LeakageBudget, leakage_budget
 from ..lo import LOProfile
+from ..mimo import VirtualArray
 from ..phase_noise import RangeCorrelation
 from ..processing.detection import pd_swerling0
 from ..processing.rd import power_db, range_axis_m, range_fft, read_peak, velocity_axis_mps
@@ -57,6 +59,9 @@ class StatResult:
     lo_rms_rad: float = 0.0             # the LO's own, same band
     nonlinearity: dict = field(default_factory=dict)  # from the chirp curve: width, sidelobe, ISLR
     chirp: dict = field(default_factory=dict)         # the chirp engine's metrics
+    targets: list = field(default_factory=list)       # milestone 2: one row per point target (the primary first)
+    angle: dict = field(default_factory=dict)         # milestone 2: the virtual array's angle metrics
+    leakage: LeakageBudget | None = None              # milestone 2: TX-RX leakage budget (None when off)
     extras: dict = field(default_factory=dict)
 
 
@@ -218,6 +223,84 @@ def ideal_profile(cfg: RadarConfig, name: str | None = None) -> dict:
             "peak_sidelobe_db": rp["peak_sidelobe_db"]}
 
 
+def target_rows(cfg: RadarConfig, rc: RangeCorrelation, n_tx: int = 1) -> list[dict]:
+    """One row per point target: its own budget, cell position, and the
+    masking by the others -- the strongest interferer's response at this
+    target's cell (the range window's sidelobe at the range offset times
+    the Doppler window's at the Doppler offset, the LO's residual noise at
+    the range offset through range correlation at the interferer's tau,
+    whichever is higher) relative to this target's own level.  A target
+    whose margin is negative sits under another's skirt."""
+    import dataclasses
+
+    from ..processing.windows import spectrum_db
+
+    n, m = cfg.n_samples, cfg.chirp.n_chirps // n_tx
+    df = cfg.rx.adc_fs_hz / n
+    dfd = 1.0 / (cfg.chirp.pri_s * n_tx * m)
+    bins_r, w_r = spectrum_db(window(cfg.processing.window_range, n), 16)
+    bins_d, w_d = spectrum_db(window(cfg.processing.window_doppler, m), 16)
+    enbw = enbw_bins(window(cfg.processing.window_range, n)) * df
+    cell_off = -coherent_gain_db(window(cfg.processing.window_doppler, m))
+    rows = []
+    for t in cfg.targets:
+        c = dataclasses.replace(cfg, target=t, extra_targets=())
+        b = link_budget(c)
+        rows.append({"kind": t.kind, "range_m": t.range_m, "velocity_mps": t.velocity_mps, "angle_deg": t.angle_deg,
+                     "rcs_dbsm": b.rcs_dbsm, "rcs_source": b.inputs["rcs_dbsm"][1], "beat_hz": c.beat_hz(),
+                     "doppler_hz": c.doppler_hz(), "ps_adc_dbm": b.ps_adc_dbm,
+                     "snr_cell_db": b.snr_cell_db - 10.0 * math.log10(n_tx), "pd": float(pd_swerling0(b.snr_cell_db - 10.0 * math.log10(n_tx), cfg.processing.cfar_pfa)),
+                     "in_if_band": bool(c.beat_hz() <= cfg.rx.if_bw_hz)})
+    for i, r in enumerate(rows):
+        worst = None
+        for j, o in enumerate(rows):
+            if j == i:
+                continue
+            d_r = abs(r["beat_hz"] - o["beat_hz"]) / df
+            d_d = abs(r["doppler_hz"] - o["doppler_hz"]) / dfd
+            d_d = min(d_d, m - d_d) if m > 1 else 0.0
+            # the window's skirt at that offset: the lobe's envelope within half a bin (a DFT-even window's
+            # spectrum is exactly zero at whole-bin offsets, where a plain lookup would read nothing)
+            side = _envelope(bins_r, w_r, d_r) + (_envelope(bins_d, w_d, d_d) if m > 1 else 0.0)
+            rc_o = RangeCorrelation(rc.profile, cfg.tau_s(o["range_m"]))
+            pn = float(rc_o.sidelobe_dbc(max(abs(r["beat_hz"] - o["beat_hz"]), df), enbw)) + cell_off if d_r >= 1.0 else 0.0
+            lvl = o["ps_adc_dbm"] + max(side, pn) - r["ps_adc_dbm"]
+            if worst is None or lvl > worst[1]:
+                worst = (j, lvl, "window" if side >= pn else "phase noise")
+        r["interferer"] = None if worst is None else worst[0]
+        r["interference_dbc"] = None if worst is None else worst[1]          # the interferer's skirt at this cell rel. this target
+        r["interference_kind"] = None if worst is None else worst[2]
+        r["margin_db"] = None if worst is None else -worst[1]
+        r["masked"] = bool(worst is not None and worst[1] > 0.0)
+    return rows
+
+
+def _envelope(bins: np.ndarray, spec_db: np.ndarray, offset: float) -> float:
+    sel = np.abs(bins - offset) <= 0.5
+    return float(spec_db[sel].max()) if np.any(sel) else -300.0
+
+
+def angle_metrics(cfg: RadarConfig, snr_cell_db: float) -> dict:
+    """The virtual array's angle resolution, accuracy bound and biases for
+    the primary target (empty for one TX, one RX)."""
+    m = cfg.mimo
+    if m.n_virtual < 2:
+        return {}
+    va = VirtualArray(cfg)
+    th = cfg.target.angle_deg
+    fd = cfg.doppler_hz()
+    snr_el = snr_cell_db - 10.0 * math.log10(m.n_tx)               # one TX block's Doppler FFT per virtual element
+    est = va.estimate(va.snapshot(th, fd, coupled=True), fd)
+    sq = va.sweep_squint(th)
+    return {"n_virtual": va.n, "filled": va.filled, "aperture_m": va.aperture_m, "beamwidth_deg": va.beamwidth_deg(th),
+            "crlb_sigma_deg": va.crlb_sigma_deg(snr_el, th), "snr_element_db": snr_el,
+            "theta_est_deg": est["theta_deg"], "peak_sidelobe_db": est["peak_sidelobe_db"],
+            "coupling_bias_deg": va.coupling_bias_deg(th), "tdm_bias_uncompensated_deg": va.tdm_bias_deg(th, fd),
+            "coupling_source": m.coupling.source, "coupling_calibrated": m.coupling.calibrated,
+            "coupling_max_offdiag_db": (va.coupling.max_offdiag_db() if va.coupling is not None else None),
+            "max_velocity_mps": cfg.max_velocity_mps, **sq}
+
+
 def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatResult:
     budget = link_budget(cfg)
     n = cfg.n_samples
@@ -255,6 +338,11 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
     res.extras["pn_residual_total_rad"] = math.sqrt(sb.sigma2)
     res.extras["snr_cell_expected_db"] = (-10.0 * math.log10(thermal_cell + pn_cell)
                                           + res.extras["pn_carrier_loss_db"])
+    res.targets = target_rows(cfg, rc, cfg.mimo.n_tx)
+    res.angle = angle_metrics(cfg, budget.snr_cell_db)
+    res.leakage = leakage_budget(cfg, budget)
+    if cfg.mimo.n_tx > 1:
+        res.extras["snr_cell_per_tx_db"] = budget.snr_cell_db - 10.0 * math.log10(cfg.mimo.n_tx)
     res.extras["max_range_m"] = cfg.max_range_m
     res.extras["max_velocity_mps"] = cfg.max_velocity_mps
     res.extras["in_if_band"] = bool(beat <= cfg.rx.if_bw_hz)
@@ -278,4 +366,5 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
 
 
 __all__ = ["StatResult", "run_statistical", "pn_floor_table", "nonlinearity_profile", "ideal_profile", "ghost_targets",
+           "target_rows", "angle_metrics",
            "rd_cell_pn_offset_db", "scalloping_loss_db", "pn_floor_mean_cell", "beat_sideband", "REPORT_OFFSETS_M"]

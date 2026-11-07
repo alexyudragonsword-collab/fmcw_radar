@@ -4,7 +4,7 @@
 的相关抵消(range correlation)、雷达方程、低速 ADC、距离–多普勒处理、CFAR;指标是距离 / 速度分辨率、相噪旁瓣、检测概率。
 mmw60_trx 的姊妹库而不是扩展 —— 它的前端(PA / LNA / 阵列 / 封装 / LO ×N)到位之前,这里用一个解析占位前端(每项一个数,全标 `source: assumed`)。
 
-里程碑 1(单 chirp、单目标)已交付;MIMO 测角、TX 泄漏、多目标 / CFAR 曲线在 [`ROADMAP.md`](ROADMAP.md)。协作规则在 [`AGENTS.md`](AGENTS.md)。
+里程碑 1(单 chirp、单目标)与里程碑 2(TDM-MIMO 测角、TX 泄漏、多目标 / CFAR 曲线)已交付;待办在 [`ROADMAP.md`](ROADMAP.md)。协作规则在 [`AGENTS.md`](AGENTS.md)。
 
 ## 用法
 
@@ -37,12 +37,14 @@ IF / ADC、窗与 CFAR、仿真。77 GHz 车载一档结构相同只换数(`conf
 | `lo.py` | vendored ADPLL 的构造;LO 相噪剖面 = analyze() ×N²(fref/2 以上取 DCO 自身)或剖面文件 | 2 |
 | `phase_noise/` | range correlation:残余 PSD = 2(1 − cos 2πfτ)·S_φ,合成与闭式 | 2 |
 | `chirp/` | 斜坡经 event / response / ideal 引擎 → 瞬时频率误差曲线;离线 LS / 在线 sign-sign 两点校准 | 4, 6 |
-| `link/` | 雷达方程、噪声密度、窗的相干增益、P1dB 裕量 | 3 |
-| `processing/` | 窗、距离 / 多普勒 FFT、峰值读数、CA-CFAR、Swerling 0 检测概率 | — |
-| `engine/statistical.py` | 格点 SNR、分辨率、相噪旁瓣表、非线性旁瓣(误差曲线喂一次 FFT)、Pd | 3 |
-| `engine/timedomain.py` | 5 GS/s 包络真混频 → 砖墙 IF → ADC 量化 → 距离–多普勒图 | 3 |
+| `link/` | 雷达方程、噪声密度、窗的相干增益、P1dB 裕量;TX 泄漏预算(直接 + 近端反射体,高通前后) | 3 |
+| `processing/` | 窗、距离 / 多普勒 FFT、峰值读数、CA-CFAR 与它的蒙卡 Pd(Swerling 0 / 1)、IF 高通 | — |
+| `mimo.py` | TDM-MIMO 虚拟阵列:位置之和、u 格点 DBF、TDM 多普勒补偿、互耦(array_tx 三来源)与校准、CRLB、斜视 | 1, 5 |
+| `engine/statistical.py` | 格点 SNR、分辨率、相噪旁瓣表、非线性旁瓣(误差曲线喂一次 FFT)、Pd;每目标一行与遮蔽、测角指标、泄漏 | 3 |
+| `engine/timedomain.py` | 5 GS/s 包络真混频 → 泄漏音 → 砖墙 IF → 高通 → ADC 量化(削波)→ 距离–多普勒图 / MIMO 立方与 DBF | 3 |
 | `report.py`, `tools/` | 预算一页、指纹、vendor 漂移、示例冒烟 / 漂移 | 7 |
 | `vendor/polartx/` | polar_tx@7057738 的两点调制器、两点校准、嵌套的 pllsim 子树(逐字节校验) | — |
+| `vendor/arraytx/` | array_tx@e897c15 的阵列几何、波束宽 / 斜视、互耦矩阵三来源、Touchstone 读写(coupling 为改编副本) | — |
 
 ## 默认配置的数(示例 00–04,`examples/expected/` 存全量输出)
 
@@ -56,10 +58,22 @@ IF / ADC、窗与 CFAR、仿真。77 GHz 车载一档结构相同只换数(`conf
   离线校准两次把失配压到 1e-4,在线校准(飞回后 20 周期的 LMS)四个 chirp 内到 ±0.05 %。event 与 response 在瞬态上逐周期一致(比值 1.005 ± 0.046);
   误差曲线喂统计引擎与时域引擎的剖面逐点相同;TDC 量化的鬼目标(5 ps:±4.85 m 处 −45.3 dBc)从同一条曲线里报出。
 
+## 里程碑 2 的数(示例 05–08,`configs/radar_60g_mimo.yaml`)
+
+- 2 TX × 4 RX、RX 间距 0.5 λ、TX 间距 2 λ → 8 元填满的线,孔径 20 mm,波束宽 13.4°;20° 目标每元 39.3 dB,CRLB 0.023°;理想快拍 DBF 读 20.000°,Hann 角旁瓣 −32 dB。
+  TDM 把不模糊速度减半到 ±6.25 m/s,2 m/s 的块间多普勒相位不补偿偏 +2.71°(时域 +2.72°),补偿后时域 6 个 seed 均值 +0.014°、RMS 0.050°。
+- 互耦(array_tx,相邻 −16 dB 占位):未校准偏 −0.29°、角旁瓣升到 −20.6 dB;校准后 +0.0002°(时域 +0.02°)。扫频斜视:相移器对准 60 GHz 的 TX 波束在 ±2 GHz 边沿 +0.72 / −0.67°
+  (FR2 28 GHz / 400 MHz ±0.15°);虚拟阵列边缘元的拍频只偏 0.04 格。
+- TX 泄漏(隔离 25 dB 占位,τ 0.2 ns → 8 kHz;2 cm 反射体 −10 dB):接收端 −15 dBm,P1dB 裕量 −5 dB,ADC 裕量 −21 dB(时域 100 % 削波);
+  2 阶 200 kHz 高通衰 56 dB → 裕量 +35 dB、削波 3.5 %(飞回瞬态),5 m 人体在泄漏下 −18.1 dB 处(预算 −16.2 dB)。
+- 四目标(人 5 m / 车 5.3 m / 人 9.9 m / −20 dBsm 点 5.42 m):统计引擎的遮蔽判断全为否(最强他者的窗裙 −43.7 … −7.7 dBc),时域各目标电平对统计 0.0 / 0.0 / +0.8 / +2.1 dB。
+- CA-CFAR 对已知噪底(Pfa 1e-4,Pd 0.9):N = 16 损失 1.35 dB、N = 32 0.73 dB;Swerling 1 在 N = 16 要 20.0 dB;时域纯噪声帧 64000 格 4 个虚警(6.3e-5)。
+
 ## 建模口径与已知边界
 
-- 倍频器理想(相噪 +20 log N,无自身底噪);前端是占位;TX 泄漏不在里程碑 1。
+- 倍频器理想(相噪 +20 log N,无自身底噪);前端与 TX-RX 隔离、互耦都是占位(`source: assumed`);泄漏只有直接路径 + 一个近端反射体。
 - 时域引擎按 chirp 独立合成相噪(最低 10 kHz),chirp 间 LO 低频相关没有表示(论证见 `cairn/range-correlation.md`)。
 - polar_tx 的 event 有效域指标(每参考周期相位推进)在 chirp 上读 495 %;本库的判断是该指标针对亚周期相位轨迹、不适用于频率斜坡,
   证据与保留意见在 `cairn/chirp-engine.md`。`lo.engine: response` 是线性化引擎,不能背书杂散。
-- CA-CFAR 是最简版;Pd 是已知噪底的闭式,不含 CFAR 损失。示例 00 的 64 chirp 帧里 CFAR 在目标主瓣外还报 12 个格:无噪声逐周期引擎的量化杂散(ROADMAP P1 #1)。
+- CA-CFAR 是最简版(2-D 方窗);`pd` 仍是已知噪底的闭式,CFAR 损失由示例 06 的蒙卡曲线给。示例 00 的 64 chirp 帧里 CFAR 在目标主瓣外还报 12 个格:无噪声逐周期引擎的量化杂散(ROADMAP P1 #1)。
+- 测角只有 DBF(加窗 DFT + 抛物线插峰),没有 MUSIC / ESPRIT;TDM 的多普勒补偿在目标格上估单音频率,多目标同格时取其合成。高通后的飞回瞬态没有 blanking。

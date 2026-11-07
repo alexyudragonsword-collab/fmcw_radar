@@ -31,7 +31,8 @@ def doppler_fft(ranged: np.ndarray, name: str, pad: int = 1) -> np.ndarray:
     m = ranged.shape[0]
     w = window(name, m)
     w = w / w.sum()
-    return np.fft.fftshift(np.fft.fft(ranged * w[:, None], m * pad, axis=0), axes=0)
+    w = w.reshape((-1,) + (1,) * (ranged.ndim - 1))                  # the chirp axis first, whatever follows
+    return np.fft.fftshift(np.fft.fft(ranged * w, m * pad, axis=0), axes=0)
 
 
 def range_doppler_map(frame: np.ndarray, cfg: RadarConfig) -> np.ndarray:

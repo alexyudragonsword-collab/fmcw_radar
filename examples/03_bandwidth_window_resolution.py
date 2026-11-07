@@ -8,7 +8,7 @@ the time engine's processed point target for the ideal chirp (measured):
 the rectangular lobe at the Rayleigh level is one bin = c / 2B.
 """
 
-from _common import CONFIG, OUT, SMOKE, plt_or_none
+from _common import CONFIG, OUT, SMOKE, plt_or_none, rel
 
 from fmcw_radar.config import load_config
 from fmcw_radar.engine.statistical import ideal_profile
@@ -59,4 +59,4 @@ if plt is not None and not SMOKE:
     fig.tight_layout()
     p = OUT / "03_bandwidth_window_resolution.png"
     fig.savefig(p, dpi=120)
-    print(f"  wrote {p}")
+    print(f"  wrote {rel(p)}")

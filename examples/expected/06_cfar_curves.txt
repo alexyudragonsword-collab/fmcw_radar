@@ -1,0 +1,17 @@
+Pd against cell SNR at Pfa = 0.0001 (threshold factors: N=16 12.45, N=32 10.67, ideal 9.21):
+  SNR [dB] | ideal (known noise)          | CA-CFAR N=16, Swerling 0 (MC | CA-CFAR N=16, Swerling 1 (cl | CA-CFAR N=32, Swerling 0 (MC | CA-CFAR N=32, Swerling 1 (cl
+         4 |                       0.0294 |                       0.0148 |                       0.0407 |                       0.0212 |                       0.0548
+         6 |                       0.0925 |                       0.0445 |                       0.0980 |                       0.0645 |                       0.1257
+         8 |                       0.2708 |                       0.1407 |                       0.1981 |                       0.1968 |                       0.2398
+        10 |                       0.6161 |                       0.3766 |                       0.3349 |                       0.4917 |                       0.3845
+        12 |                       0.9251 |                       0.7451 |                       0.4855 |                       0.8522 |                       0.5341
+        14 |                       0.9981 |                       0.9694 |                       0.6251 |                       0.9911 |                       0.6663
+        16 |                       1.0000 |                       0.9996 |                       0.7391 |                       1.0000 |                       0.7707
+        18 |                       1.0000 |                       1.0000 |                       0.8244 |                       1.0000 |                       0.8470
+        20 |                       1.0000 |                       1.0000 |                       0.8844 |                       1.0000 |                       0.8999
+
+SNR for Pd = 0.9: ideal 11.75 dB; CA-CFAR N=16 13.10 dB (loss 1.35 dB), N=32 12.48 dB (loss 0.73 dB); a Rayleigh target (Swerling 1) needs 20.0 dB at N=16
+realised Pfa, 1-D MC, N=16: 9.62e-05 for 0.0001 asked
+time engine, noise only (32 chirps, 2-D CA-CFAR with 416 training cells, Pfa 0.0001): 4 false alarms in 64000 cells = 6.25e-05
+  (the map is zero-padded x4 in range: neighbouring cells are correlated, so the count is not a free-sample estimate)
+  wrote examples/output/06_cfar_curves.png

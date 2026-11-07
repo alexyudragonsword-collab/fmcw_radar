@@ -1,0 +1,75 @@
+# 60 GHz sensing radar, milestone 2: the 60g_sensing radar with a 2 TX x 4 RX
+# TDM-MIMO front end (an 8-element virtual line at lambda/2), the RX array's
+# mutual coupling from the survey-shaped matrix (source: assumed magnitude and
+# phase), the TX-RX leakage with a near reflector, an IF high-pass, and a
+# second target 30 cm behind the first.  Every front-end number is a placeholder.
+schema_version: 1
+band:
+  kind: 60g_sensing
+  center_hz: 60.0e9
+  sweep_hz: 4.0e9
+chirp:
+  shape: sawtooth
+  duration_s: 100.0e-6
+  idle_s: 0.0
+  n_chirps: 64
+lo:
+  fref_hz: 100.0e6
+  loop_bw_hz: 1.0e6
+  phase_margin_deg: 60.0
+  kdco_hz: 50.0e3
+  dp_gain: 1.0
+  dp_cal: offline
+  dp_cal_iterations: 2
+  engine: event
+frontend: {}
+channel:
+  extra_loss_db: 0.0
+target:
+  kind: human
+  range_m: 5.0
+  velocity_mps: 2.0
+  angle_deg: 20.0
+extra_targets:
+  - kind: car
+    range_m: 5.3
+    velocity_mps: 2.0
+    angle_deg: -10.0
+mimo:
+  n_tx: 2
+  n_rx: 4
+  rx_spacing_lambda: 0.5
+  element_pattern: cos
+  angle_window: hann
+  angle_pad: 8
+  tdm_doppler_compensation: true
+  coupling:
+    source: survey
+    c1_deg: 180.0
+    c2_rel_db: -6.0
+    path_delay: true
+    calibrated: false
+leakage:
+  enabled: true
+  path_delay_s: 0.2e-9
+  reflector_range_m: 0.02
+  reflector_level_db: -10.0
+rx:
+  if_bw_hz: 4.0e6
+  adc_fs_hz: 10.0e6
+  adc_bits: 12
+  adc_fullscale_dbm: 4.0
+  hpf_corner_hz: 200.0e3
+  hpf_order: 2
+processing:
+  window_range: hann
+  window_doppler: hann
+  range_pad: 4
+  doppler_pad: 1
+  cfar_guard: 2
+  cfar_train: 8
+  cfar_pfa: 1.0e-4
+sim:
+  seed: 1
+  engine: statistical
+  time_osr: 1.25

@@ -13,7 +13,7 @@ step, not a parabola).
 """
 
 import numpy as np
-from _common import CONFIG, OUT, plt_or_none
+from _common import CONFIG, OUT, plt_or_none, rel
 
 from fmcw_radar.chirp import ChirpEngine, quadratic_reference
 from fmcw_radar.config import load_config
@@ -98,4 +98,4 @@ if plt is not None:
     fig.tight_layout()
     p = OUT / "02_chirp_nonlinearity.png"
     fig.savefig(p, dpi=120)
-    print(f"  wrote {p}")
+    print(f"  wrote {rel(p)}")

@@ -27,9 +27,22 @@ Pins
   fmcw_radar's own (polar_tx's import the DTC modulator and the skew
   calibrator, which are not vendored); ``vendor/pllsim/`` keeps polar_tx's.
 
+* ``arraytx/`` -- array_tx @ ``e897c159e5fc5b2e26af6336cf9f6164461ff7f5``
+  (its ``main``), the virtual array's parts only (milestone 2):
+
+  - ``geometry.py`` (``ArrayGeometry``: positions, delays, element pattern),
+  - ``beam.py`` (array factor, beamwidth, the phase-shifter squint
+    ``squint_analytic_deg``),
+  - ``coupling.py`` (``CouplingMatrix`` from the three sources and the one
+    ``apply_coupling``; adapted: the ``from .config import ArrayConfig`` line
+    is dropped, fmcw_radar builds the matrix from its own config and never
+    calls ``build_coupling``),
+  - ``touchstone.py`` (the .sNp reader / writer).
+
 Local changes
 -------------
-None in any ``.py`` body.  A linear FM chirp is the two-point modulator fed a
+None in any ``.py`` body (the one import line above is the adapted copy's
+whole difference, which ``tools/vendor_check.py`` classifies as such).  A linear FM chirp is the two-point modulator fed a
 frequency ramp, so the chirp generator (``fmcw_radar.chirp``) wraps these
 classes rather than editing them.  A change to a vendored body goes upstream
 first (polar_tx's ROADMAP), then gets re-vendored at a new pin; if it cannot,

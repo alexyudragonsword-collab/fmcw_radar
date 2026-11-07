@@ -10,7 +10,7 @@ pip install -e ".[plot,test]"
 pytest -q                                   # 全绿是提交的前置条件(addopts 已有 -q)
 python examples/00_single_target_rd_map.py  # 图写到 examples/output/
 python tools/budget_report.py configs/radar_60g_sensing.yaml   # 预算一页
-python tools/vendor_check.py --strict       # vendor 漂移(需要 polar_tx 的 checkout,见下)
+python tools/vendor_check.py --strict       # vendor 漂移(需要 polar_tx 与 array_tx 的 checkout,见下)
 python tools/fingerprint.py record before.json && ... && python tools/fingerprint.py compare before.json after.json
 python tools/run_examples.py --smoke        # 每个示例冒烟(n_chirps 截到 8)
 ```
@@ -27,9 +27,9 @@ python tools/run_examples.py --smoke        # 每个示例冒烟(n_chirps 截到
 
 ## 2. vendored 代码是改编副本,不是 fork
 
-`src/fmcw_radar/vendor/` 下的每个文件头是 `# Vendored from polar_tx@<完整 SHA>: src/polartx/...`,
+`src/fmcw_radar/vendor/` 下的每个文件头是 `# Vendored from <repo>@<完整 SHA>: src/...`(polar_tx 与 array_tx 两个来源),
 polar_tx 自己嵌套的 `# Vendored from pll_simulator@...` 头保留在下面;`tools/vendor_check.py` 只剥外层头,
-剩下的与 polar_tx 的文件逐字节比。要改 vendored 文件先问能不能在 `fmcw_radar` 侧包一层(chirp 引擎就是这么做的:
+剩下的与上游文件逐字节比。array_tx 的 `coupling.py` 是改编副本(去掉了对它自己 config 的 import),按 `adapted` 规则校验。要改 vendored 文件先问能不能在 `fmcw_radar` 侧包一层(chirp 引擎就是这么做的:
 直接驱动 `ADPLL.simulate`,校准器按 `dp_cal` 契约另写);真要改就更新 `tools/vendor_manifest.json` 并写 `reason`。
 需要上游改的报回 polar_tx 的 ROADMAP,合并后重新 pin。
 

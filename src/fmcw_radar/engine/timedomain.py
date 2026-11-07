@@ -35,9 +35,12 @@ import numpy as np
 from ..chirp import ChirpEngine, ChirpResult
 from ..config.schema import RadarConfig
 from ..link.budget import adc_amplitudes, link_budget
+from ..link.leakage import leakage_tones
 from ..lo import LOProfile
+from ..mimo import VirtualArray
 from ..phase_noise import RangeCorrelation
 from ..processing.cfar import ca_cfar_2d
+from ..processing.iffilter import apply_hpf, hpf_initial_state, hpf_sos
 from ..processing.rd import (noise_floor, power_db, range_axis_m, range_doppler_map, range_fft, read_peak,
                              velocity_axis_mps)
 from ..processing.windows import enbw_bins, window
@@ -66,13 +69,29 @@ class TimeResult:
 
 def beat_frame(cfg: RadarConfig, chirp: ChirpResult | None, *, noise: bool = True, phase_noise: bool = True,
                quantise: bool = True, seed: int | None = None, n_chirps: int | None = None,
-               rc: RangeCorrelation | None = None) -> tuple[np.ndarray, dict]:
-    """The ADC frame ``(n_chirps, n_samples)`` and a dict of what was used."""
+               rc: RangeCorrelation | None = None, leakage: bool = True, hpf: bool = True) -> tuple[np.ndarray, dict]:
+    """The ADC frame and a dict of what was used: ``(n_chirps, n_samples)``
+    for one TX and one RX (milestone 1, bit for bit), ``(n_chirps, n_rx,
+    n_samples)`` otherwise -- chirp m is transmitted by TX ``m % n_tx``
+    (TDM) and every RX samples it; every target (``cfg.targets``), the
+    leakage tones and the IF high-pass are in."""
     seed = cfg.sim.seed if seed is None else seed
     rng = np.random.default_rng(seed)
     m_chirps = cfg.time_chirps() if n_chirps is None else n_chirps
     budget = link_budget(cfg)
     a_s, a_fs, n0_50 = adc_amplitudes(cfg, budget)
+    import dataclasses
+
+    mimo = cfg.mimo
+    multi = mimo.n_virtual > 1
+    va = VirtualArray(cfg) if multi else None
+    # every target's amplitude at the ADC, its own delay and velocity; the primary's amplitude is the milestone-1 one
+    tgt = []
+    for t in cfg.targets:
+        c_t = dataclasses.replace(cfg, target=t, extra_targets=())
+        amp = adc_amplitudes(c_t, link_budget(c_t))[0] if t is not cfg.target else a_s
+        tgt.append((t.range_m, t.velocity_mps, t.angle_deg, amp))
+    leaks = leakage_tones(cfg) if (leakage and cfg.leakage.enabled) else []
     fs_w = cfg.sim.time_osr * cfg.band.sweep_hz
     n_w = int(round(cfg.chirp.duration_s * fs_w))
     n_adc = cfg.n_samples
@@ -99,37 +118,88 @@ def beat_frame(cfg: RadarConfig, chirp: ChirpResult | None, *, noise: bool = Tru
     idx_adc = np.rint(f_adc * cfg.chirp.duration_s).astype(int) % n_w
     sigma = math.sqrt(n0_50 * fs_w)
     step = 2.0 * a_fs / (2 ** cfg.rx.adc_bits)
-    frame = np.empty((m_chirps, n_adc), dtype=complex)
+    n_rx = mimo.n_rx
+    frame = np.empty((m_chirps, n_rx, n_adc), dtype=complex) if multi else np.empty((m_chirps, n_adc), dtype=complex)
+    clipped = 0
+    use_hpf = hpf and cfg.rx.hpf_corner_hz > 0.0
+    sos = hpf_sos(cfg.rx.adc_fs_hz, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order) if use_hpf else None
+    hpf_state = [hpf_initial_state(sos) for _ in range(n_rx)] if use_hpf else None
+    x_tx = va.tx.x_m if multi else np.zeros(1)
+    x_rx = va.rx.x_m if multi else np.zeros(1)
+
+    def beat_phase(tau):
+        """The ideal beat phase for a delay tau(t): exact for the sweep."""
+        return TWOPI * (f_c - 0.5 * b) * tau + TWOPI * s * tau * t - math.pi * s * tau * tau
+
     for m in range(m_chirps):
-        tau = 2.0 * (r0 + v * (m * pri + t)) / c0
-        phase = TWOPI * (f_c - 0.5 * b) * tau + TWOPI * s * tau * t - math.pi * s * tau * tau
+        t_abs = m * pri + t
+        i_tx = m % mimo.n_tx
+        # the LO's error at this chirp: the chirp engine's curve and the phase noise, delayed by the
+        # primary target's round trip; the channels' extra delays (tens of ps across the aperture, the
+        # leakage's fraction of a ns) are far below the error's own resolution and share this term
+        tau0 = 2.0 * (r0 + v * t_abs) / c0
+        err = np.zeros(n_w)
         if psi_ref is not None:
-            t_abs = m * pri + t
-            phase = phase + np.interp(t_abs, t_ref, psi_ref) - np.interp(t_abs - tau, t_ref, psi_ref)
+            err = err + np.interp(t_abs, t_ref, psi_ref) - np.interp(t_abs - tau0, t_ref, psi_ref)
         if phase_noise:
             pn = rc.synthesize_lo(n_w, fs_w, rng)
-            phase = phase + rc.residual(pn, fs_w)
+            err = err + rc.residual(pn, fs_w)
             for f0, a in rc.profile.spurs:
                 ph0 = rng.uniform(0.0, TWOPI)
-                t_abs = m * pri + t
-                phase = phase + a * (np.sin(TWOPI * f0 * t_abs + ph0) - np.sin(TWOPI * f0 * (t_abs - tau) + ph0))
-        x = a_s * np.exp(1j * phase)
-        if noise:
-            x = x + (sigma / math.sqrt(2.0)) * (rng.standard_normal(n_w) + 1j * rng.standard_normal(n_w))
-        spec = np.fft.fft(x)
-        spec = np.where(keep, spec, 0.0)
-        y = np.fft.ifft(spec[idx_adc]) * (n_adc / n_w)
-        if quantise:
-            y = np.clip(np.round(y.real / step) * step, -a_fs, a_fs) + 1j * np.clip(np.round(y.imag / step) * step,
-                                                                                  -a_fs, a_fs)
-        frame[m] = y
+                err = err + a * (np.sin(TWOPI * f0 * t_abs + ph0) - np.sin(TWOPI * f0 * (t_abs - tau0) + ph0))
+        ys = []
+        for n in range(n_rx):
+            x = np.zeros(n_w, dtype=complex)
+            for r_t, v_t, th_t, amp in tgt:
+                tau = 2.0 * (r_t + v_t * t_abs) / c0
+                if multi:
+                    tau = tau + (x_tx[i_tx] + x_rx[n]) * math.sin(math.radians(th_t)) / c0
+                g = va.element_gain(th_t) if multi else 1.0
+                x = x + (amp * g) * np.exp(1j * (beat_phase(tau) + err))
+            for tau_l, amp_l in leaks:
+                # the leakage shares the LO: its error phase is the same curve at a tau of ~0, i.e. nothing
+                x = x + amp_l * np.exp(1j * beat_phase(np.full(n_w, tau_l)))
+            if noise:
+                x = x + (sigma / math.sqrt(2.0)) * (rng.standard_normal(n_w) + 1j * rng.standard_normal(n_w))
+            ys.append(x)
+        if multi and va.coupling is not None:
+            # the receive array's mutual coupling at the carrier: received_k = a_k + sum_j S_kj a_j
+            c = va.c_rx
+            ys = [sum(c[k, j] * ys[j] for j in range(n_rx)) if np.any(c[k] != np.eye(n_rx)[k]) else ys[k] for k in range(n_rx)]
+        for n, x in enumerate(ys):
+            spec = np.fft.fft(x)
+            spec = np.where(keep, spec, 0.0)
+            y = np.fft.ifft(spec[idx_adc]) * (n_adc / n_w)
+            if use_hpf:
+                if m == 0:
+                    # warm the filter up on the first chirp (the receiver has been running), then filter it for real
+                    _, hpf_state[n] = apply_hpf(y, cfg.rx.adc_fs_hz, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order, hpf_state[n], sos)
+                y, hpf_state[n] = apply_hpf(y, cfg.rx.adc_fs_hz, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order, hpf_state[n], sos)
+            if quantise:
+                over = (np.abs(y.real) > a_fs) | (np.abs(y.imag) > a_fs)
+                clipped += int(np.count_nonzero(over))
+                y = np.clip(np.round(y.real / step) * step, -a_fs, a_fs) + 1j * np.clip(np.round(y.imag / step) * step,
+                                                                                      -a_fs, a_fs)
+            if multi:
+                frame[m, n] = y
+            else:
+                frame[m] = y
     info = {"fs_wave_hz": fs_w, "n_wave": n_w, "signal_amplitude_v": a_s, "fullscale_v": a_fs,
-            "noise_sigma_wave_v": sigma, "adc_step_v": step, "budget": budget, "n_chirps": m_chirps}
+            "noise_sigma_wave_v": sigma, "adc_step_v": step, "budget": budget, "n_chirps": m_chirps,
+            "clipped_fraction": clipped / float(frame.size), "n_targets": len(tgt), "n_leakage_tones": len(leaks)}
     return frame, info
 
 
 def process_frame(cfg: RadarConfig, frame: np.ndarray, info: dict | None = None) -> TimeResult:
-    """Window + range FFT + Doppler FFT + CFAR on an ADC frame; the target read off the map."""
+    """Window + range FFT + Doppler FFT + CFAR on an ADC frame; the target
+    read off the map.  A MIMO cube ``(n_chirps, n_rx, n_samples)`` is
+    processed per TX block and RX channel; the map is the non-coherent sum
+    over the virtual channels, the angle the DBF estimate at the primary
+    target's cell (``extras['angle_deg']``), the Doppler for the TDM
+    compensation the peak's own."""
+    cube = frame.ndim == 3
+    if cube:
+        return _process_cube(cfg, frame, info)
     m_chirps, n = frame.shape
     rd = range_doppler_map(frame, cfg)
     p = np.abs(rd) ** 2
@@ -160,6 +230,127 @@ def process_frame(cfg: RadarConfig, frame: np.ndarray, info: dict | None = None)
                              "peak_range_interp_m": rp["peak_pos"]})
     if info:
         res.extras.update({k: v for k, v in info.items() if k != "budget"})
+    res.extras["targets_found"] = found_targets(cfg, p[:, :half], r_axis[:half], v_axis)
+    return res
+
+
+def found_targets(cfg: RadarConfig, power: np.ndarray, r_axis: np.ndarray, v_axis: np.ndarray) -> list:
+    """For every configured target, the map's peak within +-3 range bins and
+    +-2 Doppler bins of where it should be: ``(range, velocity, level dB rel.
+    the primary's peak)``, or None when the target is not seen there.  Two
+    targets closer than the window share it: each one's search stops at the
+    bins nearer the other's place, and the peak must be a local maximum
+    along range (a point on another target's skirt is not this target) and
+    rise 6 dB above the map's median (the noise)."""
+    import dataclasses
+
+    n_d, n_r = power.shape
+    pad = cfg.processing.range_pad
+    ref = float(power.max())
+    floor = float(np.median(power))
+    places = []
+    for t in cfg.targets:
+        c = dataclasses.replace(cfg, target=t, extra_targets=())
+        places.append((int(round(c.beat_hz() * cfg.chirp.duration_s * pad)), int(np.argmin(np.abs(v_axis - t.velocity_mps)))))
+    out = []
+    for n_t, (j0, i0) in enumerate(places):
+        js = []
+        for d in range(-3 * pad, 3 * pad + 1):
+            j = (j0 + d) % n_r
+            others = [abs(j - jo) for k, (jo, io) in enumerate(places) if k != n_t and abs(io - i0) <= 2]
+            if not others or abs(d) <= min(others):                     # nearer this target than any other
+                js.append(j)
+        is_ = [(i0 + d) % n_d for d in range(-2, 3)]
+        sub = power[np.ix_(is_, js)]
+        local = np.ones_like(sub, dtype=bool)
+        for col, j in enumerate(js):
+            local[:, col] = (power[is_, j] >= power[is_, (j - 1) % n_r]) & (power[is_, j] >= power[is_, (j + 1) % n_r])
+        cand = np.where(local, sub, -1.0)
+        k = np.unravel_index(int(np.argmax(cand)), sub.shape)
+        pk = float(cand[k])
+        if pk < 4.0 * floor:
+            out.append(None)
+        else:
+            out.append((float(r_axis[js[k[1]]]), float(v_axis[is_[k[0]]]), 10.0 * math.log10(pk / ref)))
+    return out
+
+
+def doppler_fine_hz(x: np.ndarray, pri_s: float, coarse_hz: float) -> float:
+    """The Doppler of the tone in ``x`` (``(n_tx, m_tx, n_rx)`` range-FFT
+    values of one range bin, chirp by chirp) finer than the Doppler FFT's
+    bin: the phase advance between consecutive same-TX chirps, averaged over
+    the TX and RX channels (the ML estimate of a single tone's frequency at
+    high SNR, unbiased where the FFT bin is quantised to 1 / (m_tx PRI)).
+    Falls back to ``coarse_hz`` for a single chirp per TX or an empty bin."""
+    if x.shape[1] < 2:
+        return coarse_hz
+    z = np.sum(np.conj(x[:, :-1]) * x[:, 1:])
+    if abs(z) == 0.0:
+        return coarse_hz
+    return float(np.angle(z) / (2.0 * math.pi * pri_s))
+
+
+def _process_cube(cfg: RadarConfig, cube: np.ndarray, info: dict | None) -> TimeResult:
+    from ..processing.rd import doppler_fft, range_fft
+
+    m_chirps, n_rx, n = cube.shape
+    n_tx = cfg.mimo.n_tx
+    p_ = cfg.processing
+    va = VirtualArray(cfg)
+    # per TX block: its own chirps (every n_tx-th), range FFT, Doppler FFT over them
+    blocks, ranges = [], []
+    for i_tx in range(n_tx):
+        sub = cube[i_tx::n_tx]                                          # (m / n_tx, n_rx, n)
+        rr = range_fft(sub, p_.window_range, p_.range_pad)
+        ranges.append(rr)
+        blocks.append(doppler_fft(rr, p_.window_doppler, p_.doppler_pad))   # (m_tx x pad, n_rx, n x pad)
+    maps = np.stack(blocks)                                             # (n_tx, m_tx, n_rx, n_r)
+    rmaps = np.stack(ranges)                                            # (n_tx, m_tx, n_rx, n_r) before the Doppler FFT
+    p = np.sum(np.abs(maps) ** 2, axis=(0, 2))                          # non-coherent sum over the virtual channels
+    rd_db = 10.0 * np.log10(np.maximum(p, 1e-300))
+    n_d, n_r = p.shape
+    r_axis = range_axis_m(cfg, n_r)
+    pri_tx = cfg.chirp.pri_s * n_tx
+    fd = np.fft.fftshift(np.fft.fftfreq(n_d, d=pri_tx))
+    v_axis = fd * cfg.band.wavelength_m / 2.0
+    half = n_r // 2
+    i, j = np.unravel_index(int(np.argmax(p[:, :half])), (n_d, half))
+    excl = (min(max(2, n_d // 8), max(n_d // 2 - 1, 0)), max(8, half // 16))
+    n_if = int(cfg.rx.if_bw_hz * cfg.chirp.duration_s * p_.range_pad)
+    floor = noise_floor(p[:, :min(n_if, half)], (i, j), excl)
+    snr = 10.0 * math.log10(p[i, j] / floor) if floor > 0.0 else float("inf")
+    # the virtual snapshot at the peak cell (TX-major) and the angle; the TDM
+    # compensation wants the Doppler finer than the frame's few bins give it
+    snap = maps[:, i, :, j].ravel()
+    fd_fine = doppler_fine_hz(rmaps[:, :, :, j], pri_tx, float(fd[i]))
+    est = va.estimate(snap, fd_fine)
+    prof = power_db(range_fft(cube[-1, 0], p_.window_range, p_.range_pad))[:half]
+    rp = read_peak(r_axis[:half], prof)
+    _, det = ca_cfar_2d(p, p_.cfar_guard, p_.cfar_train, p_.cfar_pfa)
+    dets = [(float(v_axis[a]), float(r_axis[b])) for a, b in np.argwhere(det[:, :half])]
+    res = TimeResult(frame=cube, rd_db=rd_db, range_axis_m=r_axis, velocity_axis_mps=v_axis,
+                     peak_range_m=float(r_axis[j]), peak_velocity_mps=float(v_axis[i]), snr_cell_db=snr,
+                     n_chirps=m_chirps, range_profile_db=prof - prof.max(), range_profile_axis_m=r_axis[:half],
+                     width_3db_m=rp["width_3db"], width_rayleigh_m=rp["width_rayleigh"],
+                     peak_sidelobe_db=rp["peak_sidelobe_db"], cfar_detections=dets,
+                     extras={"peak_rc": (int(i), int(j)), "noise_floor": floor, "peak_power": float(p[i, j]),
+                             "peak_range_interp_m": rp["peak_pos"], "angle_deg": est["theta_deg"],
+                             "angle_peak_sidelobe_db": est["peak_sidelobe_db"], "angle_spectrum": (est["u_grid"], est["spectrum_db"]),
+                             "snapshot": snap, "n_virtual": va.n, "doppler_fine_hz": fd_fine})
+    if info:
+        res.extras.update({k: v for k, v in info.items() if k != "budget"})
+    found = found_targets(cfg, p[:, :half], r_axis[:half], v_axis)
+    # the angle of every target found: the DBF estimate at its own cell
+    out = []
+    for f_ in found:
+        if f_ is None:
+            out.append(None)
+            continue
+        jj = int(np.argmin(np.abs(r_axis[:half] - f_[0])))
+        ii = int(np.argmin(np.abs(v_axis - f_[1])))
+        e = va.estimate(maps[:, ii, :, jj].ravel(), doppler_fine_hz(rmaps[:, :, :, jj], pri_tx, float(fd[ii])))
+        out.append(f_ + (e["theta_deg"],))
+    res.extras["targets_found"] = out
     return res
 
 

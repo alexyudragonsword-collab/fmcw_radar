@@ -11,16 +11,25 @@ cfg = load_config("configs/radar_60g_sensing.yaml", {"target.range_m": 8.0, "lo.
 cfg2 = apply_overrides(RadarConfig(), {"band.sweep_hz": 7e9, "band.center_hz": 60.5e9})
 ```
 
-派生量:`cfg.slope_hz_per_s`、`range_resolution_m`(c/2B)、`max_range_m`(IF 带宽决定)、`velocity_resolution_mps`、`max_velocity_mps`、
+派生量:`cfg.slope_hz_per_s`、`range_resolution_m`(c/2B)、`max_range_m`(IF 带宽决定)、`velocity_resolution_mps`、`max_velocity_mps`(TDM 下除以 n_tx)、
 `beat_hz(R)`、`doppler_hz(v)`、`tau_s(R)`。
+
+里程碑 2 的段:`extra_targets`(目标列表,`cfg.targets` 把主目标排在前面)、`mimo.*`(`n_tx` / `n_rx` / 间距 / 元方向图 / 角窗 / `tdm_doppler_compensation` /
+`coupling.{source, c1_db, calibrated, touchstone}`)、`leakage.*`(`enabled` / `isolation_db` / `path_delay_s` / 反射体)、`rx.hpf_corner_hz` / `rx.hpf_order`。
+`configs/radar_60g_mimo.yaml` 把它们都打开了。
 
 ## 引擎
 
 - `run_radar(cfg)` → `RadarResult(cfg, chirp, stat, time)`;`sim.engine` 选 `statistical` / `time` / `both`。
 - `run_statistical(cfg, chirp=None)` → `StatResult`:`budget`(雷达方程逐行)、`snr_cell_db`、`pd`、`range_res_*`、`pn_floor{offset: (per bin, per cell)}`、
-  `nonlinearity`、`chirp`、`extras["snr_cell_expected_db"]`(扣格点失配、带内相噪、拍频音相干损失后时域引擎该读到的数)。
-- `run_time(cfg, chirp=None, noise=True, phase_noise=True, quantise=True)` → `TimeResult`:`rd_db`、轴、峰值位置、`snr_cell_db`、
-  最后一个 chirp 的距离剖面与宽度、CFAR 检测。开关只为一致性检查,config 里没有。
+  `nonlinearity`、`chirp`、`extras["snr_cell_expected_db"]`(扣格点失配、带内相噪、拍频音相干损失后时域引擎该读到的数);
+  里程碑 2:`targets`(每目标一行:电平、格点 SNR、最强他者的裙边、`masked`)、`angle`(孔径、波束宽、CRLB、TDM 偏差、互耦偏差、斜视)、`leakage`(`LeakageBudget`)。
+- `run_time(cfg, chirp=None, noise=True, phase_noise=True, quantise=True, leakage=True, hpf=True)` → `TimeResult`:`rd_db`、轴、峰值位置、`snr_cell_db`、
+  最后一个 chirp 的距离剖面与宽度、CFAR 检测;`extras["targets_found"]`(每目标 `(距离, 速度, 相对电平[, 角度])` 或 None)、`clipped_fraction`;
+  MIMO 时 `frame` 是 (chirp, RX, 样本) 立方,`extras` 多 `angle_deg`、`angle_spectrum`、`snapshot`、`doppler_fine_hz`。开关只为一致性检查,config 里没有。
+- `VirtualArray(cfg)`:`x_v`、`filled`、`snapshot(theta, doppler)`、`estimate(snapshot, doppler)`、`beamwidth_deg`、`crlb_sigma_deg`、`coupling_bias_deg`、
+  `tdm_bias_deg`、`sweep_squint`。`leakage_budget(cfg)` 与 `leakage_tones(cfg)`;`cfar_pd_monte_carlo(snr_db, pfa, n_train, trials, swerling=0|1)`、
+  `cfar_pd_swerling1`、`hpf_attenuation_db` / `apply_hpf`。
 - `ChirpEngine(cfg).run(noise=False, n_chirps=None)` → `ChirpResult`:`f_err_dco_hz` 整帧曲线、`ramp(k)` / `ramp_carrier(k)`、`metrics(k)`
   (峰值、RMS、底、建立时间)、`dp_cal_passes` / `dp_cal_trace`、`ui_per_ref_cycle_p99`、`vouches_for_spurs`。
 - `RangeCorrelation(profile, tau)`:`residual_psd(f)`、`sidelobe_dbc(offset_hz, enbw_hz)`、`synthesize_residual(n, fs, rng)`、`measured_residual_psd`。
@@ -46,3 +55,7 @@ cfg2 = apply_overrides(RadarConfig(), {"band.sweep_hz": 7e9, "band.center_hz": 6
 | `02_chirp_nonlinearity.py` | ADPLL 曲线(event / response / 校准)对距离分辨率与旁瓣,解析二次项参照 |
 | `03_bandwidth_window_resolution.py` | 扫频宽度 × 窗 → 分辨率表,时域实测对 c/2B 与 Harris 表 |
 | `04_statistical_vs_time.py` | 统计 / 时域一致性:SNR 三距离、相噪旁瓣、非线性剖面 |
+| `05_multi_target_masking.py` | 四目标的遮蔽表(窗裙 / 相噪)与时域 `found_targets` |
+| `06_cfar_curves.py` | CA-CFAR 的 Pd / Pfa 蒙卡对闭式,CFAR 损失,时域纯噪声帧的虚警 |
+| `07_mimo_angle.py` | 2 × 4 TDM-MIMO:互耦三来源与校准、TDM 补偿、CRLB、斜视、双目标各自的角 |
+| `08_tx_leakage.py` | 泄漏预算,高通前后的削波与目标 |

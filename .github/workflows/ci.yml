@@ -178,6 +178,12 @@ jobs:
           repository: alexyudragonsword-collab/polar_tx
           ref: 70577381f678da34da20fcd083c5052afae1c437
           path: _siblings/polar_tx
+      - name: Checkout array_tx (pinned)
+        uses: actions/checkout@v4
+        with:
+          repository: alexyudragonsword-collab/array_tx
+          ref: e897c159e5fc5b2e26af6336cf9f6164461ff7f5
+          path: _siblings/array_tx
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -186,3 +192,4 @@ jobs:
         run: >
           python tools/vendor_check.py --strict --fail-on-skip
           --siblings polar_tx=${{ github.workspace }}/_siblings/polar_tx
+          array_tx=${{ github.workspace }}/_siblings/array_tx

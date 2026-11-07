@@ -4,16 +4,11 @@
 
 > 约定:`[P1]` 会让某类结论不可信;`[P2]` 影响能力上限;`[P3]` 可选扩展;`[边界]` 有意不做,仅记录范围。
 
-## 里程碑 2(下一轮)
+## 等上游
 
-1. **TDM-MIMO 虚拟阵列测角** —— vendor array_tx(main e897c15,到时按当时 main 的完整 SHA pin)的互耦矩阵三来源与按真实带宽算的波束斜视
-   (4–7 GHz 扫频下斜视比 FR2 400 MHz 大一个数量级,ex06 的机制直接复用);虚拟阵列是新的。`target.angle_deg` 已在 config 里,单通道引擎不用它。
-2. **TX 泄漏 / 自干扰**(老清单 #10 全双工 / SIC):近端泄漏经同一 LO 的 range correlation 在 τ ≈ 0 处几乎没有相噪,但幅度大;
-   P1dB 裕量现在只对目标回波报(里程碑 1 的 `p1db_margin_db` 67 dB 不含泄漏)。
-3. **多目标与 CFAR 的虚警 / 检测曲线**:现在的 CA-CFAR 是最简版(2-D 方窗,阈值因子 n(Pfa^(−1/n) − 1)),检测概率是 Swerling 0 已知噪底的闭式,
-   没有 CFAR 损失;示例 00 在 64 chirp、距离零填充 ×4 下给 27 个过阈格(都是目标主瓣的邻格)。要做:Pfa / Pd 的蒙卡曲线对闭式,多目标遮蔽。
-4. **mmw60_trx 前端到位后替换占位**:`frontend.*`、`lo.mult`、`lo.dco_pn_*`、`lo.tdc_res_s` 全是 `source: assumed`(`grep -c "source: assumed"` = 20);
-   接口按前端对象写(`cfg.frontend_value(name)` 一处换),到了就换、重新 pin。倍频器自身底噪也在那时补。
+1. **mmw60_trx 前端到位后替换占位**:`frontend.*`、`lo.mult`、`lo.dco_pn_*`、`lo.tdc_res_s`、`leakage.isolation_db`、`mimo.coupling.c1_db` 全是 `source: assumed`
+   (`grep -c "source: assumed" src/fmcw_radar/data/sources.yaml` = 24);接口按前端对象写(`cfg.frontend_value(name)` / `leakage_value` / `coupling_c1` 各一处换),
+   到了就换、重新 pin。倍频器自身底噪也在那时补。mmw60_trx 在 2026-11-07 仍是空仓。
 
 ## P1 — 结论的可信度
 
@@ -21,13 +16,22 @@
    开环路噪声后 2.2 / 7.81 m 处 −49 … −50 dBc(两个 seed 同位置)。机制与数字见 `cairn/chirp-engine.md`。0.1.1 起 `StatResult.nonlinearity["ghosts"]`
    从单 ramp 的曲线列出它(±4.85 m,−45.3 dBc,与距离–多普勒图 3 dB 内一致),报表有一张表;示例 00 的 CFAR 仍在主瓣外报 12 格,因为 Pd / Pfa 的闭式只认高斯噪底。
    要做:(a) TDC dither(pllsim 没有,报回 pll_simulator);(b) chirp 引擎带噪声时与 `LOProfile` 的分工(环内由逐周期引擎、环外由剖面)以免重复计相噪;
-   (c) 多目标 / CFAR 曲线(里程碑 2)把确定性杂散算进虚警。
+   (c) 示例 06 的 CFAR 曲线仍只对高斯噪底(蒙卡与闭式都是),确定性杂散没算进虚警。
    复现:`run_statistical(cfg).nonlinearity["ghosts"]`;时域对照 `run_time(cfg, ..., phase_noise=False, noise=False, quantise=False)` 看 rd_db 离目标 ±40 格外的最大值。
 2. **polar_tx 的 event 有效域指标在 chirp 上读 495 %**,本库的判断是指标不适用(见 `cairn/chirp-engine.md`)。这是本库的读法,
    应报回 polar_tx ROADMAP B1:指标按"亚周期相位轨迹"与"频率斜坡"分开。没有报之前,`ChirpResult.ui_per_ref_cycle_p99` 和报表都把数打出来。
 
 ## P2 — 一致性与能力
 
+0. **里程碑 2 留下的**(复现:示例 05–08,`cairn/mimo-angle.md`):
+   - 高通后的飞回瞬态没有 blanking:2 阶 200 kHz 高通下每个 chirp 开头削波 3.5 %(1 阶 2.7 %,50 kHz 14.9 %),窗压住了它,但 `clipped_fraction` 不会到零;
+     要做 chirp 开头的 ADC blanking 或把瞬态算进期望 SNR。
+   - 时域测角 RMS 0.050° 对 CRLB 0.023°(2 × 4、20°、6 个 seed × 8 chirp),差的 2 倍没有归因(ADC 量化、相噪、多普勒估计噪声各占多少);
+     界是单快拍确定性信源的,时域是 Hann 多普勒格上的合成快拍。
+   - TDM 的多普勒补偿在目标格上估单音频率(`doppler_fine_hz`),两目标同距离格同多普勒格时取其合成,各自的角都偏;要做多普勒维的分辨或 BPM-MIMO。
+   - `found_targets` 的分格规则只分到格:两目标近于一个距离格(3.75 cm)时仍找同一个峰;那是分辨率,不是 bug,但报表没有标。
+   - 2-D CA-CFAR 的格相关:距离维零填充 ×4 下纯噪声帧 64000 格 4 个虚警(6.3e-5 对 1e-4),闭式的 Pfa 按独立格算是上界;要给出有效独立格数。
+   - 泄漏只有直接路径 + 一个反射体,相噪经 τ ≈ 0 几乎全抵消是对的,但发射机的 AM 噪声 / 泄漏的幅度噪声没有模型(mmw60_trx 到位再说)。
 1. **时域 SNR 比期望低 0.07–0.10 dB**(示例 04:2 / 5 / 10 m,32 chirp;示例 00 的 64 chirp 差 0.00 dB)。已扣的:格点失配(Hann 多普勒维 0.44 格 1.1 dB)、
    带内相噪均值(−74 … −60 dBc/格)、拍频音相干损失 e^{−σ²}(−0.05 … −0.10 dB)。纯热噪声 + 理想 chirp 时差 +0.15 dB(噪底估计的最大值偏差一类),
    剩下的 −0.1 dB 没有归因。1 dB 判据过了。

@@ -31,7 +31,7 @@ def test_grep_lists_every_sourced_number():
 def test_every_front_end_placeholder_exists_for_every_band():
     for band in ("60g_sensing", "77g_automotive"):
         for name in ("tx_power_dbm", "tx_gain_dbi", "rx_gain_dbi", "rx_gain_db", "nf_db", "p1db_dbm", "lo_mult",
-                     "dco_pn_dbchz", "dco_pn_floor_dbchz", "tdc_res_s"):
+                     "dco_pn_dbchz", "dco_pn_floor_dbchz", "tdc_res_s", "tx_rx_isolation_db", "rx_coupling_c1_db"):
             e = sources.frontend_placeholder(band, name)
             assert e.placeholder, (band, name)
 

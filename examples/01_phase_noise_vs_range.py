@@ -10,7 +10,7 @@ against synthesised sequences (band-averaged) at 1, 10 and 100 m.
 """
 
 import numpy as np
-from _common import CONFIG, OUT, SMOKE, plt_or_none
+from _common import CONFIG, OUT, SMOKE, plt_or_none, rel
 
 from fmcw_radar.config import load_config
 from fmcw_radar.lo import LOProfile
@@ -88,4 +88,4 @@ if plt is not None:
     fig.tight_layout()
     p = OUT / "01_phase_noise_vs_range.png"
     fig.savefig(p, dpi=120)
-    print(f"  wrote {p}")
+    print(f"  wrote {rel(p)}")

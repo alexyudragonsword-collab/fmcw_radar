@@ -78,14 +78,30 @@ def stat_values(s) -> dict:
         out[f"nl.ghost.{i}"] = f"{dr!r},{lvl!r}"
     if "nonlinearity_profile" in s.extras:
         out["nl.profile"] = digest(s.extras["nonlinearity_profile"][1])
+    for i, t in enumerate(s.targets):
+        for k in ("snr_cell_db", "interference_dbc", "margin_db"):
+            if t.get(k) is not None:
+                out[f"target.{i}.{k}"] = _scalar(t[k])
+    for k, v in s.angle.items():
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            out["angle." + k] = _scalar(v)
+    if s.leakage is not None:
+        for lab, v, _ in s.leakage.as_rows():
+            out["leak." + lab] = _scalar(v)
     return out
 
 
 def time_values(t) -> dict:
-    return {"frame": digest(np.concatenate([t.frame.real.ravel(), t.frame.imag.ravel()])), "rd": digest(t.rd_db),
-            "peak_range_m": _scalar(t.peak_range_m), "peak_velocity_mps": _scalar(t.peak_velocity_mps),
-            "snr_cell_db": _scalar(t.snr_cell_db), "width_3db_m": _scalar(t.width_3db_m),
-            "peak_sidelobe_db": _scalar(t.peak_sidelobe_db), "n_detections": repr(len(t.cfar_detections))}
+    out = {"frame": digest(np.concatenate([t.frame.real.ravel(), t.frame.imag.ravel()])), "rd": digest(t.rd_db),
+           "peak_range_m": _scalar(t.peak_range_m), "peak_velocity_mps": _scalar(t.peak_velocity_mps),
+           "snr_cell_db": _scalar(t.snr_cell_db), "width_3db_m": _scalar(t.width_3db_m),
+           "peak_sidelobe_db": _scalar(t.peak_sidelobe_db), "n_detections": repr(len(t.cfar_detections))}
+    for k in ("angle_deg", "clipped_fraction"):
+        if k in t.extras:
+            out[k] = _scalar(t.extras[k])
+    for i, d in enumerate(t.extras.get("targets_found") or []):
+        out[f"found.{i}"] = repr(tuple(round(float(x), 6) for x in d))
+    return out
 
 
 def _guarded(fn):
@@ -145,6 +161,16 @@ def record_synthetic() -> dict:
                                              "lo.profile_shift_db": 3.0, "sim.engine": "statistical"}),
         "far_target_idle": apply_overrides(base, {"target.range_m": 12.0, "target.kind": "corner_reflector",
                                                   "chirp.idle_s": 10e-6, "frontend.nf_db": 8.0}),
+        # milestone 2 (0.2.0): TDM-MIMO with coupling, several targets, the leakage with its high-pass
+        "mimo_2x4_coupled": apply_overrides(base, {"mimo.n_tx": 2, "mimo.n_rx": 4, "target.angle_deg": 20.0,
+                                                   "mimo.coupling.source": "survey", "chirp.n_chirps": 8}),
+        "mimo_1x4_calibrated_cos": apply_overrides(base, {"mimo.n_rx": 4, "target.angle_deg": -35.0,
+                                                          "mimo.coupling.source": "analytic", "mimo.coupling.calibrated": True,
+                                                          "mimo.element_pattern": "cos", "mimo.angle_window": "blackman"}),
+        "three_targets": apply_overrides(base, {"extra_targets": [{"kind": "car", "range_m": 5.3, "velocity_mps": 2.0},
+                                                                   {"kind": "human", "range_m": 9.9, "velocity_mps": -1.0}]}),
+        "leakage_hpf": apply_overrides(base, {"leakage.enabled": True, "leakage.reflector_range_m": 0.02,
+                                              "rx.hpf_corner_hz": 200e3, "rx.hpf_order": 2}),
     }
     out = {}
     for name, cfg in cases.items():

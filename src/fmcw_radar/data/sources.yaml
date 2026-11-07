@@ -73,6 +73,19 @@ entries:
     cite: "placeholder: TDC resolution of a mmWave ADPLL (a 15 GHz DCO period is 66.7 ps, so ~13 codes per period)"
     note: "占位:TDC 量化经环路是匹配两点增益时 chirp 频率误差的主项(cairn/chirp-engine.md)。"
 
+  60g_sensing.tx_rx_isolation_db:
+    value: 25.0
+    unit: dB
+    source: assumed
+    cite: "placeholder: on-chip / in-package TX-to-RX isolation of a 60 GHz transceiver without cancellation (milestone 2)"
+    note: "占位:mmw60_trx 的封装 / 阵列模块到位后由它的 TX-RX 隔离给出;SIC 之前的数。"
+  60g_sensing.rx_coupling_c1_db:
+    value: -16.0
+    unit: dB
+    source: assumed
+    cite: "placeholder: adjacent-element mutual coupling of a lambda/2 patch array, array_tx's value (its ROADMAP A1: the papers give no mmWave phase, the magnitude is pessimistic)"
+    note: "占位:随 mmw60_trx 的阵列 / 封装模块替换;相位 180 deg 也是 assumed。"
+
   # ---------------------------------------------------------------- 77 GHz 车载一档(结构相同,只换数;全部 assumed)
   77g_automotive.tx_power_dbm:
     value: 12.0
@@ -131,6 +144,19 @@ entries:
   77g_automotive.tdc_res_s:
     value: 5.0e-12
     unit: s
+    source: assumed
+    cite: "placeholder"
+    note: "占位。"
+
+  77g_automotive.tx_rx_isolation_db:
+    value: 30.0
+    unit: dB
+    source: assumed
+    cite: "placeholder"
+    note: "占位。"
+  77g_automotive.rx_coupling_c1_db:
+    value: -16.0
+    unit: dB
     source: assumed
     cite: "placeholder"
     note: "占位。"

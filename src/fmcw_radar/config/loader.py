@@ -61,7 +61,10 @@ def _build(cls: type, data: dict[str, Any], path: str) -> Any:
         elif typing.get_origin(tp) is tuple and isinstance(value, (list, tuple)):
             inner = typing.get_args(tp)
             elem = inner[0] if inner else Any
-            kwargs[key] = tuple(_coerce(elem, v, f"{path}.{key}[{i}]") for i, v in enumerate(value))
+            if dataclasses.is_dataclass(elem):
+                kwargs[key] = tuple(_build(elem, v, f"{path}.{key}[{i}]") for i, v in enumerate(value))
+            else:
+                kwargs[key] = tuple(_coerce(elem, v, f"{path}.{key}[{i}]") for i, v in enumerate(value))
         else:
             kwargs[key] = _coerce(tp, value, f"{path}.{key}")
     return cls(**kwargs)
@@ -113,8 +116,14 @@ def _replace_tree(obj: Any, tree: dict[str, Any]) -> Any:
             kwargs[key] = _replace_tree(child, value)
         else:
             tp = _unwrap_optional(hints[key])
-            if typing.get_origin(tp) is tuple and isinstance(value, list):
-                value = tuple(value)
+            if typing.get_origin(tp) is tuple and isinstance(value, (list, tuple)):
+                inner = typing.get_args(tp)
+                elem = inner[0] if inner else None
+                if elem is not None and dataclasses.is_dataclass(elem):
+                    value = tuple(v if dataclasses.is_dataclass(v) else _build(elem, v, f"{key}[{i}]")
+                                  for i, v in enumerate(value))
+                else:
+                    value = tuple(value)
             kwargs[key] = value
     return dataclasses.replace(obj, **kwargs)
 

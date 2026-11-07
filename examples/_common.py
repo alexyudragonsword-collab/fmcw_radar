@@ -2,6 +2,7 @@
 the smoke flag (d2d_link's ``examples/_common.py`` method)."""
 
 import os
+import pathlib
 import sys
 from pathlib import Path
 
@@ -15,6 +16,14 @@ CONFIG = CONFIGS / "radar_60g_sensing.yaml"
 #: n_chirps (the range sweeps) run a subset; the numbers they print are then
 #: not the documented ones
 SMOKE = os.environ.get("FMCW_RADAR_SMOKE") == "1"
+
+
+def rel(p) -> str:
+    """A path as the expected outputs print it: relative to the repo, whatever the cwd."""
+    try:
+        return str(pathlib.Path(p).resolve().relative_to(REPO))
+    except ValueError:
+        return str(p)
 
 
 def plt_or_none():
