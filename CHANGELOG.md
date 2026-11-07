@@ -4,6 +4,17 @@
 
 ---
 
+## [0.2.1] — 2026-11-07 — 飞回 blanking(里程碑 2 的 P2 #0 第一项)
+
+- `rx.blank_s`:每个 chirp 开头 blanking 的时长;距离窗按剩下的样本重配(`processing.windows.range_window`,所有距离 FFT 与窗统计共用),
+  近旁瓣不变、主瓣宽 n/(n − k)、SNR 损 10 log(n/(n − k));时域引擎把那些样本置零并另报 `clipped_fraction_after_blanking`。
+- 泄漏预算多五行:锯齿重启的泄漏相位跳变在 ADC 的阶跃(2A|sin(Δφ/2)| 求和,7.2 V)、高通最慢极点的时间常数(1.13 µs @ 2 阶 200 kHz)、
+  推荐 blanking(阶跃落到满幅以下 + 1 个时间常数:4.5 µs)、配置值、blanking 的 SNR 损失。1 / 2 / 3 阶的推荐值盖住时域量到的削波段(余量 1.2–1.3 倍)。
+- 示例 08 多 blanking 行与无噪声的远底对照;指纹 1235 → 1367 值,旧值逐位不变(numbers-move:只有新键与新用例 `leakage_hpf_blanked`)。
+- 被推翻的判断:"blanking = 把样本清零"——不变的窗下清零 80 个样本把远旁瓣抬 20 dB 以上(`cairn/mimo-angle.md`)。
+
+---
+
 ## [0.2.0] — 2026-11-07 — 里程碑 2:TDM-MIMO 测角、TX 泄漏、多目标与 CFAR 曲线
 
 - **TDM-MIMO 虚拟阵列**(`mimo.py`,config `mimo.*`,vendored array_tx@e897c15 的 geometry / beam / coupling / touchstone):TX + RX 位置之和(默认填满的线),

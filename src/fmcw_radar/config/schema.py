@@ -264,9 +264,12 @@ class RxConfig:
     adc_fullscale_dbm: float = 4.0      # 1 Vpp into 50 ohm
     hpf_corner_hz: float = 0.0          # IF high-pass corner [Hz]; 0 = none (milestone 2: the leakage notch)
     hpf_order: int = 1                  # Butterworth order of that high-pass
+    blank_s: float = 0.0                # beat samples blanked at the start of every chirp [s] (the flyback transient
+                                        # through the high-pass); the range window is fitted to the samples that remain
 
     def __post_init__(self):
         _finite_pos(self.if_bw_hz, "rx.if_bw_hz")
+        _finite_nonneg(self.blank_s, "rx.blank_s")
         _finite_pos(self.adc_fs_hz, "rx.adc_fs_hz")
         _require(self.if_bw_hz <= 0.5 * self.adc_fs_hz, "rx.if_bw_hz must be <= adc_fs_hz / 2 (anti-alias)")
         _require(1 <= self.adc_bits <= 24, f"rx.adc_bits must be in 1..24, got {self.adc_bits}")
@@ -444,6 +447,8 @@ class RadarConfig:
         n = self.chirp.duration_s * self.rx.adc_fs_hz
         _require(abs(n - round(n)) < 1e-6 and round(n) >= 16,
                  f"chirp.duration_s x rx.adc_fs_hz = {n:g} must be a whole number of samples >= 16")
+        _require(self.rx.blank_s <= 0.25 * self.chirp.duration_s,
+                 f"rx.blank_s = {self.rx.blank_s:g} s must be at most a quarter of the chirp ({self.chirp.duration_s:g} s)")
         n_ref = self.chirp.duration_s * self.lo.fref_hz
         _require(abs(n_ref - round(n_ref)) < 1e-6, f"chirp.duration_s x lo.fref_hz = {n_ref:g} must be a whole number")
         n_idle = self.chirp.idle_s * self.lo.fref_hz
@@ -541,6 +546,11 @@ class RadarConfig:
     def n_samples(self) -> int:
         """Beat samples per chirp."""
         return int(round(self.chirp.duration_s * self.rx.adc_fs_hz))
+
+    @property
+    def n_blank(self) -> int:
+        """Beat samples blanked at the start of every chirp (``rx.blank_s``)."""
+        return int(round(self.rx.blank_s * self.rx.adc_fs_hz))
 
     @property
     def n_ref_cycles(self) -> int:

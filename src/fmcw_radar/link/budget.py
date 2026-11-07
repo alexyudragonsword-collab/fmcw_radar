@@ -28,7 +28,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..config.schema import K_BOLTZMANN, T0_K, RadarConfig
-from ..processing.windows import coherent_gain_db, enbw_hz, window
+from ..processing.windows import coherent_gain_db, enbw_hz, range_window, window
 
 
 def db(x: float) -> float:
@@ -110,7 +110,7 @@ def link_budget(cfg: RadarConfig, range_m: float | None = None) -> LinkBudget:
     n0_tot = w_to_dbm(dbm_to_w(n0_th_adc) + dbm_to_w(n0_q))
     cn0 = ps_adc - n0_tot
     n = cfg.n_samples
-    wr = window(cfg.processing.window_range, n)
+    wr = range_window(cfg.processing.window_range, n, cfg.n_blank)
     wd = window(cfg.processing.window_doppler, cfg.chirp.n_chirps)
     enbw_r = enbw_hz(wr, fs)
     snr_chirp = cn0 - db(enbw_r)

@@ -31,6 +31,23 @@ def window(name: str, n: int) -> np.ndarray:
     raise ValueError(f"unknown window {name!r} (one of {NAMES})")
 
 
+def range_window(name: str, n: int, n_blank: int = 0) -> np.ndarray:
+    """The range window of a chirp of ``n`` beat samples whose first
+    ``n_blank`` are blanked (the flyback transient through the IF
+    high-pass): zeros there, then the window fitted to the samples that
+    remain.  Zeroing the samples under an unchanged window would leave a
+    step at the blank's edge and raise the window's far sidelobes by tens
+    of dB; refitting keeps the sidelobes and widens the lobe by
+    ``n / (n - n_blank)``.  With no blanking this is ``window(name, n)``."""
+    if n_blank <= 0:
+        return window(name, n)
+    if n_blank >= n:
+        raise ValueError(f"blanking {n_blank} of {n} samples leaves nothing")
+    w = np.zeros(n)
+    w[n_blank:] = window(name, n - n_blank)
+    return w
+
+
 def coherent_gain_db(w: np.ndarray) -> float:
     """SNR gain of a windowed FFT on a tone against white noise:
     ``(sum w)^2 / sum w^2`` (N for a rectangular window)."""
@@ -79,15 +96,15 @@ def width_at_level(x: np.ndarray, y_db: np.ndarray, level_db: float) -> float:
     return float(abs(cross(+1) - cross(-1)))
 
 
-def mainlobe_width_bins(name: str, n: int = 1024, level_db: float = -3.0, pad: int = 64) -> float:
+def mainlobe_width_bins(name: str, n: int = 1024, level_db: float = -3.0, pad: int = 64, n_blank: int = 0) -> float:
     """The window's mainlobe width at ``level_db`` [bins], from its own spectrum."""
-    bins, s = spectrum_db(window(name, n), pad)
+    bins, s = spectrum_db(range_window(name, n, n_blank), pad)
     return width_at_level(bins, s, level_db)
 
 
-def peak_sidelobe_db(name: str, n: int = 1024, pad: int = 64) -> float:
+def peak_sidelobe_db(name: str, n: int = 1024, pad: int = 64, n_blank: int = 0) -> float:
     """Highest sidelobe of the window's spectrum relative to its peak [dB]."""
-    bins, s = spectrum_db(window(name, n), pad)
+    bins, s = spectrum_db(range_window(name, n, n_blank), pad)
     return float(peak_sidelobe_of(bins, s))
 
 
@@ -110,5 +127,5 @@ def peak_sidelobe_of(x: np.ndarray, y_db: np.ndarray) -> float:
     return float(outside.max() - y_db[i0]) if outside.size else float("-inf")
 
 
-__all__ = ["NAMES", "window", "coherent_gain_db", "enbw_bins", "enbw_hz", "spectrum_db", "width_at_level",
+__all__ = ["NAMES", "window", "range_window", "coherent_gain_db", "enbw_bins", "enbw_hz", "spectrum_db", "width_at_level",
            "mainlobe_width_bins", "peak_sidelobe_db", "peak_sidelobe_of"]

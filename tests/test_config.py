@@ -47,6 +47,7 @@ def test_frozen_and_replace():
     {"sim.time_osr": 0.5},
     {"lo.dp_cal": "sometimes"},
     {"processing.cfar_pfa": 1.5},
+    {"rx.blank_s": 30e-6},                          # more than a quarter of the chirp
 ])
 def test_bad_values_fail_by_name(bad):
     with pytest.raises(ValueError):

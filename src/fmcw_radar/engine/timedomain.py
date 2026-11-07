@@ -43,7 +43,7 @@ from ..processing.cfar import ca_cfar_2d
 from ..processing.iffilter import apply_hpf, hpf_initial_state, hpf_sos
 from ..processing.rd import (noise_floor, power_db, range_axis_m, range_doppler_map, range_fft, read_peak,
                              velocity_axis_mps)
-from ..processing.windows import enbw_bins, window
+from ..processing.windows import enbw_bins, range_window
 
 TWOPI = 2.0 * np.pi
 
@@ -121,6 +121,8 @@ def beat_frame(cfg: RadarConfig, chirp: ChirpResult | None, *, noise: bool = Tru
     n_rx = mimo.n_rx
     frame = np.empty((m_chirps, n_rx, n_adc), dtype=complex) if multi else np.empty((m_chirps, n_adc), dtype=complex)
     clipped = 0
+    clipped_kept = 0
+    n_blank = cfg.n_blank
     use_hpf = hpf and cfg.rx.hpf_corner_hz > 0.0
     sos = hpf_sos(cfg.rx.adc_fs_hz, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order) if use_hpf else None
     hpf_state = [hpf_initial_state(sos) for _ in range(n_rx)] if use_hpf else None
@@ -178,15 +180,20 @@ def beat_frame(cfg: RadarConfig, chirp: ChirpResult | None, *, noise: bool = Tru
             if quantise:
                 over = (np.abs(y.real) > a_fs) | (np.abs(y.imag) > a_fs)
                 clipped += int(np.count_nonzero(over))
+                clipped_kept += int(np.count_nonzero(over[n_blank:]))
                 y = np.clip(np.round(y.real / step) * step, -a_fs, a_fs) + 1j * np.clip(np.round(y.imag / step) * step,
                                                                                       -a_fs, a_fs)
+            if n_blank:
+                y = y.copy()
+                y[:n_blank] = 0.0                                    # blanked: the range window is zero there too
             if multi:
                 frame[m, n] = y
             else:
                 frame[m] = y
     info = {"fs_wave_hz": fs_w, "n_wave": n_w, "signal_amplitude_v": a_s, "fullscale_v": a_fs,
             "noise_sigma_wave_v": sigma, "adc_step_v": step, "budget": budget, "n_chirps": m_chirps,
-            "clipped_fraction": clipped / float(frame.size), "n_targets": len(tgt), "n_leakage_tones": len(leaks)}
+            "clipped_fraction": clipped / float(frame.size), "n_targets": len(tgt), "n_leakage_tones": len(leaks),
+            "clipped_fraction_after_blanking": clipped_kept / float(frame.size), "n_blank": n_blank}
     return frame, info
 
 
@@ -217,7 +224,7 @@ def process_frame(cfg: RadarConfig, frame: np.ndarray, info: dict | None = None)
     n_if = int(cfg.rx.if_bw_hz * cfg.chirp.duration_s * cfg.processing.range_pad)
     floor = noise_floor(p[:, :min(n_if, half)], (i, j), excl)
     snr = 10.0 * math.log10(p[i, j] / floor) if floor > 0.0 else float("inf")
-    prof = power_db(range_fft(frame[-1], cfg.processing.window_range, cfg.processing.range_pad))[:half]
+    prof = power_db(range_fft(frame[-1], cfg.processing.window_range, cfg.processing.range_pad, cfg.n_blank))[:half]
     rp = read_peak(r_axis[:half], prof)
     _, det = ca_cfar_2d(p, cfg.processing.cfar_guard, cfg.processing.cfar_train, cfg.processing.cfar_pfa)
     dets = [(float(v_axis[a]), float(r_axis[b])) for a, b in np.argwhere(det[:, :half])]
@@ -301,7 +308,7 @@ def _process_cube(cfg: RadarConfig, cube: np.ndarray, info: dict | None) -> Time
     blocks, ranges = [], []
     for i_tx in range(n_tx):
         sub = cube[i_tx::n_tx]                                          # (m / n_tx, n_rx, n)
-        rr = range_fft(sub, p_.window_range, p_.range_pad)
+        rr = range_fft(sub, p_.window_range, p_.range_pad, cfg.n_blank)
         ranges.append(rr)
         blocks.append(doppler_fft(rr, p_.window_doppler, p_.doppler_pad))   # (m_tx x pad, n_rx, n x pad)
     maps = np.stack(blocks)                                             # (n_tx, m_tx, n_rx, n_r)
@@ -324,7 +331,7 @@ def _process_cube(cfg: RadarConfig, cube: np.ndarray, info: dict | None) -> Time
     snap = maps[:, i, :, j].ravel()
     fd_fine = doppler_fine_hz(rmaps[:, :, :, j], pri_tx, float(fd[i]))
     est = va.estimate(snap, fd_fine)
-    prof = power_db(range_fft(cube[-1, 0], p_.window_range, p_.range_pad))[:half]
+    prof = power_db(range_fft(cube[-1, 0], p_.window_range, p_.range_pad, cfg.n_blank))[:half]
     rp = read_peak(r_axis[:half], prof)
     _, det = ca_cfar_2d(p, p_.cfar_guard, p_.cfar_train, p_.cfar_pfa)
     dets = [(float(v_axis[a]), float(r_axis[b])) for a, b in np.argwhere(det[:, :half])]
@@ -377,16 +384,16 @@ def measured_pn_sidelobes(cfg: RadarConfig, offsets_m, n_chirps: int = 32, seed:
     sb = beat_sideband(cfg, rc)
     frame, _ = beat_frame(cfg, None, noise=False, phase_noise=True, quantise=False, seed=seed, n_chirps=n_chirps,
                           rc=rc)
-    spec = range_fft(frame, name, 1)
+    spec = range_fft(frame, name, 1, cfg.n_blank)
     p = np.mean(np.abs(spec) ** 2, axis=0)
     n = cfg.n_samples
     df = cfg.rx.adc_fs_hz / n
-    enbw = enbw_bins(window(name, n)) * df
+    enbw = enbw_bins(range_window(name, n, cfg.n_blank)) * df
     peak = int(np.argmax(p))
     # the tone's power read on a 16x padded grid: its peak bin on the plain
     # grid sits up to half a bin off and loses up to 1 dB of scalloping the
     # noise bins do not (a 5 m target's beat lands 0.43 bins off: +0.75 dB)
-    tone = float(np.max(np.mean(np.abs(range_fft(frame, name, 16)) ** 2, axis=0)))
+    tone = float(np.max(np.mean(np.abs(range_fft(frame, name, 16, cfg.n_blank)) ** 2, axis=0)))
     out = {}
     for dr in offsets_m:
         k = int(round(cfg.slope_hz_per_s * cfg.tau_s(dr) / df))
