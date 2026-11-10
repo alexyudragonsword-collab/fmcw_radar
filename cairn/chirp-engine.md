@@ -5,7 +5,7 @@ summary: "chirp 发生器 = vendored polar_tx 两点 ADPLL 喂斜坡:event 引�
 tags: [adpll, chirp, two-point, dp_cal, polar_tx]
 contains: [decision, lesson, experience]
 created: "2026-11-06"
-updated: "2026-11-06"
+updated: "2026-11-10"
 related: [architecture-invariants]
 authoring_mode: ai_generated
 ---
@@ -48,6 +48,31 @@ LTE-20 的 29 % 不行,polar_tx ROADMAP B1)。任务要求先量一次这个指�
 - **离线 LS**(polar_tx `cal/twopoint.estimate_dp_gain_error`,在 response 的精确高通回归量上投影)一次把 5 % 估到 4.995 %(event)/ 4.98 %(response),
   第二次残余 1e-4。但要喂它**连续两个 chirp 以上**:单个 chirp 的首个飞回是从锁定态来的半幅阶跃,回归量按整幅建模 → 估计只有 2.5 %。
   现在每次校准跑 3 个 PRI、估后 2 个。这是默认(`lo.dp_cal: offline`)。
+
+## 带噪声的曲线与 LO 剖面的分工(P1 #1(b),0.2.5)
+
+- 逐周期引擎和线性剖面(`analyze()` × N²)说的是同一个环路。**斜坡上两者一致**:noise=True 时每个 ramp 去线性趋势的载波相位谱对剖面
+  0.1 / 0.3 / 1 / 3 / 10 MHz 处 −83.2 / −80.5 / −80.1 / −89.9 / −100.7 对 −83.8 / −80.8 / −80.2 / −90.2 / −100.9 dBc/Hz(0.6 dB 内;30 / 45 MHz 高 0.9 / 1.9 dB,
+  逼近 fref/2 的混叠);一个 ramp 的相位 RMS 0.194 对 0.197 rad。
+- **noise=False 的曲线就是剖面里的量化两项**:−84.6 / −83.4 / −85.2 / −94.0 / −106.1 对 `tdc_quant` −85.1 / −84.0 / −85.3 / −95.5 / −106.0(`dco_quant` 低 40 dB)。
+  同一份能量,在斜坡上是每个 chirp 都相同的确定性图样(鬼目标),在线性模型里是白噪声。
+- **分工**(`ChirpResult.lo_noise_in_curve` → `beat_frame`):曲线已经带的,剖面就不再合成。
+  noise=False 的 event 曲线带量化 → 剖面去掉 `tdc_quant` + `dco_quant`(`LOProfile.without`);noise=True 带环路在 fref/2 以内的全部 → 剖面只留 fref/2 以上
+  (`LOProfile.above`,DCO 自身的 Leeson 段);ideal / 不带噪声的 response → 剖面全算。`run_time(cfg, chirp_noise=True)` 走第二种。
+- 核对(示例 04:32 chirp,Blackman,±12 格,对整份剖面的闭式,+1 / +2 / +3 / +5 m):只有剖面 +0.29 / −0.00 / +0.04 / +0.03 dB;noise=False 曲线 + 去量化的剖面
+  +0.30 / +0.17 / +0.47 / +0.80(均 +0.43;图样是成团的,鬼目标所在的偏移高;另一个 seed +0.23 / +0.41 / +1.18 / +0.70);noise=True 曲线 + fref/2 以上
+  −0.02 / −0.03 / +0.47 / +0.15(均 +0.14)。
+- **坑(contains:时域引擎把 TDC 量化算了两遍)**:0.2.4 及以前把 noise=False 的曲线叠在**整份**剖面上:1–5 m 的底比分工后高 1.11 dB(示例 04);
+  逐偏移对闭式 +1.88 / +1.56 / +2.21 / +1.68 dB(seed 3)。
+  单独量相噪旁瓣的检查(`measured_pn_sidelobes`)当时不带曲线,所以一直没看见。
+- **坑(contains:`freq_out` 不是带噪声的瞬时频率)**:pllsim 的 `freq_out` 是调谐字决定的频率;DCO 自己的相噪只进 `phi_v`(`phase_err_out`)。
+  noise=True 时把 `freq_out − 指令` 积分,得到的是环路对 DCO 噪声的**反作用**:30 kHz 处 −39 dBc/Hz(真值 −85,多 45 dB),3 MHz 以上反而少 4–10 dB。
+  `phase_err_carrier_rad()` 现在加上 `osc_phase_dco_rad` = `phase_err_out`(后移一拍,减指令相位)− 调谐字积分;noise=False 时这一项 < 2e-5 rad,不加,逐位不变。
+- **坑(contains:CW 下线性模型低估带内相噪 15 dB)**:整数 N、不扫频、noise=True:`simulate` 的带内相噪 −66 … −69 dBc/Hz(60 GHz 处),`analyze` −81 … −85。
+  相位误差 0.133 rad RMS(DCO 处)= 5 ps / √12 的 0.136 rad:TDC 死区,环路看不见一个量化格以内的漂移。斜坡每周期把小数相位扫过量化格,等于给了 dither,
+  所以 chirp 时两者才一致。雷达只在斜坡上用 LO,结论不受影响;CW / 空闲段(`chirp.idle_s`)的相噪不能用剖面。已并入给 pll_simulator 的 dither 条目。
+- 没做的:带 `lo.profile` 文件的配置没有分项,noise=False 的曲线仍叠在整份剖面上(`lo_noise_split` 里写明);response 引擎的 noise=True 没核对过它加了什么,
+  时域引擎拒绝它。
 
 ## 经验
 

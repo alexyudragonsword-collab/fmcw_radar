@@ -25,11 +25,11 @@ leakage budget (TX 10 dBm, isolation 25 dB (source: assumed), reflector at 0.02 
 
 time engine: clipped ADC samples and the target, with and without the high-pass, with and without blanking; the far floor relative to the target with the thermal noise on (what a frame sees) and off (what the transient alone leaves)
   high-pass                        | blank [us] | clipped [%] | after blanking [%] | floor 2-4 m rel. target, noise on / off [dB] | target found | at [m] | level rel. map peak [dB]
-  none                             |        0.0 |      100.00 |             100.00 |                   10.0 /   10.1         | yes |  4.890 | -71.3
-  1st order 200 kHz                |        0.0 |        2.70 |               2.70 |                  -36.2 /  -51.0         | yes |  5.003 | -46.6
-  2nd order 200 kHz                |        0.0 |        3.50 |               3.50 |                  -35.6 /  -43.5         | yes |  5.003 | -18.1
+  none                             |        0.0 |      100.00 |             100.00 |                   10.1 /   10.1         | yes |  4.890 | -71.3
+  1st order 200 kHz                |        0.0 |        2.70 |               2.70 |                  -36.0 /  -51.0         | yes |  5.003 | -46.6
+  2nd order 200 kHz                |        0.0 |        3.50 |               3.50 |                  -35.5 /  -43.5         | yes |  5.003 | -18.1
   2nd order 50 kHz                 |        0.0 |       14.85 |              14.85 |                  -30.7 /  -32.8         | yes |  5.003 | -42.5
-  1st order 200 kHz, blanked       |        3.2 |        2.70 |               0.00 |                  -36.1 /  -52.3         | yes |  5.003 | -46.6
-  2nd order 200 kHz, blanked       |        4.5 |        3.50 |               0.10 |                  -35.9 /  -51.0         | yes |  5.003 | -18.0
+  1st order 200 kHz, blanked       |        3.2 |        2.70 |               0.00 |                  -36.0 /  -52.3         | yes |  5.003 | -46.6
+  2nd order 200 kHz, blanked       |        4.5 |        3.50 |               0.10 |                  -35.7 /  -51.0         | yes |  5.003 | -18.0
   2nd order 50 kHz, blanked        |       18.0 |       14.85 |               0.10 |                  -35.9 /  -54.3         | yes |  5.003 | -42.1
   (reference, no leakage at all: floor -36.2 / -53.3 dB rel. the target, noise on / off. With the filter the clipped samples are the flyback transient at each chirp's start and the budget's recommended blank covers them; what remains after the blank is the chirp's last sample, where the engine's circular IF filter rings the next step back)

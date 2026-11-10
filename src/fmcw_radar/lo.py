@@ -74,7 +74,16 @@ class LOProfile:
     flat above it (the DCO floor runs to the waveform's Nyquist: d2d_link's
     ``profile_above: floor`` reading).  ``spurs`` are ``(offset_hz, peak
     phase [rad])`` at the carrier -- none for the ADPLL's own analysis of an
-    integer-N loop, the file's table otherwise."""
+    integer-N loop, the file's table otherwise.
+
+    ``components`` is the same PSD by source on the same grid (the ADPLL's
+    own breakdown: ``ref``, ``dco``, ``tdc_quant``, ``dco_quant``; None for a
+    profile read from a file).  It is what lets the time engine split the
+    LO's noise with the chirp engine without counting anything twice: the
+    cycle-accurate error curve already *is* the TDC's and the DCO's
+    quantisation (``without("tdc_quant", "dco_quant")`` is what is left to
+    synthesise), and with the loop's noise sources on it is everything the
+    loop does up to fref / 2 (``above(fref / 2)`` is what is left)."""
 
     f_hz: np.ndarray
     s_phi: np.ndarray                   # rad^2/Hz, double-sideband, at the carrier
@@ -82,6 +91,33 @@ class LOProfile:
     mult: int
     source: str
     spurs: tuple[tuple[float, float], ...] = ()
+    components: dict | None = None      # name -> rad^2/Hz on f_hz, summing to s_phi
+
+    def without(self, *names: str) -> "LOProfile":
+        """The profile less the named sources (those it does not have are
+        ignored; a profile with no breakdown is returned as it is)."""
+        if not self.components:
+            return self
+        drop = [k for k in names if k in self.components]
+        if not drop:
+            return self
+        s = np.maximum(self.s_phi - sum(self.components[k] for k in drop), 1e-300)
+        rest = {k: v for k, v in self.components.items() if k not in drop}
+        return LOProfile(self.f_hz, s, self.carrier_hz, self.mult, f"{self.source}; less {', '.join(drop)}", self.spurs, rest)
+
+    def above(self, f_split_hz: float) -> "LOProfile":
+        """The profile above ``f_split_hz`` only (nothing below it)."""
+        keep = self.f_hz > f_split_hz
+        if not np.any(keep):
+            raise ValueError(f"the profile has nothing above {f_split_hz:g} Hz")
+        f = np.concatenate([[f_split_hz * (1.0 - 1e-9), f_split_hz], self.f_hz[keep]])
+        edge = float(self.psd(np.array([f_split_hz * (1.0 + 1e-9)]))[0])
+        s = np.concatenate([[1e-300, edge], self.s_phi[keep]])
+        comp = None
+        if self.components:
+            comp = {k: np.concatenate([[0.0, float(np.interp(f_split_hz, self.f_hz, v))], v[keep]]) for k, v in self.components.items()}
+        return LOProfile(f, s, self.carrier_hz, self.mult, f"{self.source}; above {f_split_hz / 1e6:g} MHz only",
+                         tuple(sp for sp in self.spurs if sp[0] > f_split_hz), comp)
 
     @classmethod
     def from_config(cls, cfg: RadarConfig) -> "LOProfile":
@@ -100,9 +136,11 @@ class LOProfile:
             far = np.geomspace(0.5 * cfg.lo.fref_hz * 1.0001, 100.0 * cfg.band.sweep_hz, 120)
             s_far = np.asarray(pll.cfg.osc.leeson("dco").psd(far), dtype=float)
             s = np.concatenate([np.asarray(ana.pn_breakdown["total"], dtype=float)[keep], s_far]) * n * n
+            comp = {k: np.concatenate([np.asarray(v, dtype=float)[keep], s_far if k == "dco" else np.zeros(far.size)]) * n * n
+                    for k, v in ana.pn_breakdown.items() if k != "total"}
             return cls(np.concatenate([f[keep], far]), s, cfg.band.center_hz, n,
                        f"vendored ADPLL analyze() at {cfg.dco_center_hz / 1e9:.4g} GHz x{n}, the DCO alone above "
-                       f"fref/2 (source: assumed)")
+                       f"fref/2 (source: assumed)", components=comp)
         import yaml
 
         p = resolve_data_file(cfg.lo.profile)

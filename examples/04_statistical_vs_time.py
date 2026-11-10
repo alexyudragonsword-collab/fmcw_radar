@@ -15,7 +15,9 @@ from fmcw_radar.chirp import ChirpEngine
 from fmcw_radar.config import load_config
 from fmcw_radar.engine import run_radar
 from fmcw_radar.engine.statistical import nonlinearity_profile
-from fmcw_radar.engine.timedomain import measured_pn_sidelobes, run_time
+from fmcw_radar.engine.timedomain import beat_frame, measured_pn_sidelobes, run_time
+from fmcw_radar.lo import LOProfile
+from fmcw_radar.phase_noise import RangeCorrelation
 
 n_time = 8 if SMOKE else 32
 print(f"cell SNR, {n_time} chirps, three ranges (statistical 'expected': the radar equation less the windows'\n"
@@ -39,6 +41,36 @@ print("  offset [m] | closed form [dBc/bin] | measured [dBc/bin] | difference [d
 for o in offs:
     d = m[o]
     print(f"  {o:10g} | {d['closed_form_dbc']:21.2f} | {d['measured_dbc']:18.2f} | {d['measured_dbc'] - d['closed_form_dbc']:+15.2f}")
+
+# --- who carries the LO's noise: the cycle-accurate chirp curve and the linear profile describe the same loop
+n_split = 8 if SMOKE else 32
+quiet = ChirpEngine(cfg).run(noise=False, n_chirps=n_split)
+noisy = ChirpEngine(cfg).run(noise=True, seed=7, n_chirps=n_split)
+wide = (1.0, 2.0, 3.0, 5.0)
+print(f"\nthe LO's noise floor with the chirp engine's error curve in the frame ({n_split} chirps, Blackman, +-12 bins), against the closed "
+      f"form of the whole profile -- nothing may be counted twice:")
+print("  who carries what                                                              | " + " | ".join(f"+{o:g} m" for o in wide) + " | mean [dB]")
+for label, kw in (("profile: everything (no curve)", {}),
+                  ("curve: TDC + DCO quantisation (noise off); profile: the rest", {"chirp": quiet}),
+                  ("curve: the loop to fref/2 (noise on); profile: above fref/2", {"chirp": noisy})):
+    mm = measured_pn_sidelobes(cfg, wide, n_chirps=n_split, half_bins=12, window_name="blackman", **kw)
+    g = [mm[o]["measured_dbc"] - mm[o]["closed_form_dbc"] for o in wide]
+    print(f"  {label:77s} | " + " | ".join(f"{v:+5.2f}" for v in g) + f" | {np.mean(g):+.2f}")
+whole = RangeCorrelation(LOProfile.from_config(cfg), cfg.tau_s())
+c_bl = load_config(CONFIG, {"processing.window_range": "blackman"})
+fr_old, _ = beat_frame(c_bl, quiet, noise=False, phase_noise=True, quantise=False, n_chirps=n_split, rc=whole)
+fr_new, info = beat_frame(c_bl, quiet, noise=False, phase_noise=True, quantise=False, n_chirps=n_split)
+
+
+def band_floor(fr):
+    p = np.mean(np.abs(np.fft.fft(fr * np.blackman(fr.shape[-1]), axis=-1)) ** 2, axis=0)
+    k = int(np.argmax(p))
+    return 10.0 * np.log10(np.mean(p[k + 27:k + 134]) / p[k])               # 1 to 5 m beyond the target
+
+
+print(f"  the same curve laid over the *whole* profile (what the time engine did up to 0.2.4): {band_floor(fr_old) - band_floor(fr_new):+.2f} dB "
+      f"on the 1-5 m floor -- the TDC's quantisation once as the curve's pattern and once more as the profile's noise term")
+print(f"  ({info['lo_noise_split']})")
 
 print("\nchirp nonlinearity: the ADPLL curve fed into one FFT vs the time engine mixing the same curve "
       "(5 % mismatch, no calibration, no noise, target at rest so both lobes sit on the same bins):")
