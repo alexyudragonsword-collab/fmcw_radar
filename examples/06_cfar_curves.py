@@ -19,8 +19,8 @@ from fmcw_radar.config import load_config
 from fmcw_radar.engine import run_statistical
 from fmcw_radar.engine.timedomain import run_time
 from fmcw_radar.processing import cfar_pd_monte_carlo, cfar_pd_swerling1, cfar_threshold_factor, pd_swerling0, snr_for_pd
-from fmcw_radar.processing.cfar import ca_cfar_2d
-from fmcw_radar.processing.cfarstats import cfar_statistics, count_clusters, noise_map
+from fmcw_radar.processing.cfar import ca_cfar_2d, threshold_factor
+from fmcw_radar.processing.cfarstats import cfar_snr_for_pd, cfar_statistics, count_clusters, noise_map
 from fmcw_radar.processing.windows import window
 
 pfa = 1e-4
@@ -103,6 +103,15 @@ for d in designs:
     ex = cfar_statistics(load_config(CONFIG, {"chirp.n_chirps": cfg.chirp.n_chirps, "processing.cfar_pfa": d}))["pfa_cell"]
     print(f"  {d:10g} | {ex:.3e}  | {count[d][0] / cells_mc:.3e} ({count[d][0]:6d} / {count[d][1]:5d})        | "
           f"{te[d][0] / cells_te:.3e} ({te[d][0]:5d} / {te[d][1]:4d})")
+print(f"  detection on this map: a Pd of 0.9 takes {cs['snr_pd90_db']:.2f} dB (known noise level {s_ideal:.2f}: CFAR loss {cs['cfar_loss_db']:.2f} dB, "
+      f"of which the target's own leak into its training cells, {cs['tone_leak']:.4f} of its power, is part)")
+mimo = cfar_statistics(load_config(CONFIG, {"chirp.n_chirps": cfg.chirp.n_chirps, "mimo.n_tx": 2, "mimo.n_rx": 4}))
+print(f"  the same frame as a 2 x 4 TDM-MIMO cube: {mimo['n_looks']} looks summed per cell, {cfg.chirp.n_chirps // 2} chirps per TX; threshold factor "
+      f"{mimo['threshold_factor']:.2f} ({10 * np.log10(mimo['threshold_factor']):.1f} dB over the mean) where the single-look factor for its "
+      f"{mimo['n_train']} training cells is {threshold_factor(mimo['n_train'], pfa):.2f} "
+      f"({10 * np.log10(threshold_factor(mimo['n_train'], pfa)):.1f} dB) -- used on the sum it would give Pfa "
+      f"{mimo['pfa_with_single_look_factor']:.1e} and cost {mimo['single_look_factor_penalty_db']:.1f} dB; exact per-cell Pfa {mimo['pfa_cell']:.2e}, "
+      f"Pd 0.9 at {cfar_snr_for_pd(0.9, mimo):.2f} dB per look")
 print("  what the guard does (exact per-cell Pfa at the design 1e-4, same windows and padding):")
 for g in (0, 2, 4, 8, 12):
     s_g = cfar_statistics(load_config(CONFIG, {"chirp.n_chirps": cfg.chirp.n_chirps, "processing.cfar_guard": g}))

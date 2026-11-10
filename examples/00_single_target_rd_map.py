@@ -49,9 +49,12 @@ near = [(v, r) for v, r in tm.cfar_detections
 far = [(v, r) for v, r in tm.cfar_detections if (v, r) not in near]
 print(f"  CA-CFAR (guard {cfg.processing.cfar_guard}, train {cfg.processing.cfar_train}, Pfa {cfg.processing.cfar_pfa:g}): "
       f"{len(tm.cfar_detections)} cells over threshold, {len(near)} in the target's lobe (the zero-padded grid's "
-      f"neighbours), {len(far)} elsewhere" + (": " + ", ".join(f"{r:.2f} m / {v:+.2f} m/s" for v, r in far[:4])
-                                               + " -- the cycle-accurate engine's quantisation spur (ROADMAP P1 #1)"
-                                               if far else ""))
+      f"neighbours), {len(far)} elsewhere" + (": " + ", ".join(f"{r:.2f} m / {v:+.2f} m/s" for v, r in far[:4]) if far else ""))
+cf = st.cfar
+print(f"    expected elsewhere: {cf['false_alarm_cells_per_frame']:.1f} noise false-alarm cells a frame (per-cell Pfa {cf['pfa_cell']:.2e} on "
+      f"{cf['cells_in_band']} in-band cells, in clumps) and {cf['ghost_detections_per_frame']:.2f} detections of the chirp's ghost targets "
+      f"(the strongest at {max((g['snr_db'] for g in cf['ghosts']), default=float('nan')):+.1f} dB SNR); the target itself: Pd {cf['pd_target']:.3f}, "
+      f"a Pd of 0.9 takes {cf['snr_pd90_db']:.2f} dB on this map (CFAR loss {cf.get('cfar_loss_db', float('nan')):.2f} dB)")
 
 plt = plt_or_none()
 if plt is not None:

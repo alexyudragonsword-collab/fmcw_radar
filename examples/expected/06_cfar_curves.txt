@@ -21,10 +21,12 @@ realised Pfa, 1-D MC, N=16: 9.62e-05 for 0.0001 asked
         0.01 | 1.039e-02  | 1.044e-02 (160372 / 35262)        | 1.022e-02 ( 6240 / 1420)
        0.001 | 1.036e-03  | 1.033e-03 ( 15865 /  5093)        | 9.565e-04 (  584 /  186)
       0.0001 | 1.021e-04  | 1.062e-04 (  1632 /   641)        | 9.172e-05 (   56 /   25)
+  detection on this map: a Pd of 0.9 takes 12.24 dB (known noise level 11.75: CFAR loss 0.49 dB, of which the target's own leak into its training cells, 0.0062 of its power, is part)
+  the same frame as a 2 x 4 TDM-MIMO cube: 8 looks summed per cell, 16 chirps per TX; threshold factor 2.88 (4.6 dB over the mean) where the single-look factor for its 290 training cells is 9.36 (9.7 dB) -- used on the sum it would give Pfa 2.3e-23 and cost 5.1 dB; exact per-cell Pfa 9.63e-05, Pd 0.9 at 5.01 dB per look
   what the guard does (exact per-cell Pfa at the design 1e-4, same windows and padding):
     guard  0 cells = 0.00 range bins:  288 training cells worth  23.0, correlation with the test cell 0.0489, Pfa 9.23e-06
     guard  2 cells = 0.50 range bins:  416 training cells worth  33.4, correlation with the test cell 0.0151, Pfa 1.02e-04
     guard  4 cells = 1.00 range bins:  544 training cells worth  43.8, correlation with the test cell 0.0038, Pfa 1.70e-04
-    guard  8 cells = 2.00 range bins:  800 training cells worth  58.9, correlation with the test cell 0.0001, Pfa 1.79e-04
-    guard 12 cells = 3.00 range bins: 1056 training cells worth  50.5, correlation with the test cell 0.0000, Pfa 1.98e-04
+    guard  8 cells = 2.00 range bins:  734 training cells worth  59.8, correlation with the test cell 0.0001, Pfa 1.77e-04
+    guard 12 cells = 3.00 range bins:  646 training cells worth  57.4, correlation with the test cell 0.0000, Pfa 1.81e-04
   wrote examples/output/06_cfar_curves.png

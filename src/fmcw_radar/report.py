@@ -144,7 +144,17 @@ def to_markdown(rep: dict) -> str:
                   f"Design Pfa {CF['pfa_design']:g} -> per cell {CF['pfa_cell']:.3g} (exact; the noisier threshold alone would give "
                   f"{CF['pfa_training_only']:.2g}, the test cell lifting its own threshold alone {CF['pfa_cut_only']:.2g}). "
                   f"A noise-only frame: {CF['cells_in_band']} cells in the IF band = {CF['independent_looks']:.0f} independent looks, "
-                  f"{CF['false_alarm_cells_per_frame']:.1f} false-alarm cells expected."]
+                  f"{CF['false_alarm_cells_per_frame']:.1f} false-alarm cells expected.", "",
+                  (f"The map is a sum of {CF['n_looks']} looks: threshold factor {CF['threshold_factor']:.2f} "
+                   f"(the single-look factor would cost {CF['single_look_factor_penalty_db']:.1f} dB). " if CF.get("n_looks", 1) > 1 else "")
+                  + f"The target at {CF['snr_look_db']:.1f} dB per look: Pd {CF['pd_target']:.3f}; a Pd of 0.9 takes {CF['snr_pd90_db']:.2f} dB per look"
+                  + (f" (CFAR loss {CF['cfar_loss_db']:.2f} dB, the target's own leak into its training cells included)" if "cfar_loss_db" in CF else "")
+                  + f". The chirp's ghost targets add {CF['ghost_detections_per_frame']:.2f} detections per frame"
+                  + ("" if CF.get("ghosts_vouched") or not CF.get("ghosts") else " (not vouched: linearised chirp engine)") + "."]
+        if CF.get("ghosts"):
+            lines += ["", "| ghost at [m] | level [dBc] | SNR [dB] | Pd | in view |", "|---:|---:|---:|---:|---|"]
+            lines += [f"| {g['range_m']:.2f} | {g['level_dbc']:.1f} | {g['snr_db']:.1f} | {g['pd']:.3f} | {'yes' if g['in_view'] else 'no'} |"
+                      for g in CF["ghosts"]]
     LK = rep.get("leakage")
     if LK:
         lines += ["", "## TX-RX leakage", "", "| term | value | unit |", "|---|---:|---|"]
