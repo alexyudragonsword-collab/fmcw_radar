@@ -101,11 +101,98 @@ def test_sweep_squint_numbers():
     assert sq["edge_shift_bins"] < 0.1 and sq["edge_taper_db"] > -0.1
 
 
-def test_time_engine_angle_error_sits_at_the_bound():
+def _snapshot_mc(cfg, snr_chirp_db: float, trials: int, seed: int = 0) -> float:
+    """RMS angle error [deg] of the engine's own estimator on synthetic
+    range-bin samples: per-TX Doppler FFT, the peak bin, ``doppler_fine_hz``,
+    ``VirtualArray.estimate`` -- everything the time engine does after the
+    range FFT, with white noise at ``snr_chirp_db`` per sample."""
+    from fmcw_radar.engine.timedomain import doppler_fine_hz
+    from fmcw_radar.processing.rd import doppler_fft
+
+    va = VirtualArray(cfg)
+    n_tx, n_rx, p = cfg.mimo.n_tx, cfg.mimo.n_rx, cfg.processing
+    m_tx = cfg.chirp.n_chirps // n_tx
+    th, fd, t_tx = cfg.target.angle_deg, cfg.doppler_hz(), cfg.chirp.pri_s * n_tx
+    rng = np.random.default_rng(seed)
+    z0 = (va.snapshot(th, fd).reshape(n_tx, n_rx)[:, None, :]
+          * np.exp(2j * np.pi * fd * t_tx * np.arange(m_tx))[None, :, None])           # (n_tx, m_tx, n_rx)
+    sig = 10.0 ** (-snr_chirp_db / 20.0) / math.sqrt(2.0)
+    fgrid = np.fft.fftshift(np.fft.fftfreq(m_tx * p.doppler_pad, d=t_tx))
+    errs = []
+    for _ in range(trials):
+        z = z0 + sig * (rng.standard_normal(z0.shape) + 1j * rng.standard_normal(z0.shape))
+        maps = np.stack([doppler_fft(z[i], p.window_doppler, p.doppler_pad) for i in range(n_tx)])
+        i_pk = int(np.argmax(np.sum(np.abs(maps) ** 2, axis=(0, 2))))
+        f_hat = doppler_fine_hz(z, t_tx, float(fgrid[i_pk]))
+        errs.append(va.estimate(maps[:, i_pk, :].ravel(), f_hat)["theta_deg"] - th)
+    return float(np.sqrt(np.mean(np.square(errs))))
+
+
+def test_error_budget_factors_are_the_closed_forms():
+    """Uniform weights on the Doppler bin with a known Doppler is the bound;
+    the Hann taper across 8 elements costs sum w^2 x^2 sum x^2 / (sum w x^2)^2
+    in variance; half a Doppler bin off costs the window's scalloping; an
+    isotropic element costs nothing and a cos one 1 / cos(theta)."""
+    from fmcw_radar.processing.windows import coherent_gain_db, window
+
+    cfg = _mimo(**{"target.velocity_mps": 0.0})
+    va = VirtualArray(cfg)
+    b = va.angle_error_budget(35.0, 20.0, 0.0)
+    cg = coherent_gain_db(window("hann", 4))                                   # 4 chirps per TX
+    assert b["sigma_crlb_deg"] == pytest.approx(va.crlb_sigma_deg(35.0 + cg, 20.0), rel=1e-9)
+    assert b["factor_element_pattern"] == 1.0 and b["factor_scalloping"] == pytest.approx(1.0, abs=1e-12)
+    w = window("hann", 8)
+    x = np.arange(8) - 3.5
+    xw = np.sum(w * x) / np.sum(w)
+    f_w = np.sum(w ** 2 * (x - xw) ** 2) * np.sum(x ** 2) / np.sum(w * (x - xw) ** 2) ** 2
+    assert b["factor_angle_window"] == pytest.approx(math.sqrt(f_w), rel=1e-9) and 1.5 < b["factor_angle_window"] < 1.55
+    assert 1.0 < b["factor_doppler_estimate"] < 1.03                          # the pulse-pair estimate: a percent
+    assert b["sigma_expected_deg"] == pytest.approx(b["sigma_crlb_deg"] * b["factor_angle_window"] * b["factor_doppler_estimate"], rel=1e-9)
+    rect = VirtualArray(_mimo(**{"mimo.angle_window": "rect", "target.velocity_mps": 0.0})).angle_error_budget(35.0, 20.0, 0.0)
+    assert rect["factor_angle_window"] == pytest.approx(1.0, abs=1e-12)
+    moving = VirtualArray(_mimo()).angle_error_budget(35.0, 20.0, _mimo().doppler_hz())
+    d = window("hann", 4) / window("hann", 4).sum()
+    off = moving["doppler_bin_offset"]
+    scal = abs(np.sum(d * np.exp(2j * np.pi * off * np.arange(4) / 4)))
+    assert moving["factor_scalloping"] == pytest.approx(1.0 / scal, rel=1e-9) and abs(off) == pytest.approx(0.36, abs=0.01)
+    cos = VirtualArray(_mimo(**{"mimo.element_pattern": "cos"})).angle_error_budget(35.0, 20.0, 0.0)
+    assert cos["factor_element_pattern"] == pytest.approx(1.0 / math.cos(math.radians(20.0)), rel=1e-9)
+    assert VirtualArray(_mimo(**{"mimo.tdm_doppler_compensation": False})).angle_error_budget(35.0, 20.0, 0.0)["factor_doppler_estimate"] == 1.0
+    assert VirtualArray(RadarConfig()).angle_error_budget(35.0, 0.0) == {}
+
+
+@pytest.mark.parametrize("ov", [
+    {},                                                                        # Hann, 2 m/s: 0.36 Doppler bins off
+    {"mimo.angle_window": "rect", "mimo.element_pattern": "cos"},
+    {"mimo.n_tx": 3, "chirp.n_chirps": 12, "target.angle_deg": -40.0, "mimo.angle_window": "blackman", "target.velocity_mps": -3.0},
+], ids=["hann", "rect-cos", "3x4-blackman"])
+def test_error_budget_is_what_the_estimator_scatters_by(ov):
+    """The closed form against the estimator itself on 2000 noisy snapshots:
+    within 6 % (the RMS of 2000 trials is good to 1.6 %)."""
+    cfg = _mimo(**ov)
+    b = VirtualArray(cfg).angle_error_budget(35.0, cfg.target.angle_deg, cfg.doppler_hz())
+    assert _snapshot_mc(cfg, 35.0, 2000) == pytest.approx(b["sigma_expected_deg"], rel=0.06)
+
+
+def test_statistical_engine_carries_the_error_budget():
+    cfg = _mimo()
+    st = run_statistical(cfg)
+    a = st.angle
+    assert a["sigma_crlb_deg"] == pytest.approx(a["crlb_sigma_deg"], rel=1e-9)   # the same bound, two derivations
+    assert a["sigma_expected_deg"] == pytest.approx(a["crlb_sigma_deg"] * a["factor_element_pattern"] * a["factor_scalloping"]
+                                                    * a["factor_angle_window"] * a["factor_doppler_estimate"], rel=1e-9)
+    assert a["sigma_expected_deg"] / a["crlb_sigma_deg"] == pytest.approx(1.67, abs=0.03)     # not at the bound: the Hann taper
+    assert a["snr_element_cell_db"] < a["snr_element_db"]
+
+
+def test_time_engine_angle_error_is_the_estimators_expected_scatter():
+    """Three seeds only say 'the right order': their RMS within 2.5x the
+    expected sigma (a 3-sample RMS exceeds that 3 times in 10^4) and not a
+    bias -- the 128-seed comparison is example 07's and the LOG's."""
     cfg = _mimo(**{"chirp.n_chirps": 8})
-    bound = run_statistical(cfg).angle["crlb_sigma_deg"]
+    expected = run_statistical(cfg).angle["sigma_expected_deg"]
     errs = [run_time(cfg, seed=s).extras["angle_deg"] - 20.0 for s in (1, 2, 3)]
-    assert np.sqrt(np.mean(np.square(errs))) < 3.0 * bound + 0.02
+    assert np.sqrt(np.mean(np.square(errs))) < 2.5 * expected
     off = run_time(apply_overrides(cfg, {"mimo.tdm_doppler_compensation": False}), seed=1).extras["angle_deg"] - 20.0
     assert abs(off) > 1.0                                             # the Doppler phase, uncompensated
 

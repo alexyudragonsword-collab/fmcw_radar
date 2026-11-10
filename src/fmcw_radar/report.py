@@ -28,6 +28,7 @@ def report(cfg: RadarConfig, st: StatResult) -> dict:
                   "max_range_m": st.extras["max_range_m"], "velocity_res_mps": st.velocity_res_mps,
                   "max_velocity_mps": st.extras["max_velocity_mps"]},
         "target": {"kind": cfg.target.kind, "range_m": cfg.target.range_m, "velocity_mps": cfg.target.velocity_mps,
+                   "angle_deg": cfg.target.angle_deg,
                    "rcs_dbsm": b.rcs_dbsm, "rcs_source": b.inputs["rcs_dbsm"][1], "beat_khz": st.beat_hz / 1e3,
                    "doppler_hz": st.doppler_hz, "range_bin": st.range_bin, "doppler_bin": st.doppler_bin,
                    "in_if_band": st.extras["in_if_band"]},
@@ -119,6 +120,11 @@ def to_markdown(rep: dict) -> str:
                   f"{A['aperture_m'] * 1e3:.1f} mm; beamwidth {A['beamwidth_deg']:.2f} deg at the target's {rep['target'].get('angle_deg', 0):g} deg; "
                   f"Cramer-Rao bound {A['crlb_sigma_deg']:.3f} deg RMS at {A['snr_element_db']:.1f} dB per element; estimate "
                   f"{A['theta_est_deg']:+.3f} deg (sidelobe {A['peak_sidelobe_db']:.1f} dB).", "",
+                  *([f"Expected scatter of this estimator {A['sigma_expected_deg']:.3f} deg RMS = the bound x "
+                     f"{A['factor_element_pattern']:.3f} (element pattern) x {A['factor_scalloping']:.3f} (range / Doppler cell scalloping) x "
+                     f"{A['factor_angle_window']:.3f} (angle window against uniform weights) x {A['factor_doppler_estimate']:.3f} "
+                     f"(the TDM compensation's Doppler estimate); per-element cell SNR as processed {A['snr_element_cell_db']:.1f} dB.", ""]
+                    if "sigma_expected_deg" in A else []),
                   f"Biases: RX mutual coupling ({A['coupling_source']}"
                   + (f", {A['coupling_max_offdiag_db']:.1f} dB adjacent" if A['coupling_max_offdiag_db'] is not None else "")
                   + f", {'calibrated' if A['coupling_calibrated'] else 'uncalibrated'}) {A['coupling_bias_deg']:+.3f} deg; the TDM Doppler phase "
