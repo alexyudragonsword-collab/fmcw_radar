@@ -7,14 +7,19 @@ receive array's mutual coupling leaves on a DBF estimate (array_tx's
 survey-shaped matrix, source: assumed), the bias the TDM Doppler phase
 would leave uncompensated, and what the 4 GHz sweep does to the manifold
 (next to FR2's 400 MHz).  Time engine: the estimate over several noise
-seeds against the bound, with the coupling off / on / calibrated and the
-compensation on / off.
+seeds against the bound and against what this estimator should scatter by
+(the bound times the element pattern, the cell's scalloping, the Hann
+taper across the eight elements and the Doppler estimate the TDM
+compensation uses), with the coupling off / on / calibrated and the
+compensation on / off; the same snapshots re-read with the true Doppler
+and with uniform weights show which factor is which.
 """
 
 import numpy as np
 from _common import CONFIGS, OUT, SMOKE, plt_or_none, rel
 
-from fmcw_radar.config import load_config
+from fmcw_radar.chirp import ChirpEngine
+from fmcw_radar.config import apply_overrides, load_config
 from fmcw_radar.engine import run_statistical
 from fmcw_radar.engine.timedomain import run_time
 from fmcw_radar.mimo import VirtualArray
@@ -32,6 +37,10 @@ print(f"2 TX x 4 RX, RX pitch {cfg.mimo.rx_spacing_lambda:g} lambda, TX pitch {c
 print(f"  target at {cfg.target.angle_deg:g} deg: beamwidth {a['beamwidth_deg']:.2f} deg, per-element cell SNR {a['snr_element_db']:.1f} dB, "
       f"Cramer-Rao bound {a['crlb_sigma_deg']:.3f} deg RMS; DBF estimate on the ideal snapshot {a['theta_est_deg']:+.3f} deg, "
       f"angle sidelobe {a['peak_sidelobe_db']:.1f} dB ({cfg.mimo.angle_window})")
+print(f"  expected scatter of this estimator {a['sigma_expected_deg']:.3f} deg RMS = the bound x {a['factor_element_pattern']:.3f} (element "
+      f"pattern at {cfg.target.angle_deg:g} deg) x {a['factor_scalloping']:.3f} (cell scalloping, {a['doppler_bin_offset']:+.2f} Doppler bins off) x "
+      f"{a['factor_angle_window']:.3f} ({cfg.mimo.angle_window} across {a['n_virtual']} elements against uniform weights) x "
+      f"{a['factor_doppler_estimate']:.3f} (the compensation's Doppler estimate); per-element cell SNR as processed {a['snr_element_cell_db']:.1f} dB")
 print(f"  TDM: unambiguous velocity +-{a['max_velocity_mps']:.2f} m/s; the Doppler phase between the TX blocks would bias the "
       f"estimate by {a['tdm_bias_uncompensated_deg']:+.2f} deg at {cfg.target.velocity_mps:g} m/s if not compensated")
 print(f"  the sweep: edge virtual element's beat {a['edge_shift_bins']:.3f} range bins off, window taper {a['edge_taper_db']:.3f} dB; "
@@ -50,23 +59,38 @@ for src in ("none", "analytic", "survey"):
     print(f"  {src:8s} | {adj:>13s} | {s['coupling_bias_deg']:+23.3f} | {s['peak_sidelobe_db']:19.1f} | "
           f"{run_statistical(cc).angle['coupling_bias_deg']:+21.4f}")
 
-seeds = [1, 2] if SMOKE else [1, 2, 3, 4, 5, 6]
-print(f"\ntime engine, {len(seeds)} noise seeds x {n_chirps} chirps, the estimate at the target's cell:")
-print("  case                               | mean error [deg] | RMS error [deg] | bound [deg]")
+seeds = list(range(1, 3 if SMOKE else 33))
+chirp = ChirpEngine(cfg).run(noise=False, n_chirps=cfg.time_chirps())      # the same ramp for every seed and case
+print(f"\ntime engine, {len(seeds)} noise seeds x {n_chirps} chirps, the estimate at the target's cell (an RMS over {len(seeds)} seeds is good to "
+      f"+-{100 / np.sqrt(2 * len(seeds)):.0f} %):")
+print("  case                               | mean error [deg] | RMS error [deg] | expected [deg] | bound [deg]")
 cases = [("no coupling, compensated", {}),
          ("survey coupling, uncalibrated", {"mimo.coupling.source": "survey"}),
          ("survey coupling, calibrated", {"mimo.coupling.source": "survey", "mimo.coupling.calibrated": True}),
          ("no coupling, NOT compensated", {"mimo.tdm_doppler_compensation": False})]
+rms = lambda e: float(np.sqrt(np.mean(np.square(e))))                      # noqa: E731
+reread = {}
 for label, ov in cases:
     c = load_config(MIMO, {"extra_targets": [], "leakage.enabled": False, "rx.hpf_corner_hz": 0.0, "chirp.n_chirps": n_chirps,
                            "mimo.coupling.source": "none", **ov})
     errs = []
-    for sd in seeds:
-        tm = run_time(c, seed=sd)
+    for sd in (seeds if c.mimo.tdm_doppler_compensation else seeds[:6]):   # the uncompensated case is a bias: six seeds show it
+        tm = run_time(c, chirp, seed=sd)
         errs.append(tm.extras["angle_deg"] - c.target.angle_deg)
+        if not ov:
+            # the same snapshot through the estimator with the true Doppler, and with uniform weights
+            snap, fd = tm.extras["snapshot"], c.doppler_hz()
+            reread.setdefault("true Doppler", []).append(va.estimate(snap, fd)["theta_deg"] - c.target.angle_deg)
+            va_rect = VirtualArray(apply_overrides(c, {"mimo.angle_window": "rect"}))
+            reread.setdefault("true Doppler, uniform weights", []).append(va_rect.estimate(snap, fd)["theta_deg"] - c.target.angle_deg)
+            reread.setdefault("Doppler estimate error [Hz]", []).append(tm.extras["doppler_fine_hz"] - fd)
     errs = np.array(errs)
-    bound = run_statistical(c).angle["crlb_sigma_deg"]
-    print(f"  {label:34s} | {errs.mean():+16.3f} | {np.sqrt(np.mean(errs ** 2)):15.3f} | {bound:11.3f}")
+    ang = run_statistical(c).angle
+    print(f"  {label:34s} | {errs.mean():+16.3f} | {rms(errs):15.3f} | {ang['sigma_expected_deg']:14.3f} | {ang['crlb_sigma_deg']:11.3f}")
+no_dopp = a["sigma_expected_deg"] / a["factor_doppler_estimate"]
+print(f"  the first case's snapshots re-read: with the true Doppler {rms(reread['true Doppler']):.3f} deg (expected {no_dopp:.3f}); with the true "
+      f"Doppler and uniform weights {rms(reread['true Doppler, uniform weights']):.3f} deg (expected {no_dopp / a['factor_angle_window']:.3f}, "
+      f"the bound at the processed SNR); the Doppler estimate itself is off by {rms(reread['Doppler estimate error [Hz]']):.1f} Hz RMS")
 
 two = load_config(MIMO, {"leakage.enabled": False, "rx.hpf_corner_hz": 0.0, "chirp.n_chirps": n_chirps, "mimo.coupling.source": "none"})
 tm = run_time(two, seed=1)

@@ -280,9 +280,13 @@ def _envelope(bins: np.ndarray, spec_db: np.ndarray, offset: float) -> float:
     return float(spec_db[sel].max()) if np.any(sel) else -300.0
 
 
-def angle_metrics(cfg: RadarConfig, snr_cell_db: float) -> dict:
+def angle_metrics(cfg: RadarConfig, snr_cell_db: float, snr_chirp_db: float | None = None,
+                  range_scalloping_db: float = 0.0) -> dict:
     """The virtual array's angle resolution, accuracy bound and biases for
-    the primary target (empty for one TX, one RX)."""
+    the primary target (empty for one TX, one RX).  With ``snr_chirp_db``
+    (one chirp's range bin on one receiver) the estimator's own expected
+    scatter and what separates it from the bound are added
+    (``VirtualArray.angle_error_budget``)."""
     m = cfg.mimo
     if m.n_virtual < 2:
         return {}
@@ -298,7 +302,8 @@ def angle_metrics(cfg: RadarConfig, snr_cell_db: float) -> dict:
             "coupling_bias_deg": va.coupling_bias_deg(th), "tdm_bias_uncompensated_deg": va.tdm_bias_deg(th, fd),
             "coupling_source": m.coupling.source, "coupling_calibrated": m.coupling.calibrated,
             "coupling_max_offdiag_db": (va.coupling.max_offdiag_db() if va.coupling is not None else None),
-            "max_velocity_mps": cfg.max_velocity_mps, **sq}
+            "max_velocity_mps": cfg.max_velocity_mps, **sq,
+            **(va.angle_error_budget(snr_chirp_db, th, fd, range_scalloping_db) if snr_chirp_db is not None else {})}
 
 
 def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatResult:
@@ -339,7 +344,7 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
     res.extras["snr_cell_expected_db"] = (-10.0 * math.log10(thermal_cell + pn_cell)
                                           + res.extras["pn_carrier_loss_db"])
     res.targets = target_rows(cfg, rc, cfg.mimo.n_tx)
-    res.angle = angle_metrics(cfg, budget.snr_cell_db)
+    res.angle = angle_metrics(cfg, budget.snr_cell_db, budget.snr_chirp_db, sc_r)
     res.leakage = leakage_budget(cfg, budget)
     if cfg.mimo.n_tx > 1:
         res.extras["snr_cell_per_tx_db"] = budget.snr_cell_db - 10.0 * math.log10(cfg.mimo.n_tx)

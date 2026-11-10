@@ -41,7 +41,11 @@ the peak's ``u`` is the estimate.  Three things sit on it:
 Accuracy: the Cramer-Rao bound of a single-snapshot deterministic source on
 these positions, ``var(u) = 6 lambda^2 / (4 pi^2 d^2 N (N^2 - 1) SNR)`` for
 a filled line (the general sum of squared positions otherwise), with the
-per-element cell SNR from the link budget.  Resolution: the virtual
+per-element cell SNR from the link budget.  The estimator here is not on
+that bound and ``angle_error_budget`` says by how much and why: the taper
+across the elements (Hann on 8: 1.52 in sigma), the cell's scalloping, the
+element pattern, and the Doppler estimate of the TDM compensation (a
+percent).  Resolution: the virtual
 aperture's ``0.886 lambda / (L cos theta)``, measured on the array factor
 through array_tx's ``beamwidth_3db_deg`` for the filled line.
 """
@@ -220,6 +224,86 @@ class VirtualArray:
         ss = float(np.sum((self.x_v - self.x_v.mean()) ** 2))
         var_u = self.wavelength_m ** 2 / (8.0 * math.pi ** 2 * snr * ss)
         return math.degrees(math.sqrt(var_u) / max(math.cos(math.radians(theta_deg)), 1e-3))
+
+    def angle_error_budget(self, snr_chirp_db: float, theta_deg: float, doppler_hz: float = 0.0,
+                           range_scalloping_db: float = 0.0) -> dict:
+        """What the estimator this module implements should scatter by, and
+        why it is not the Cramer-Rao bound: the first-order (high-SNR) error
+        of the windowed DBF peak on a TDM snapshot whose Doppler is estimated
+        from the same chirps.  ``snr_chirp_db`` is the budget's SNR of one
+        chirp's range bin on one receiver (isotropic element, on the grid).
+
+        Every range-bin sample ``z[i, m, r]`` (TX block i, its chirp m, RX r)
+        carries independent noise; the estimate is linear in it to first
+        order, so the variance is the sum of squared coefficients:
+
+        * the snapshot element (i, r) is the Doppler FFT's bin, weights
+          ``c_m = d_m exp(j 2 pi delta m T) / D(delta)`` for a tone ``delta``
+          off the bin (``sum c_m = 1``; ``sum |c_m|^2`` carries the Doppler
+          window's coherent gain and its scalloping);
+        * the beamformer's peak moves by ``sum_k a_k psi_k`` with ``a_k =
+          w_k (x_k - x_w) / (kappa sum w_k (x_k - x_w)^2)``: uniform weights
+          are the bound, a tapered window pays ``sum w^2 (x - x_w)^2
+          sum (x - x_mean)^2 / (sum w (x - x_w)^2)^2`` in variance;
+        * the TDM compensation takes ``i / n_tx`` of the estimated phase
+          advance per TX period out of block i; the pulse-pair estimate
+          (``doppler_fine_hz``) telescopes to the last chirp's phase minus
+          the first's, averaged over the virtual channels, and is correlated
+          with the snapshot through those two chirps.
+
+        Returned: the bound at the budget's cell SNR (``sigma_crlb_deg``),
+        the sigma factors of the element pattern, the cell's scalloping, the
+        angle window and the Doppler estimate, their product applied to the
+        bound (``sigma_expected_deg``), and the per-element cell SNR the
+        snapshot really has.  Coupling (a bias, and coloured noise once its
+        inverse is applied) is not in it."""
+        m = self.cfg.mimo
+        p = self.cfg.processing
+        n_tx, n_rx = m.n_tx, m.n_rx
+        m_tx = self.cfg.chirp.n_chirps // n_tx
+        if self.n < 2:
+            return {}
+        cos_t = max(math.cos(math.radians(theta_deg)), 1e-3)
+        kappa = TWOPI / self.wavelength_m
+        d = window(p.window_doppler, m_tx)
+        d = d / d.sum()
+        t_tx = self.cfg.chirp.pri_s * n_tx
+        bins = doppler_hz * t_tx * m_tx * p.doppler_pad
+        delta_t = (bins - round(bins)) / (m_tx * p.doppler_pad)             # (f_d - f_bin) T, cycles per TX period
+        rot = d * np.exp(1j * TWOPI * delta_t * np.arange(m_tx))
+        big_d = rot.sum()
+
+        def sigma_u(weights: np.ndarray, c: np.ndarray, rho_chirp: float, doppler_term: bool) -> float:
+            xw = float(np.sum(weights * self.x_v) / np.sum(weights))
+            a = weights * (self.x_v - xw) / (kappa * float(np.sum(weights * (self.x_v - xw) ** 2)))    # per element, TX-major
+            i_tx = np.repeat(np.arange(n_tx), n_rx)
+            cq = a[:, None] * c.real[None, :]                               # on the quadrature noise of z[k, m]
+            cp = a[:, None] * c.imag[None, :]                               # on the in-phase noise
+            if doppler_term and m.tdm_doppler_compensation and n_tx > 1 and m_tx > 1:
+                b = float(np.sum(a * i_tx)) / n_tx
+                cq = cq.copy()
+                cq[:, -1] -= b / (self.n * (m_tx - 1))
+                cq[:, 0] += b / (self.n * (m_tx - 1))
+            return math.sqrt(float(np.sum(cq ** 2) + np.sum(cp ** 2)) / (2.0 * rho_chirp))
+
+        rho0 = 10.0 ** (snr_chirp_db / 10.0)
+        g2 = self.element_gain(theta_deg) ** 2
+        rho = rho0 * g2 * 10.0 ** (-range_scalloping_db / 10.0)
+        ones = np.ones(self.n)
+        w = window(m.angle_window, self.n)
+        c_grid = d.astype(complex)                                          # on the Doppler bin
+        c_off = rot / big_d
+        s_crlb = sigma_u(ones, c_grid, rho0, False)
+        s_elem = sigma_u(ones, c_grid, rho0 * g2, False)
+        s_scal = sigma_u(ones, c_off, rho, False)
+        s_win = sigma_u(w, c_off, rho, False)
+        s_all = sigma_u(w, c_off, rho, True)
+        to_deg = lambda su: math.degrees(su / cos_t)                        # noqa: E731
+        snr_el = 10.0 * math.log10(rho / float(np.sum(np.abs(c_off) ** 2)))
+        return {"sigma_crlb_deg": to_deg(s_crlb), "factor_element_pattern": s_elem / s_crlb,
+                "factor_scalloping": s_scal / s_elem, "factor_angle_window": s_win / s_scal,
+                "factor_doppler_estimate": s_all / s_win, "sigma_expected_deg": to_deg(s_all),
+                "snr_element_cell_db": snr_el, "doppler_bin_offset": float(delta_t * m_tx * p.doppler_pad)}
 
     def coupling_bias_deg(self, theta_deg: float) -> float:
         """What the uncalibrated coupling moves the estimate by (noiseless)."""

@@ -4,6 +4,17 @@
 
 ---
 
+## [0.2.2] — 2026-11-10 — 测角 RMS 归因(P2 #0 第二项)
+
+- `VirtualArray.angle_error_budget`:本估计器(加窗 DBF + 脉冲对多普勒补偿)的一阶误差闭式,拆成四个因子乘在 CRLB 上——元方向图、格点刻度损失、
+  角窗对均匀权、TDM 补偿的多普勒估计(含它与快拍的相关)。默认 2 × 4:0.0231° × 1.088 × 1.523 × 1.011 = 0.0386°(cos 元再 × 1.064 = 0.041°)。
+  进 `StatResult.angle`(`sigma_expected_deg`、`factor_*`、`snr_element_cell_db`)、报表与示例 07。
+- 核对:快拍级蒙卡 9 组配置 ≤ 1.5 %;时域引擎 384 个 seed 0.0395° 对 0.0386°(+2.3 %,抽样 ±3.6 %)。ADC 量化、相噪、多普勒估计都不是那 2 倍的来源。
+- 示例 07:32 个 seed、期望列、同一批快拍用真多普勒 / 均匀权重读;报表的"目标角度"原来恒打 0(`report["target"]` 没带 `angle_deg`),已修。
+- 被推翻的判断:"时域测角误差贴着 CRLB,差的是 ADC 量化与多普勒估计噪声"(`cairn/mimo-angle.md` 2b)。指纹只多新键(numbers-move)。
+
+---
+
 ## [0.2.1] — 2026-11-07 — 飞回 blanking(里程碑 2 的 P2 #0 第一项)
 
 - `rx.blank_s`:每个 chirp 开头 blanking 的时长;距离窗按剩下的样本重配(`processing.windows.range_window`,所有距离 FFT 与窗统计共用),
