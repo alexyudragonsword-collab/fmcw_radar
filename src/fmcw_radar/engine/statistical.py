@@ -29,6 +29,7 @@ from ..lo import LOProfile
 from ..mimo import VirtualArray
 from ..phase_noise import RangeCorrelation
 from ..processing.detection import pd_swerling0
+from ..processing.cfarstats import cfar_statistics
 from ..processing.rd import power_db, range_axis_m, range_fft, read_peak, velocity_axis_mps
 from ..processing.windows import (coherent_gain_db, enbw_bins, mainlobe_width_bins, peak_sidelobe_db, range_window, spectrum_db,
                                   window)
@@ -62,6 +63,7 @@ class StatResult:
     targets: list = field(default_factory=list)       # milestone 2: one row per point target (the primary first)
     angle: dict = field(default_factory=dict)         # milestone 2: the virtual array's angle metrics
     leakage: LeakageBudget | None = None              # milestone 2: TX-RX leakage budget (None when off)
+    cfar: dict = field(default_factory=dict)          # what the windows and padding make of the CA-CFAR's Pfa
     extras: dict = field(default_factory=dict)
 
 
@@ -346,6 +348,7 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
     res.targets = target_rows(cfg, rc, cfg.mimo.n_tx)
     res.angle = angle_metrics(cfg, budget.snr_cell_db, budget.snr_chirp_db, sc_r)
     res.leakage = leakage_budget(cfg, budget)
+    res.cfar = cfar_statistics(cfg)
     if cfg.mimo.n_tx > 1:
         res.extras["snr_cell_per_tx_db"] = budget.snr_cell_db - 10.0 * math.log10(cfg.mimo.n_tx)
     res.extras["max_range_m"] = cfg.max_range_m

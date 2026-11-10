@@ -77,6 +77,11 @@
 2. **polar_tx 的 event 有效域指标在 chirp 上读 495 %**,本库的判断是指标不适用(见 `cairn/chirp-engine.md`)。这是本库的读法,
    报回条目已写在上面"报回上游"#1(等用户转到 polar_tx ROADMAP B1)。B1 有定论之前,`ChirpResult.ui_per_ref_cycle_p99` 和报表都把数打出来。
 
+3. **MIMO 图上的 CFAR 用的是单通道的阈值因子**。`_process_cube` 的图是 K = n_tx × n_rx 个虚拟通道的非相干和,格功率是 Gamma(K) 不是指数,
+   而 `ca_cfar_2d` 的 α = N(Pfa^(−1/N) − 1) 只对指数成立:K = 8、设计 1e-4 时实际 Pfa 1.2e-23,阈值 9.7 dB 而需要的只有 4.6 dB——MIMO 的检测白丢 5.1 dB。
+   复现:`gamma.sf(8 * threshold_factor(416, 1e-4), 8)`、`gamma.isf(1e-4, 8) / 8`。要做:`threshold_factor(n, pfa, n_looks)`(CA-CFAR 对 Gamma 格是不完全 Beta 的闭式),
+   `cfarstats` 的精确式推广到 K 重特征值;MIMO 用例的 `n_detections` 指纹会动。另:帧短于训练窗(8 chirp 对 21 格)时 Pfa 1.4e-6,config 没有拦(`cairn/cfar-statistics.md`)。
+
 ## P2 — 一致性与能力
 
 0. **里程碑 2 留下的**(复现:示例 05–08,`cairn/mimo-angle.md`):
@@ -84,7 +89,6 @@
      真实的线性相位抽取滤波器也有前振铃,但长度是它的抽头数不是一整个 chirp。要做因果 / 有限长的 IF 滤波器(所有时域指纹都会动)。
    - TDM 的多普勒补偿在目标格上估单音频率(`doppler_fine_hz`),两目标同距离格同多普勒格时取其合成,各自的角都偏;要做多普勒维的分辨或 BPM-MIMO。
    - `found_targets` 的分格规则只分到格:两目标近于一个距离格(3.75 cm)时仍找同一个峰;那是分辨率,不是 bug,但报表没有标。
-   - 2-D CA-CFAR 的格相关:距离维零填充 ×4 下纯噪声帧 64000 格 4 个虚警(6.3e-5 对 1e-4),闭式的 Pfa 按独立格算是上界;要给出有效独立格数。
    - 泄漏只有直接路径 + 一个反射体,相噪经 τ ≈ 0 几乎全抵消是对的,但发射机的 AM 噪声 / 泄漏的幅度噪声没有模型(mmw60_trx 到位再说)。
 1. **时域 SNR 比期望低 0.07–0.10 dB**(示例 04:2 / 5 / 10 m,32 chirp;示例 00 的 64 chirp 差 0.00 dB)。已扣的:格点失配(Hann 多普勒维 0.44 格 1.1 dB)、
    带内相噪均值(−74 … −60 dBc/格)、拍频音相干损失 e^{−σ²}(−0.05 … −0.10 dB)。纯热噪声 + 理想 chirp 时差 +0.15 dB(噪底估计的最大值偏差一类),

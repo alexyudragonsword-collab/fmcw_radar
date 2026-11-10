@@ -12,6 +12,19 @@ Pd against cell SNR at Pfa = 0.0001 (threshold factors: N=16 12.45, N=32 10.67, 
 
 SNR for Pd = 0.9: ideal 11.75 dB; CA-CFAR N=16 13.10 dB (loss 1.35 dB), N=32 12.48 dB (loss 0.73 dB); a Rayleigh target (Swerling 1) needs 20.0 dB at N=16
 realised Pfa, 1-D MC, N=16: 9.62e-05 for 0.0001 asked
-time engine, noise only (32 chirps, 2-D CA-CFAR with 416 training cells, Pfa 0.0001): 4 false alarms in 64000 cells = 6.25e-05
-  (the map is zero-padded x4 in range: neighbouring cells are correlated, so the count is not a free-sample estimate)
+
+2-D CA-CFAR on the map (32 chirps, hann / hann, range pad x4, guard 2 + train 8 padded cells each side): 416 training cells worth 33.4 independent ones (one look spans 7.78 x 1.94 padded cells); the guard is 0.5 range bins, so the training cells correlate 0.0151 with the cell under test
+  design Pfa 0.0001: the noisier threshold alone -> 2.71e-04; the test cell lifting its own threshold alone -> 2.64e-05; both, exact -> 1.021e-04
+  a noise-only frame: 51200 cells in the IF band = 3385 independent looks; 5.2 false-alarm cells expected
+  realised per-cell Pfa: white noise through the same windows and padding (120 maps, 1.54e+07 cells) and the time engine's noise-only frames (6 frames, 6.11e+05 in-band cells); clusters are 8-connected groups of detections
+  design Pfa | exact      | noise maps (cells / clusters)       | time engine (cells / clusters)
+        0.01 | 1.039e-02  | 1.044e-02 (160372 / 35262)        | 1.022e-02 ( 6240 / 1420)
+       0.001 | 1.036e-03  | 1.033e-03 ( 15865 /  5093)        | 9.565e-04 (  584 /  186)
+      0.0001 | 1.021e-04  | 1.062e-04 (  1632 /   641)        | 9.172e-05 (   56 /   25)
+  what the guard does (exact per-cell Pfa at the design 1e-4, same windows and padding):
+    guard  0 cells = 0.00 range bins:  288 training cells worth  23.0, correlation with the test cell 0.0489, Pfa 9.23e-06
+    guard  2 cells = 0.50 range bins:  416 training cells worth  33.4, correlation with the test cell 0.0151, Pfa 1.02e-04
+    guard  4 cells = 1.00 range bins:  544 training cells worth  43.8, correlation with the test cell 0.0038, Pfa 1.70e-04
+    guard  8 cells = 2.00 range bins:  800 training cells worth  58.9, correlation with the test cell 0.0001, Pfa 1.79e-04
+    guard 12 cells = 3.00 range bins: 1056 training cells worth  50.5, correlation with the test cell 0.0000, Pfa 1.98e-04
   wrote examples/output/06_cfar_curves.png

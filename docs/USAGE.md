@@ -24,13 +24,14 @@ blanking 的时长,0.2.1:距离窗按剩下的样本重配,`cfg.n_blank` 是样�
 - `run_radar(cfg)` → `RadarResult(cfg, chirp, stat, time)`;`sim.engine` 选 `statistical` / `time` / `both`。
 - `run_statistical(cfg, chirp=None)` → `StatResult`:`budget`(雷达方程逐行)、`snr_cell_db`、`pd`、`range_res_*`、`pn_floor{offset: (per bin, per cell)}`、
   `nonlinearity`、`chirp`、`extras["snr_cell_expected_db"]`(扣格点失配、带内相噪、拍频音相干损失后时域引擎该读到的数);
-  里程碑 2:`targets`(每目标一行:电平、格点 SNR、最强他者的裙边、`masked`)、`angle`(孔径、波束宽、CRLB、TDM 偏差、互耦偏差、斜视;0.2.2 起还有本估计器的期望散布 `sigma_expected_deg` 与四个因子 `factor_*`)、`leakage`(`LeakageBudget`)。
+  里程碑 2:`targets`(每目标一行:电平、格点 SNR、最强他者的裙边、`masked`)、`angle`(孔径、波束宽、CRLB、TDM 偏差、互耦偏差、斜视;0.2.2 起还有本估计器的期望散布 `sigma_expected_deg` 与四个因子 `factor_*`)、`leakage`(`LeakageBudget`)、
+  `cfar`(0.2.3:训练集有效格数、与被测格的相关、每格精确 Pfa、带内格数 / 独立观测数 / 每帧期望虚警格)。
 - `run_time(cfg, chirp=None, noise=True, phase_noise=True, quantise=True, leakage=True, hpf=True)` → `TimeResult`:`rd_db`、轴、峰值位置、`snr_cell_db`、
   最后一个 chirp 的距离剖面与宽度、CFAR 检测;`extras["targets_found"]`(每目标 `(距离, 速度, 相对电平[, 角度])` 或 None)、`clipped_fraction`;
   MIMO 时 `frame` 是 (chirp, RX, 样本) 立方,`extras` 多 `angle_deg`、`angle_spectrum`、`snapshot`、`doppler_fine_hz`。开关只为一致性检查,config 里没有。
 - `VirtualArray(cfg)`:`x_v`、`filled`、`snapshot(theta, doppler)`、`estimate(snapshot, doppler)`、`beamwidth_deg`、`crlb_sigma_deg`、`angle_error_budget(snr_chirp_db, theta, doppler)`、`coupling_bias_deg`、
   `tdm_bias_deg`、`sweep_squint`。`leakage_budget(cfg)` 与 `leakage_tones(cfg)`;`cfar_pd_monte_carlo(snr_db, pfa, n_train, trials, swerling=0|1)`、
-  `cfar_pd_swerling1`、`hpf_attenuation_db` / `apply_hpf`;`range_window(name, n, n_blank)` 是 blanking 后的距离窗(所有距离 FFT 与窗统计都走它)。
+  `cfar_pd_swerling1`、`cfar_statistics(cfg)` / `cfar_statistics_2d(...)`(`processing.cfarstats`)、`hpf_attenuation_db` / `apply_hpf`;`range_window(name, n, n_blank)` 是 blanking 后的距离窗(所有距离 FFT 与窗统计都走它)。
 - `ChirpEngine(cfg).run(noise=False, n_chirps=None)` → `ChirpResult`:`f_err_dco_hz` 整帧曲线、`ramp(k)` / `ramp_carrier(k)`、`metrics(k)`
   (峰值、RMS、底、建立时间)、`dp_cal_passes` / `dp_cal_trace`、`ui_per_ref_cycle_p99`、`vouches_for_spurs`。
 - `RangeCorrelation(profile, tau)`:`residual_psd(f)`、`sidelobe_dbc(offset_hz, enbw_hz)`、`synthesize_residual(n, fs, rng)`、`measured_residual_psd`。
@@ -57,6 +58,6 @@ blanking 的时长,0.2.1:距离窗按剩下的样本重配,`cfg.n_blank` 是样�
 | `03_bandwidth_window_resolution.py` | 扫频宽度 × 窗 → 分辨率表,时域实测对 c/2B 与 Harris 表 |
 | `04_statistical_vs_time.py` | 统计 / 时域一致性:SNR 三距离、相噪旁瓣、非线性剖面 |
 | `05_multi_target_masking.py` | 四目标的遮蔽表(窗裙 / 相噪)与时域 `found_targets` |
-| `06_cfar_curves.py` | CA-CFAR 的 Pd / Pfa 蒙卡对闭式,CFAR 损失,时域纯噪声帧的虚警 |
+| `06_cfar_curves.py` | CA-CFAR 的 Pd / Pfa 蒙卡对闭式,CFAR 损失;图上的格相关:有效训练格数、guard 表、每格精确 Pfa 对噪声图与时域纯噪声帧 |
 | `07_mimo_angle.py` | 2 × 4 TDM-MIMO:互耦三来源与校准、TDM 补偿、CRLB 与估计器的期望散布(四个因子)、斜视、双目标各自的角 |
 | `08_tx_leakage.py` | 泄漏预算,高通前后的削波与目标 |

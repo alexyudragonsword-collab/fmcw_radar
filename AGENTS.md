@@ -16,7 +16,7 @@
 1. 先读本文件(AGENTS.md)。
 2. 读根目录 `ROADMAP.md`:只记没做的,每条附证据(复现方式与数字)。
 3. 读 `cairn/LOG.md` 最新几条(新条目在顶部):每轮的数字原值与被推翻的判断。
-4. 按任务需要读 `cairn/` 下相关知识专题文档(`cairn/architecture-invariants.md`、`cairn/chirp-engine.md`、`cairn/range-correlation.md`、`cairn/mimo-angle.md`)。
+4. 按任务需要读 `cairn/` 下相关知识专题文档(`cairn/architecture-invariants.md`、`cairn/chirp-engine.md`、`cairn/range-correlation.md`、`cairn/mimo-angle.md`、`cairn/cfar-statistics.md`)。
 
 ## 文档职责
 
