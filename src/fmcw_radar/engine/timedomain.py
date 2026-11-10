@@ -109,8 +109,27 @@ def beat_frame(cfg: RadarConfig, chirp: ChirpResult | None, *, noise: bool = Tru
         psi_ref = chirp.phase_err_carrier_rad()
     else:
         t_ref = psi_ref = None
-    if phase_noise:
-        rc = RangeCorrelation(LOProfile.from_config(cfg), cfg.tau_s()) if rc is None else rc
+    split = "no phase noise"
+    if phase_noise and rc is None:
+        # who carries which part of the LO's noise: the error curve first, the profile for the rest
+        prof = LOProfile.from_config(cfg)
+        content = chirp.lo_noise_in_curve if chirp is not None else "none"
+        if content == "unverified":
+            raise ValueError("time engine: a linearised chirp curve with its noise on cannot be split against the LO profile; "
+                             "run the response engine with noise=False (the profile is its noise) or use the event engine")
+        if content == "all":
+            prof = prof.above(0.5 * cfg.lo.fref_hz)
+            split = "curve: the loop to fref/2 (cycle-accurate, noise on); profile: above fref/2"
+        elif content == "quantisation" and prof.components:
+            prof = prof.without("tdc_quant", "dco_quant")
+            split = "curve: TDC and DCO quantisation (cycle-accurate); profile: everything else"
+        elif content == "quantisation":
+            split = "curve: TDC and DCO quantisation; profile: a file with no breakdown, synthesised whole (quantisation counted twice)"
+        else:
+            split = "profile: everything"
+        rc = RangeCorrelation(prof, cfg.tau_s())
+    elif phase_noise:
+        split = "profile: the caller's"
     # the IF brick wall and the decimation: the two grids share the bin spacing 1 / T_c
     f_w = np.fft.fftfreq(n_w, d=1.0 / fs_w)
     keep = np.abs(f_w) <= cfg.rx.if_bw_hz
@@ -193,7 +212,7 @@ def beat_frame(cfg: RadarConfig, chirp: ChirpResult | None, *, noise: bool = Tru
     info = {"fs_wave_hz": fs_w, "n_wave": n_w, "signal_amplitude_v": a_s, "fullscale_v": a_fs,
             "noise_sigma_wave_v": sigma, "adc_step_v": step, "budget": budget, "n_chirps": m_chirps,
             "clipped_fraction": clipped / float(frame.size), "n_targets": len(tgt), "n_leakage_tones": len(leaks),
-            "clipped_fraction_after_blanking": clipped_kept / float(frame.size), "n_blank": n_blank}
+            "clipped_fraction_after_blanking": clipped_kept / float(frame.size), "n_blank": n_blank, "lo_noise_split": split}
     return frame, info
 
 
@@ -361,29 +380,42 @@ def _process_cube(cfg: RadarConfig, cube: np.ndarray, info: dict | None) -> Time
     return res
 
 
-def run_time(cfg: RadarConfig, chirp: ChirpResult | None = None, **kw) -> TimeResult:
+def run_time(cfg: RadarConfig, chirp: ChirpResult | None = None, chirp_noise: bool = False, **kw) -> TimeResult:
+    """``chirp_noise``: run the chirp engine with the loop's noise sources
+    on (seeded like the frame), so the cycle-accurate engine carries the
+    LO's noise up to fref / 2 and the profile only what is above it; off
+    (the default) the curve is the deterministic one and the profile
+    carries the noise, less the quantisation the curve already is."""
     if chirp is None and cfg.lo.engine != "ideal":
-        chirp = ChirpEngine(cfg).run(noise=False, n_chirps=cfg.time_chirps())
+        seed = kw.get("seed")
+        chirp = (ChirpEngine(cfg).run(noise=True, seed=cfg.sim.seed if seed is None else seed, n_chirps=cfg.time_chirps())
+                 if chirp_noise else ChirpEngine(cfg).run(noise=False, n_chirps=cfg.time_chirps()))
     frame, info = beat_frame(cfg, chirp, **kw)
     return process_frame(cfg, frame, info)
 
 
 def measured_pn_sidelobes(cfg: RadarConfig, offsets_m, n_chirps: int = 32, seed: int | None = None,
-                          half_bins: int = 3, window_name: str | None = None) -> dict:
+                          half_bins: int = 3, window_name: str | None = None, chirp: ChirpResult | None = None) -> dict:
     """The phase-noise sidelobe at each range offset as the range FFT measures
     it: ``n_chirps`` noiseless, unquantised chirps with phase noise only,
     their range profiles averaged, read in a band of ``2 half_bins + 1``
     (unpadded) bins around each offset, relative to the tone's peak [dBc].
     The window's own sidelobes add to what is read: a Hann window sits at
     -32 dB three bins out and falls 18 dB per octave, so offsets under ten
-    bins want ``window_name = "blackman"`` (-58 dB) to see the noise."""
+    bins want ``window_name = "blackman"`` (-58 dB) to see the noise.
+
+    With ``chirp`` the frame carries that error curve as well and the LO's
+    noise is split between it and the profile the way ``beat_frame`` does:
+    what is read is then everything the LO puts at the offset, the curve's
+    deterministic pattern included, against the same closed form -- the
+    check that nothing is counted twice."""
     from .statistical import beat_sideband
 
     name = cfg.processing.window_range if window_name is None else window_name
     rc = RangeCorrelation(LOProfile.from_config(cfg), cfg.tau_s())
     sb = beat_sideband(cfg, rc)
-    frame, _ = beat_frame(cfg, None, noise=False, phase_noise=True, quantise=False, seed=seed, n_chirps=n_chirps,
-                          rc=rc)
+    frame, _ = beat_frame(cfg, chirp, noise=False, phase_noise=True, quantise=False, seed=seed, n_chirps=n_chirps,
+                          rc=rc if chirp is None else None)
     spec = range_fft(frame, name, 1, cfg.n_blank)
     p = np.mean(np.abs(spec) ** 2, axis=0)
     n = cfg.n_samples

@@ -77,6 +77,9 @@ class ChirpResult:
     cpu_s: float = 0.0
     vouches_for_spurs: bool = False     # invariant #6: only the cycle-accurate engine does
     note: str = ""
+    noise: bool = False                 # the loop's noise sources were on
+    osc_phase_dco_rad: np.ndarray | None = None   # the DCO's own phase noise along the train [rad at the DCO]: what
+                                                  # ``f_err_dco_hz`` (the tuning word's frequency) does not carry
 
     # ---------------------------------------------------------------- views
     @property
@@ -99,8 +102,30 @@ class ChirpResult:
     def phase_err_carrier_rad(self) -> np.ndarray:
         """The carrier phase error [rad] along the whole train (cumulative sum
         of the frequency error, one reference period per cycle), the quantity
-        the time engine interpolates at ``t`` and ``t - tau``."""
-        return TWOPI * self.mult * np.cumsum(self.f_err_dco_hz) / self.fref_hz
+        the time engine interpolates at ``t`` and ``t - tau``.  With the
+        loop's noise on, the DCO's own phase noise is added: the frequency
+        error is the tuning word's, which only carries the loop's *reaction*
+        to that noise -- integrated alone it reads 45 dB too much phase
+        noise at 30 kHz (cairn/chirp-engine.md)."""
+        psi = TWOPI * self.mult * np.cumsum(self.f_err_dco_hz) / self.fref_hz
+        if self.osc_phase_dco_rad is not None:
+            psi = psi + self.mult * self.osc_phase_dco_rad
+        return psi
+
+    @property
+    def lo_noise_in_curve(self) -> str:
+        """What of the LO's noise the error curve already is, so the time
+        engine does not synthesise it again from the profile: ``all`` the
+        loop does up to fref / 2 (cycle-accurate engine, noise on),
+        ``quantisation`` (cycle-accurate engine, noise off: the TDC's and
+        the DCO's quantisation as the deterministic pattern they are on a
+        ramp), ``none`` (ideal, or the linearised engine without noise), or
+        ``unverified`` (the linearised engine with its noise on)."""
+        if self.engine == "event":
+            return "all" if self.noise else "quantisation"
+        if self.engine == "response" and self.noise:
+            return "unverified"
+        return "none"
 
     def metrics(self, k: int | None = None) -> dict:
         """Peak / RMS frequency error at the carrier and the settling time of
@@ -194,7 +219,7 @@ class ChirpEngine:
         f_err = np.diff(out - phase_cmd, prepend=0.0) * fref / TWOPI
         return ChirpResult("response", fref, nc, n_ramp, n_idle, cfg.lo_mult, f_cmd, f_err, dp_gain,
                            dp_cal_passes=passes, ui_per_ref_cycle_p99=ui99,
-                           note="linearised engine: cannot vouch for spurs or quantisation")
+                           note="linearised engine: cannot vouch for spurs or quantisation", noise=bool(noise))
 
     # --------------------------------------------------------------- event
     def _simulate(self, f_cmd, dp_gain, noise, seed, dp_cal=None):
@@ -203,6 +228,20 @@ class ChirpEngine:
         sim = self.pll.simulate(seq.size, noise=noise, seed=seed, mod_freq=seq, mod_dp_gain=dp_gain, dp_cal=dp_cal)
         f_err = sim.freq_out[settle:settle + f_cmd.size] - (self.pll.cfg.fout + f_cmd)
         return f_err, sim
+
+    def _osc_phase(self, sim, f_cmd: np.ndarray, f_err: np.ndarray) -> np.ndarray:
+        """The DCO's own phase noise along the train [rad at the DCO]: the
+        simulator's phase (``phase_err_out``, against the unmodulated
+        carrier, one cycle on because the tuning word of cycle n acts during
+        cycle n + 1) less the commanded modulation's phase, less the tuning
+        word's integral.  Zero to 2e-5 rad with the noise off."""
+        settle = self.cfg.lo.settle_cycles
+        fref = self.cfg.lo.fref_hz
+        n = f_cmd.size
+        cmd = TWOPI * (np.cumsum(f_cmd)) / fref
+        true = np.asarray(sim.phase_err_out)[settle + 1:settle + 1 + n] - cmd
+        osc = true - TWOPI * np.cumsum(f_err) / fref
+        return osc - osc[0]
 
     def _calibrate_offline(self, one_pri: np.ndarray, mode: str) -> tuple[float, list[dict]]:
         """``lo.dp_cal: offline``: ``dp_cal_iterations`` least-squares passes
@@ -247,7 +286,8 @@ class ChirpEngine:
             dp_gain = float(trace[-1])
         return ChirpResult("event", cfg.lo.fref_hz, nc, n_ramp, n_idle, cfg.lo_mult, f_cmd, f_err, dp_gain,
                            dp_cal_trace=trace, dp_cal_passes=passes, ui_per_ref_cycle_p99=ui99,
-                           vouches_for_spurs=True, note="cycle-accurate engine (loop, TDC, DCO quantisation)")
+                           vouches_for_spurs=True, note="cycle-accurate engine (loop, TDC, DCO quantisation)",
+                           noise=bool(noise), osc_phase_dco_rad=self._osc_phase(sim, f_cmd, f_err) if noise else None)
 
 
 __all__ = ["ChirpEngine", "ChirpResult", "command_train", "quadratic_reference", "ui_per_ref_cycle_p99"]

@@ -59,6 +59,9 @@
    > **TDC dither**(fmcw_radar P1 #1(a)):`TDCConfig` 只有 INL / 抖动,没有 dither。TDC 量化在 chirp 上出确定性鬼目标:fmcw_radar 默认 config
    > (15 GHz DCO、1 GHz 斜坡、fref 100 MHz、5 ps TDC)5 m 目标在 **±4.85 m 处 −45.3 dBc**,2 ps TDC 时 **−54.9 dBc**;随 TDC 分辨率变、不随 Kdco 变、
    > 开环路噪声后不消失(2.2 / 7.81 m 处 −49 dBc)。要一个 dither(或亚 LSB 噪声注入)选项把它打散成底噪。
+   > 同一件事的另一面(0.2.5 量的):整数 N、CW、noise=True 时 `simulate` 的带内相噪比 `analyze` 高 **15 dB**(−66 … −69 对 −81 … −85 dBc/Hz @ 60 GHz;
+   > 相位误差 0.133 rad RMS @ DCO = 5 ps / √12):TDC 死区。频率斜坡上两者 0.6 dB 内一致(斜坡自己就是 dither)。`analyze` 的 `tdc_quant` 项在没有 dither 的整数 N 下不成立,
+   > 建议在 `analyze` 的 notes 里标出,或给 TDC 加 dither 后两边才对得上。复现:`build_adpll(RadarConfig()).simulate(400000, noise=True)` 的 `s_phi_psd` 对 `analyze().pn_breakdown`。
    > 复现:`fmcw_radar` `run_statistical(RadarConfig()).nonlinearity["ghosts"]`,`tests/test_engines.py::test_tdc_ghost_targets_are_reported_and_scale_with_the_tdc`,示例 00 / 02。
    > 等它的:fmcw_radar ROADMAP P1 #1(a);`StatResult.nonlinearity["ghosts"]` 在那之前是悲观一侧。
    >
@@ -71,9 +74,9 @@
 1. **TDC 量化的鬼目标**(机制与数字见 `cairn/chirp-engine.md`:5 ps TDC 在 ±4.85 m 处 −45.3 dBc,2 ps 时 −54.9 dBc;开环路噪声后不消失)。
    0.2.4 起它进了虚警账:`StatResult.cfar["ghosts"]` 把每个鬼目标当稳态目标算 Pd(`cairn/cfar-statistics.md`)。还没做的:
    (a) TDC dither(pllsim 没有,已写进"报回上游"#2,等 pll_simulator);
-   (b) chirp 引擎带噪声时与 `LOProfile` 的分工(环内由逐周期引擎、环外由剖面)以免重复计相噪。初步量到的(16 chirp,每 ramp 去线性趋势的周期图,未核实估计器):
-       逐周期引擎 noise=False 的量化图样在 1 MHz 处 −85 dBc/Hz、剖面 −80.2;noise=True 在 3 / 10 / 30 MHz 处比剖面低 3.5 / 4.7 / 4 dB,低频段反而高得多
-       (疑为带噪声的离线校准残差或估计器泄漏)。先把这两条量清楚再定分工。
+   (b) 分工做了(0.2.5,`cairn/chirp-engine.md`)。剩下的:带 `lo.profile` 文件的配置没有分项,noise=False 的曲线仍叠在整份剖面上(LO 底高 1.1 dB);
+       默认(noise=False)把量化当成每个 chirp 都相同的图样,统计引擎的相噪底表把它当平滑噪声——总量一致,但鬼目标所在的偏移上时域高 0.4–1.2 dB;
+       `run_time(chirp_noise=True)` 最准(对闭式 −0.02 … +0.47 dB)但每个 seed 要重跑逐周期引擎(64 chirp 约 4.5 s)。
    (c) 鬼目标表只列单 ramp 曲线上最强的 6 个;时域图上的电平与它差 1–3 dB,而 Pd 在陡段每 dB 变 0.15:0 dBsm 目标(鬼目标 SNR 9–11 dB)闭式 2.78 个 / 帧,
        时域 8 帧平均 2.00;+4 dBsm 4.78 对 4.12;车 5 对 5。要更准得从整帧的非线性剖面而不是单 ramp 取电平。
    复现:`run_statistical(cfg).cfar["ghosts"]`;时域对照 `run_time(cfg, chirp, seed=s).cfar_detections` 在鬼目标距离 ±1.5 格内有没有格。
@@ -92,9 +95,7 @@
    - TDM 的多普勒补偿在目标格上估单音频率(`doppler_fine_hz`),两目标同距离格同多普勒格时取其合成,各自的角都偏;要做多普勒维的分辨或 BPM-MIMO。
    - `found_targets` 的分格规则只分到格:两目标近于一个距离格(3.75 cm)时仍找同一个峰;那是分辨率,不是 bug,但报表没有标。
    - 泄漏只有直接路径 + 一个反射体,相噪经 τ ≈ 0 几乎全抵消是对的,但发射机的 AM 噪声 / 泄漏的幅度噪声没有模型(mmw60_trx 到位再说)。
-1. **时域 SNR 比期望低 0.07–0.10 dB**(示例 04:2 / 5 / 10 m,32 chirp;示例 00 的 64 chirp 差 0.00 dB)。已扣的:格点失配(Hann 多普勒维 0.44 格 1.1 dB)、
-   带内相噪均值(−74 … −60 dBc/格)、拍频音相干损失 e^{−σ²}(−0.05 … −0.10 dB)。纯热噪声 + 理想 chirp 时差 +0.15 dB(噪底估计的最大值偏差一类),
-   剩下的 −0.1 dB 没有归因。1 dB 判据过了。
+1. (0.2.5 了结,见 LOG:时域 SNR 对期望的差 12 个 seed 平均 +0.06 / −0.04 / +0.06 dB(2 / 5 / 10 m),单 seed 标准差 0.10–0.21 dB;原来单 seed 的 −0.07 … −0.10 dB 里有 TDC 量化重复计的一份。)
 2. **FFT 上量相噪旁瓣的方差 ±0.3 dB**(64 chirp × ±10 格,Blackman,高斯相位精确谱对照):示例 04 +1 / +2 / +5 m 差 +0.11 / −0.02 / −0.44 dB,
    换 seed 在 ±0.4 dB 内摆。要压到 0.1 dB 需要 10 倍的 chirp 数或直接比残余 PSD(那条已经 0.1 dB)。更近的偏移(< 10 格)要更低旁瓣的窗(Blackman-Harris / Taylor)。
 3. **时域引擎按 chirp 独立合成相噪**(块 500k 点,最低 10 kHz),chirp 间 LO 低频相关没有表示;对多普勒维噪底无影响的论证见 `cairn/range-correlation.md`,

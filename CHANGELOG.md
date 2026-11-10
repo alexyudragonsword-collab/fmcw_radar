@@ -4,6 +4,18 @@
 
 ---
 
+## [0.2.5] — 2026-11-10 — LO 噪声在 chirp 曲线与剖面之间的分工(P1 #1(b))
+
+- **时域引擎把 TDC 量化算了两遍**:noise=False 的逐周期曲线就是剖面的 `tdc_quant` + `dco_quant`(1 MHz 处 −85.2 对 −85.3 dBc/Hz),却叠在整份剖面上,
+  1–5 m 的 LO 底比分工后高 1.1 dB(比闭式高 1.5–2.2 dB)。现在曲线带什么、剖面就不合成什么(`ChirpResult.lo_noise_in_curve`、`LOProfile.components` / `without` / `above`、`info["lo_noise_split"]`)。
+- **带噪声的 chirp 曲线修对了**:`freq_out` 是调谐字的频率,不含 DCO 自己的相噪;积分它在 30 kHz 处多读 45 dB。`phase_err_carrier_rad()` 加上
+  `osc_phase_dco_rad`(从 `phase_err_out` 减指令相位得到)。修后斜坡上逐周期引擎与线性剖面 0.1–10 MHz 差 ≤ 0.6 dB。
+- `run_time(cfg, chirp_noise=True)`:环路到 fref/2 的噪声由逐周期引擎带,剖面只留 fref/2 以上;LO 底对闭式 −0.02 … +0.47 dB。示例 04 多一张三种分法的表。
+- 发现:CW 整数 N 下 `simulate` 的带内相噪比 `analyze` 高 15 dB(TDC 死区,0.133 rad @ DCO);斜坡自带 dither 所以 chirp 时一致。并入给 pll_simulator 的条目。
+- 时域 SNR 对期望的差(原 P2 #1)了结:12 个 seed 平均 +0.06 / −0.04 / +0.06 dB(2 / 5 / 10 m),单 seed 标准差 0.10–0.21 dB。指纹(numbers-move):带相噪的时域帧全部动了(少合成了量化两项),统计值与 chirp 值逐位不变。
+
+---
+
 ## [0.2.4] — 2026-11-10 — K-look 阈值、训练窗裁剪、含自漏的 Pd、鬼目标进虚警账(P1 #3、P1 #1(c))
 
 - **MIMO 图的 CFAR**:非相干和的格是 Gamma(K),`threshold_factor(n, pfa, n_looks)` 取 Beta(K, K·N) 的分位数(K = 8:4.6 dB 而不是 9.7 dB);`_process_cube` 用它。
