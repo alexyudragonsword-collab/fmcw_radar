@@ -88,6 +88,9 @@ def stat_values(s) -> dict:
     if s.leakage is not None:
         for lab, v, _ in s.leakage.as_rows():
             out["leak." + lab] = _scalar(v)
+    for k, v in getattr(s, "cfar", {}).items():
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            out["cfar." + k] = _scalar(v)
     return out
 
 

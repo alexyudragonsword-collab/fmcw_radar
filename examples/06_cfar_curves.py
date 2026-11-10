@@ -3,17 +3,25 @@
 The statistical side: Pd against SNR for the ideal detector (known noise
 level, Swerling 0 closed form), the CA-CFAR with 16 and 32 training cells
 (Swerling 0 by Monte Carlo, Swerling 1 in closed form), and the CFAR loss
-at Pd = 0.9 -- what the threshold's own fluctuation costs.  The time
-engine side: the 2-D CA-CFAR on noise-only frames (the transmitter turned
-down 200 dB), the realised false-alarm rate against the asked-for one.
+at Pd = 0.9 -- what the threshold's own fluctuation costs.  Then the same
+CFAR on the range-Doppler map, whose cells are correlated by the windows
+and the zero-padding: the training set's effective size, its correlation
+with the cell under test (the guard is counted in padded cells), the exact
+per-cell false-alarm probability those give, and the realised rate on
+white noise through the same processing and on the time engine's
+noise-only frames (the transmitter turned down 200 dB).
 """
 
 import numpy as np
 from _common import CONFIG, OUT, SMOKE, plt_or_none, rel
 
 from fmcw_radar.config import load_config
+from fmcw_radar.engine import run_statistical
 from fmcw_radar.engine.timedomain import run_time
 from fmcw_radar.processing import cfar_pd_monte_carlo, cfar_pd_swerling1, cfar_threshold_factor, pd_swerling0, snr_for_pd
+from fmcw_radar.processing.cfar import ca_cfar_2d
+from fmcw_radar.processing.cfarstats import cfar_statistics, count_clusters, noise_map
+from fmcw_radar.processing.windows import window
 
 pfa = 1e-4
 snr = np.arange(4.0, 20.1, 1.0)
@@ -44,13 +52,62 @@ print(f"\nSNR for Pd = 0.9: ideal {s_ideal:.2f} dB; CA-CFAR N=16 {snr_at(curves[
 pfa_mc = float(cfar_pd_monte_carlo(np.array([-300.0]), pfa, 16, trials * 4, seed=5)[0])
 print(f"realised Pfa, 1-D MC, N=16: {pfa_mc:.2e} for {pfa:g} asked")
 
+# --- the same CFAR on the range-Doppler map: its cells are neither independent of each other nor of the cell under test
 cfg = load_config(CONFIG, {"frontend.tx_power_dbm": -190.0, "chirp.n_chirps": 8 if SMOKE else 32})
-tm = run_time(cfg, phase_noise=False)
-n_cells = tm.rd_db.shape[0] * (tm.rd_db.shape[1] // 2)
-n_train = (2 * (cfg.processing.cfar_guard + cfg.processing.cfar_train) + 1) ** 2 - (2 * cfg.processing.cfar_guard + 1) ** 2
-print(f"time engine, noise only ({tm.n_chirps} chirps, 2-D CA-CFAR with {n_train} training cells, Pfa {cfg.processing.cfar_pfa:g}): "
-      f"{len(tm.cfar_detections)} false alarms in {n_cells} cells = {len(tm.cfar_detections) / n_cells:.2e}")
-print("  (the map is zero-padded x4 in range: neighbouring cells are correlated, so the count is not a free-sample estimate)")
+P = cfg.processing
+cs = run_statistical(cfg).cfar
+print(f"\n2-D CA-CFAR on the map ({cfg.chirp.n_chirps} chirps, {P.window_range} / {P.window_doppler}, range pad x{P.range_pad}, guard {P.cfar_guard} + "
+      f"train {P.cfar_train} padded cells each side): {cs['n_train']} training cells worth {cs['n_train_eff']:.1f} independent ones "
+      f"(one look spans {cs['correlation_length_range']:.2f} x {cs['correlation_length_doppler']:.2f} padded cells); the guard is "
+      f"{cs['guard_bins_range']:g} range bins, so the training cells correlate {cs['cut_correlation']:.4f} with the cell under test")
+print(f"  design Pfa {cs['pfa_design']:g}: the noisier threshold alone -> {cs['pfa_training_only']:.2e}; the test cell lifting its own threshold "
+      f"alone -> {cs['pfa_cut_only']:.2e}; both, exact -> {cs['pfa_cell']:.3e}")
+print(f"  a noise-only frame: {cs['cells_in_band']} cells in the IF band = {cs['independent_looks']:.0f} independent looks; "
+      f"{cs['false_alarm_cells_per_frame']:.1f} false-alarm cells expected")
+
+wd = window(P.window_doppler, cfg.chirp.n_chirps)
+wr = window(P.window_range, cfg.n_samples)
+designs = (1e-2, 1e-3, 1e-4)
+frames_mc = 6 if SMOKE else 120
+rng = np.random.default_rng(11)
+count = {d: [0, 0] for d in designs}
+cells_mc = 0
+for _ in range(frames_mc):
+    pm = noise_map(wd, P.doppler_pad, wr, P.range_pad, rng)
+    cells_mc += pm.size
+    for d in designs:
+        _, det = ca_cfar_2d(pm, P.cfar_guard, P.cfar_train, d)
+        count[d][0] += int(det.sum())
+        count[d][1] += count_clusters(det)
+
+frames_te = 1 if SMOKE else 6
+n_if = int(cfg.rx.if_bw_hz * cfg.chirp.duration_s * P.range_pad)
+edge = P.cfar_guard + P.cfar_train
+te = {d: [0, 0] for d in designs}
+cells_te = 0
+for seed in range(frames_te):
+    tm = run_time(cfg, phase_noise=False, seed=seed)
+    pw = 10.0 ** (tm.rd_db / 10.0)
+    band = np.zeros(pw.shape[1], dtype=bool)                               # both beat signs, clear of the brick wall's edge
+    band[:n_if - edge] = True
+    band[pw.shape[1] - (n_if - edge):] = True
+    cells_te += pw.shape[0] * int(band.sum())
+    for d in designs:
+        _, det = ca_cfar_2d(pw, P.cfar_guard, P.cfar_train, d)
+        te[d][0] += int(det[:, band].sum())
+        te[d][1] += count_clusters(det[:, band])
+print(f"  realised per-cell Pfa: white noise through the same windows and padding ({frames_mc} maps, {cells_mc:.2e} cells) and the time "
+      f"engine's noise-only frames ({frames_te} frames, {cells_te:.2e} in-band cells); clusters are 8-connected groups of detections")
+print("  design Pfa | exact      | noise maps (cells / clusters)       | time engine (cells / clusters)")
+for d in designs:
+    ex = cfar_statistics(load_config(CONFIG, {"chirp.n_chirps": cfg.chirp.n_chirps, "processing.cfar_pfa": d}))["pfa_cell"]
+    print(f"  {d:10g} | {ex:.3e}  | {count[d][0] / cells_mc:.3e} ({count[d][0]:6d} / {count[d][1]:5d})        | "
+          f"{te[d][0] / cells_te:.3e} ({te[d][0]:5d} / {te[d][1]:4d})")
+print("  what the guard does (exact per-cell Pfa at the design 1e-4, same windows and padding):")
+for g in (0, 2, 4, 8, 12):
+    s_g = cfar_statistics(load_config(CONFIG, {"chirp.n_chirps": cfg.chirp.n_chirps, "processing.cfar_guard": g}))
+    print(f"    guard {g:2d} cells = {s_g['guard_bins_range']:4.2f} range bins: {s_g['n_train']:4d} training cells worth {s_g['n_train_eff']:5.1f}, "
+          f"correlation with the test cell {s_g['cut_correlation']:.4f}, Pfa {s_g['pfa_cell']:.2e}")
 
 plt = plt_or_none()
 if plt is not None:

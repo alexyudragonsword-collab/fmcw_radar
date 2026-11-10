@@ -39,7 +39,7 @@ def report(cfg: RadarConfig, st: StatResult) -> dict:
         "phase_noise": {"lo_rms_rad": st.lo_rms_rad, "residual_rms_rad": st.pn_rms_rad,
                         "floor": [{"offset_m": dr, "per_bin_dbc": v[0], "per_cell_dbc": v[1]} for dr, v in st.pn_floor.items()]},
         "chirp": st.chirp, "nonlinearity": st.nonlinearity,
-        "targets": st.targets, "angle": st.angle,
+        "targets": st.targets, "angle": st.angle, "cfar": {**st.cfar, "range_pad": cfg.processing.range_pad},
         "leakage": None if st.leakage is None else {"rows": [{"term": lab, "value": v, "unit": u} for lab, v, u in st.leakage.as_rows()],
                                                      "adc_headroom_db": st.leakage.adc_headroom_db,
                                                      "p1db_margin_db": st.leakage.p1db_margin_db,
@@ -134,6 +134,17 @@ def to_markdown(rep: dict) -> str:
                   f"{A['edge_taper_db']:.3f} dB); a phase-shifter-steered TX beam aligned at f_c would squint "
                   f"{A['tx_beam_squint_deg'][0]:+.2f} / {A['tx_beam_squint_deg'][1]:+.2f} deg at the sweep's edges "
                   f"(FR2 400 MHz: {A['fr2_400mhz_squint_deg'][0]:+.2f} / {A['fr2_400mhz_squint_deg'][1]:+.2f} deg)."]
+    CF = rep.get("cfar") or {}
+    if CF:
+        lines += ["", "## CA-CFAR on this map", "",
+                  f"{CF['n_train']} training cells are worth {CF['n_train_eff']:.1f} independent ones (the range window and x{CF['range_pad']} "
+                  f"padding span {CF['correlation_length_range']:.1f} padded cells per look, the Doppler window {CF['correlation_length_doppler']:.1f}); "
+                  f"the guard is {CF['guard_bins_range']:g} range bins / {CF['guard_bins_doppler']:g} Doppler bins, and the training cells' mean "
+                  f"power correlation with the cell under test is {CF['cut_correlation']:.4f}.", "",
+                  f"Design Pfa {CF['pfa_design']:g} -> per cell {CF['pfa_cell']:.3g} (exact; the noisier threshold alone would give "
+                  f"{CF['pfa_training_only']:.2g}, the test cell lifting its own threshold alone {CF['pfa_cut_only']:.2g}). "
+                  f"A noise-only frame: {CF['cells_in_band']} cells in the IF band = {CF['independent_looks']:.0f} independent looks, "
+                  f"{CF['false_alarm_cells_per_frame']:.1f} false-alarm cells expected."]
     LK = rep.get("leakage")
     if LK:
         lines += ["", "## TX-RX leakage", "", "| term | value | unit |", "|---|---:|---|"]

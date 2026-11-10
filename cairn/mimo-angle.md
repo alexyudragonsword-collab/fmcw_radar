@@ -5,7 +5,7 @@ summary: "里程碑 2 的知识:TDM-MIMO 虚拟阵列测角(位置之和、u 格
 tags: [mimo, tdm, dbf, coupling, array_tx, leakage, hpf, cfar, multi-target]
 contains: [decision, lesson, experience]
 created: "2026-11-07"
-updated: "2026-11-07"
+updated: "2026-11-10"
 related: [architecture-invariants, range-correlation]
 authoring_mode: ai_generated
 ---
@@ -82,7 +82,8 @@ authoring_mode: ai_generated
 - 时域 `found_targets`:每个目标在 ±3 距离格 / ±2 多普勒格内找峰。**坑(contains:邻目标的瓣被当成本目标)**:12 cm 外的 −20 dBsm 点原来"找到"的是车的主瓣
   (电平差 +30 dB);改为两目标分格(各自只搜离自己更近的格)且峰必须是距离维局部极大,之后找到 5.434 m −28.3 dB,对统计 −30.4 dB(车的裙边相干叠加)。
 - CA-CFAR 的蒙卡(`cfar_pd_monte_carlo`,Swerling 0 / 1)对已知噪底闭式:Pd 0.9 处 CFAR 损失 N = 16 **1.35 dB**、N = 32 **0.74 dB**;Swerling 1 的闭式
-  `cfar_pd_swerling1` 与蒙卡 0.02 内;−300 dB 的"目标"过阈率 = Pfa(±25 %)。时域引擎纯噪声帧 64000 格 4 个虚警(6.3e-5 对 1e-4):距离维零填充 ×4 的格相关,不是独立样本的估计。
+  `cfar_pd_swerling1` 与蒙卡 0.02 内;−300 dB 的"目标"过阈率 = Pfa(±25 %)。时域引擎纯噪声帧 64000 格 4 个虚警(6.3e-5 对 1e-4)。
+  **更正(0.2.3)**:那 4 个格是抽样(期望 5.2 格 ≈ 2 团),格相关对 Pfa 的两个效应与精确式见 `cairn/cfar-statistics.md`。
 
 ## 复现
 

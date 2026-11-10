@@ -38,7 +38,7 @@ IF / ADC、窗与 CFAR、仿真。77 GHz 车载一档结构相同只换数(`conf
 | `phase_noise/` | range correlation:残余 PSD = 2(1 − cos 2πfτ)·S_φ,合成与闭式 | 2 |
 | `chirp/` | 斜坡经 event / response / ideal 引擎 → 瞬时频率误差曲线;离线 LS / 在线 sign-sign 两点校准 | 4, 6 |
 | `link/` | 雷达方程、噪声密度、窗的相干增益、P1dB 裕量;TX 泄漏预算(直接 + 近端反射体,高通前后) | 3 |
-| `processing/` | 窗、距离 / 多普勒 FFT、峰值读数、CA-CFAR 与它的蒙卡 Pd(Swerling 0 / 1)、IF 高通 | — |
+| `processing/` | 窗、距离 / 多普勒 FFT、峰值读数、CA-CFAR 与它的蒙卡 Pd(Swerling 0 / 1)、相关格上的 CFAR 统计(`cfarstats`)、IF 高通 | — |
 | `mimo.py` | TDM-MIMO 虚拟阵列:位置之和、u 格点 DBF、TDM 多普勒补偿、互耦(array_tx 三来源)与校准、CRLB、斜视 | 1, 5 |
 | `engine/statistical.py` | 格点 SNR、分辨率、相噪旁瓣表、非线性旁瓣(误差曲线喂一次 FFT)、Pd;每目标一行与遮蔽、测角指标、泄漏 | 3 |
 | `engine/timedomain.py` | 5 GS/s 包络真混频 → 泄漏音 → 砖墙 IF → 高通 → ADC 量化(削波)→ 距离–多普勒图 / MIMO 立方与 DBF | 3 |
@@ -71,7 +71,9 @@ IF / ADC、窗与 CFAR、仿真。77 GHz 车载一档结构相同只换数(`conf
   飞回瞬态(0.2.1):锯齿重启让泄漏拍频相位跳变,7.2 V 的阶跃整个穿过高通(时间常数 1.13 µs),预算推荐 blanking 4.5 µs(阶跃落到满幅以下 + 1 个时间常数),
   `rx.blank_s` 照此 blanking 后进 FFT 的削波样本为零、距离窗按剩下的 955 个样本重配(SNR 损失 0.2 dB,分辨率宽 4.7 %),无噪声时 2–4 m 的底从瞬态抬高的 −43.5 dB 回到 −51.0 dB(无泄漏参照 −53.3 dB)。
 - 四目标(人 5 m / 车 5.3 m / 人 9.9 m / −20 dBsm 点 5.42 m):统计引擎的遮蔽判断全为否(最强他者的窗裙 −43.7 … −7.7 dBc),时域各目标电平对统计 0.0 / 0.0 / +0.8 / +2.1 dB。
-- CA-CFAR 对已知噪底(Pfa 1e-4,Pd 0.9):N = 16 损失 1.35 dB、N = 32 0.73 dB;Swerling 1 在 N = 16 要 20.0 dB;时域纯噪声帧 64000 格 4 个虚警(6.3e-5)。
+- CA-CFAR 对已知噪底(Pfa 1e-4,Pd 0.9):N = 16 损失 1.35 dB、N = 32 0.73 dB;Swerling 1 在 N = 16 要 20.0 dB。
+- 图上的 CA-CFAR(0.2.3):窗与 ×4 零填充让 416 个训练格只值 33.4 个独立格(单看 Pfa 1e-4 → 2.7e-4),guard 2 个填充格 = 0.5 个距离格让训练格与被测格相关 0.015
+  (单看 → 2.6e-5);两项几乎抵消,精确式 1.02e-4。白噪声经同样处理 1.54e7 格实测 1.062e-4(641 团,±4 %),时域纯噪声帧 6 帧 9.2e-5(25 团);32 chirp 一帧 51200 个带内格 = 3385 次独立观测,期望 5.2 个虚警格。
 
 ## 建模口径与已知边界
 
@@ -79,6 +81,6 @@ IF / ADC、窗与 CFAR、仿真。77 GHz 车载一档结构相同只换数(`conf
 - 时域引擎按 chirp 独立合成相噪(最低 10 kHz),chirp 间 LO 低频相关没有表示(论证见 `cairn/range-correlation.md`)。
 - polar_tx 的 event 有效域指标(每参考周期相位推进)在 chirp 上读 495 %;本库的判断是该指标针对亚周期相位轨迹、不适用于频率斜坡,
   证据与保留意见在 `cairn/chirp-engine.md`。`lo.engine: response` 是线性化引擎,不能背书杂散。
-- CA-CFAR 是最简版(2-D 方窗);`pd` 仍是已知噪底的闭式,CFAR 损失由示例 06 的蒙卡曲线给。示例 00 的 64 chirp 帧里 CFAR 在目标主瓣外还报 12 个格:无噪声逐周期引擎的量化杂散(ROADMAP P1 #1)。
+- CA-CFAR 是最简版(2-D 方窗,guard / train 按填充格数);`pd` 仍是已知噪底的闭式,CFAR 损失由示例 06 的蒙卡曲线给。MIMO 的非相干和图仍用单通道阈值因子(K = 8 多丢 5.1 dB,ROADMAP P1 #3)。示例 00 的 64 chirp 帧里 CFAR 在目标主瓣外还报 12 个格:无噪声逐周期引擎的量化杂散(ROADMAP P1 #1)。
 - 测角只有 DBF(加窗 DFT + 抛物线插峰),没有 MUSIC / ESPRIT;TDM 的多普勒补偿在目标格上估单音频率,多目标同格时取其合成。
 - blanking 只盖 chirp 开头;时域引擎的 IF 砖墙是逐 chirp 的循环 FFT 滤波,会把下一个 chirp 的阶跃环回到本 chirp 的最后一个样本(每 chirp 1 个样本仍削波,窗权 ~1e-5)。
