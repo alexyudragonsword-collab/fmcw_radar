@@ -9,4 +9,4 @@ chirp's frequency error only from the vendored ADPLL loop
 (``fmcw_radar.chirp``, invariant #4).
 """
 
-__version__ = "0.2.3"
+__version__ = "0.2.4"

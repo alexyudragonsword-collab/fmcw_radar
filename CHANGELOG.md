@@ -4,6 +4,18 @@
 
 ---
 
+## [0.2.4] — 2026-11-10 — K-look 阈值、训练窗裁剪、含自漏的 Pd、鬼目标进虚警账(P1 #3、P1 #1(c))
+
+- **MIMO 图的 CFAR**:非相干和的格是 Gamma(K),`threshold_factor(n, pfa, n_looks)` 取 Beta(K, K·N) 的分位数(K = 8:4.6 dB 而不是 9.7 dB);`_process_cube` 用它。
+  修之前 Pfa 1.2e-23,`mimo_2x4_coupled` 的 39 dB 目标 0 个检测格(现在 12 个)。精确 Pfa 推广到 K 重特征值(K 阶极点的留数)。
+- **训练窗裁剪**(`cfar_window`):每轴半宽不超过 (len − 1)//2。8 chirp 帧不再绕回到被测格:设计 1e-4 实际 1.4e-6 → 6.3e-5。32 / 64 chirp 不裁,逐位不变。
+- **Pd**(`cfar_pd`、`cfar_snr_for_pd`):阈值的抖动、被测格相关与目标自己漏进训练格(c_w = 0.0062)都在内;默认图 Pd 0.9 要 12.24 dB,CFAR 损失 0.49 dB。
+- **鬼目标进虚警账**:每个 TDC 鬼目标当作 SNR + 电平的稳态目标,`StatResult.cfar["ghosts"]` 与 `ghost_detections_per_frame`;人体 0.03 / 帧,车 5 / 帧,时域引擎同。
+- 被推翻的判断:示例 00 主瓣外的 12 个过阈格是"量化杂散"——是噪声虚警(期望 10.5 格 + 0.20 个鬼目标)。示例 00 的那行改了。
+- 指纹(numbers-move):14 个用例的 `n_detections`(8 chirp 的裁剪与 MIMO 的阈值)和 8 chirp 配置的 `cfar.*` 动了,其余旧值逐位不变;多了 `cfar.*` 新键。
+
+---
+
 ## [0.2.3] — 2026-11-10 — CFAR 有效格数(P2 #0 第三项)
 
 - `processing/cfarstats.py`:窗与零填充后的格相关(w² 的谱)、训练集有效格数 N² / Σρ、训练格与被测格的相关、每格 Pfa 的**精确式**

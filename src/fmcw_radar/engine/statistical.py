@@ -28,8 +28,8 @@ from ..link.leakage import LeakageBudget, leakage_budget
 from ..lo import LOProfile
 from ..mimo import VirtualArray
 from ..phase_noise import RangeCorrelation
-from ..processing.detection import pd_swerling0
-from ..processing.cfarstats import cfar_statistics
+from ..processing.cfarstats import cfar_pd, cfar_snr_for_pd, cfar_statistics
+from ..processing.detection import pd_swerling0, snr_for_pd
 from ..processing.rd import power_db, range_axis_m, range_fft, read_peak, velocity_axis_mps
 from ..processing.windows import (coherent_gain_db, enbw_bins, mainlobe_width_bins, peak_sidelobe_db, range_window, spectrum_db,
                                   window)
@@ -308,6 +308,32 @@ def angle_metrics(cfg: RadarConfig, snr_cell_db: float, snr_chirp_db: float | No
             **(va.angle_error_budget(snr_chirp_db, th, fd, range_scalloping_db) if snr_chirp_db is not None else {})}
 
 
+def cfar_detection(cfg: RadarConfig, res: "StatResult") -> dict:
+    """What the map's CA-CFAR does with what is really on it: the primary
+    target's detection probability at its processed per-look SNR (the
+    threshold's fluctuation and the target's own leak into its training
+    cells included), the SNR a Pd of 0.9 takes and the loss against a known
+    noise level, and the deterministic spurs of the chirp -- every listed
+    ghost target as a steady target at ``SNR + level``, its Pd, and their
+    sum over the ghosts in view: the detections per frame that are neither
+    targets nor noise."""
+    cf = res.cfar
+    k = cf["n_looks"]
+    snr_look = res.angle["snr_element_cell_db"] if k > 1 and res.angle else res.extras["snr_cell_expected_db"]
+    out = {"snr_look_db": snr_look, "pd_target": float(cfar_pd(snr_look, cf)[0]), "snr_pd90_db": cfar_snr_for_pd(0.9, cf)}
+    if k == 1:
+        out["cfar_loss_db"] = out["snr_pd90_db"] - snr_for_pd(0.9, cfg.processing.cfar_pfa)
+    rows = []
+    for off, lvl in res.nonlinearity.get("ghosts") or []:
+        r = cfg.target.range_m + off
+        rows.append({"offset_m": off, "range_m": r, "level_dbc": lvl, "snr_db": snr_look + lvl,
+                     "pd": float(cfar_pd(snr_look + lvl, cf)[0]), "in_view": bool(0.0 < r < cfg.max_range_m)})
+    out["ghosts"] = rows
+    out["ghost_detections_per_frame"] = float(sum(g["pd"] for g in rows if g["in_view"]))
+    out["ghosts_vouched"] = bool(res.nonlinearity.get("ghosts_vouched", False))
+    return out
+
+
 def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatResult:
     budget = link_budget(cfg)
     n = cfg.n_samples
@@ -370,6 +396,7 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
         res.nonlinearity["engine"] = chirp.engine
         res.nonlinearity["ghosts_vouched"] = chirp.vouches_for_spurs
         res.extras["nonlinearity_profile"] = (nl["axis_m"], nl["profile_db"])
+    res.cfar.update(cfar_detection(cfg, res))
     return res
 
 

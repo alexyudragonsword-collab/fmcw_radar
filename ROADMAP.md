@@ -68,19 +68,21 @@
 
 ## P1 — 结论的可信度
 
-1. **TDC 量化的鬼目标:统计引擎现在报它,但 CFAR / Pd 的闭式仍不含它**。32 chirp 帧、5 m 目标:无噪声 event 引擎 9.87 m 处 −45.5 dBc(5 ps TDC;2 ps 时 −55.8 dBc),
-   开环路噪声后 2.2 / 7.81 m 处 −49 … −50 dBc(两个 seed 同位置)。机制与数字见 `cairn/chirp-engine.md`。0.1.1 起 `StatResult.nonlinearity["ghosts"]`
-   从单 ramp 的曲线列出它(±4.85 m,−45.3 dBc,与距离–多普勒图 3 dB 内一致),报表有一张表;示例 00 的 CFAR 仍在主瓣外报 12 格,因为 Pd / Pfa 的闭式只认高斯噪底。
-   要做:(a) TDC dither(pllsim 没有,报回 pll_simulator);(b) chirp 引擎带噪声时与 `LOProfile` 的分工(环内由逐周期引擎、环外由剖面)以免重复计相噪;
-   (c) 示例 06 的 CFAR 曲线仍只对高斯噪底(蒙卡与闭式都是),确定性杂散没算进虚警。
-   复现:`run_statistical(cfg).nonlinearity["ghosts"]`;时域对照 `run_time(cfg, ..., phase_noise=False, noise=False, quantise=False)` 看 rd_db 离目标 ±40 格外的最大值。
+1. **TDC 量化的鬼目标**(机制与数字见 `cairn/chirp-engine.md`:5 ps TDC 在 ±4.85 m 处 −45.3 dBc,2 ps 时 −54.9 dBc;开环路噪声后不消失)。
+   0.2.4 起它进了虚警账:`StatResult.cfar["ghosts"]` 把每个鬼目标当稳态目标算 Pd(`cairn/cfar-statistics.md`)。还没做的:
+   (a) TDC dither(pllsim 没有,已写进"报回上游"#2,等 pll_simulator);
+   (b) chirp 引擎带噪声时与 `LOProfile` 的分工(环内由逐周期引擎、环外由剖面)以免重复计相噪。初步量到的(16 chirp,每 ramp 去线性趋势的周期图,未核实估计器):
+       逐周期引擎 noise=False 的量化图样在 1 MHz 处 −85 dBc/Hz、剖面 −80.2;noise=True 在 3 / 10 / 30 MHz 处比剖面低 3.5 / 4.7 / 4 dB,低频段反而高得多
+       (疑为带噪声的离线校准残差或估计器泄漏)。先把这两条量清楚再定分工。
+   (c) 鬼目标表只列单 ramp 曲线上最强的 6 个;时域图上的电平与它差 1–3 dB,而 Pd 在陡段每 dB 变 0.15:0 dBsm 目标(鬼目标 SNR 9–11 dB)闭式 2.78 个 / 帧,
+       时域 8 帧平均 2.00;+4 dBsm 4.78 对 4.12;车 5 对 5。要更准得从整帧的非线性剖面而不是单 ramp 取电平。
+   复现:`run_statistical(cfg).cfar["ghosts"]`;时域对照 `run_time(cfg, chirp, seed=s).cfar_detections` 在鬼目标距离 ±1.5 格内有没有格。
 2. **polar_tx 的 event 有效域指标在 chirp 上读 495 %**,本库的判断是指标不适用(见 `cairn/chirp-engine.md`)。这是本库的读法,
    报回条目已写在上面"报回上游"#1(等用户转到 polar_tx ROADMAP B1)。B1 有定论之前,`ChirpResult.ui_per_ref_cycle_p99` 和报表都把数打出来。
 
-3. **MIMO 图上的 CFAR 用的是单通道的阈值因子**。`_process_cube` 的图是 K = n_tx × n_rx 个虚拟通道的非相干和,格功率是 Gamma(K) 不是指数,
-   而 `ca_cfar_2d` 的 α = N(Pfa^(−1/N) − 1) 只对指数成立:K = 8、设计 1e-4 时实际 Pfa 1.2e-23,阈值 9.7 dB 而需要的只有 4.6 dB——MIMO 的检测白丢 5.1 dB。
-   复现:`gamma.sf(8 * threshold_factor(416, 1e-4), 8)`、`gamma.isf(1e-4, 8) / 8`。要做:`threshold_factor(n, pfa, n_looks)`(CA-CFAR 对 Gamma 格是不完全 Beta 的闭式),
-   `cfarstats` 的精确式推广到 K 重特征值;MIMO 用例的 `n_detections` 指纹会动。另:帧短于训练窗(8 chirp 对 21 格)时 Pfa 1.4e-6,config 没有拦(`cairn/cfar-statistics.md`)。
+3. **CFAR 的 Pd 闭式在很短的帧上只准到 ±0.07**(`cfar_pd`:阈值按 Gamma(N_eff)、目标自漏与被测格相关取一阶)。N_eff ≥ 24 时对注入单音的蒙卡 ±0.03;
+   8 chirp(N_eff 11.8)13 dB 处 0.86 对 0.93,2 × 4 MIMO 每 TX 4 chirp(N_eff 5.2)5 dB 处 0.77 对 0.83。Pfa 用的是精确式,不受影响。
+   要做:Pd 也走 Hermitian 型(非中心)的精确式,或在报表里对 N_eff < 20 标"近似"。另:RX 互耦让各通道噪声相关(−16 dB),K 个 look 当独立算,没量过。
 
 ## P2 — 一致性与能力
 

@@ -333,7 +333,7 @@ def _process_cube(cfg: RadarConfig, cube: np.ndarray, info: dict | None) -> Time
     est = va.estimate(snap, fd_fine)
     prof = power_db(range_fft(cube[-1, 0], p_.window_range, p_.range_pad, cfg.n_blank))[:half]
     rp = read_peak(r_axis[:half], prof)
-    _, det = ca_cfar_2d(p, p_.cfar_guard, p_.cfar_train, p_.cfar_pfa)
+    _, det = ca_cfar_2d(p, p_.cfar_guard, p_.cfar_train, p_.cfar_pfa, n_looks=va.n)   # a sum over the virtual channels
     dets = [(float(v_axis[a]), float(r_axis[b])) for a, b in np.argwhere(det[:, :half])]
     res = TimeResult(frame=cube, rd_db=rd_db, range_axis_m=r_axis, velocity_axis_mps=v_axis,
                      peak_range_m=float(r_axis[j]), peak_velocity_mps=float(v_axis[i]), snr_cell_db=snr,
