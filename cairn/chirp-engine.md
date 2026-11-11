@@ -70,7 +70,8 @@ LTE-20 的 29 % 不行,polar_tx ROADMAP B1)。任务要求先量一次这个指�
   `phase_err_carrier_rad()` 现在加上 `osc_phase_dco_rad` = `phase_err_out`(后移一拍,减指令相位)− 调谐字积分;noise=False 时这一项 < 2e-5 rad,不加,逐位不变。
 - **坑(contains:CW 下线性模型低估带内相噪 15 dB)**:整数 N、不扫频、noise=True:`simulate` 的带内相噪 −66 … −69 dBc/Hz(60 GHz 处),`analyze` −81 … −85。
   相位误差 0.133 rad RMS(DCO 处)= 5 ps / √12 的 0.136 rad:TDC 死区,环路看不见一个量化格以内的漂移。斜坡每周期把小数相位扫过量化格,等于给了 dither,
-  所以 chirp 时两者才一致。雷达只在斜坡上用 LO,结论不受影响;CW / 空闲段(`chirp.idle_s`)的相噪不能用剖面。已并入给 pll_simulator 的 dither 条目。
+  所以 chirp 时两者才一致。雷达只在斜坡上用 LO,结论不受影响;CW / 空闲段(`chirp.idle_s`)的相噪不能用剖面。已提 pll_simulator#76(在它自己的 main 上复现:
+  TDC 抖动 0 / 1 / 2 / 5 ps 时带内差 +15.8 / +10 / +6 / 0 dB;`analyze` 的总量不随抖动变,5 ps 时 `simulate` 在 3–10 MHz 高 4 dB)。
 - 没做的:带 `lo.profile` 文件的配置没有分项,noise=False 的曲线仍叠在整份剖面上(`lo_noise_split` 里写明);response 引擎的 noise=True 没核对过它加了什么,
   时域引擎拒绝它。
 
@@ -84,3 +85,6 @@ LTE-20 的 29 % 不行,polar_tx ROADMAP B1)。任务要求先量一次这个指�
   判断:这是 TDC 量化的物理 —— 斜坡让每参考周期的小数相位以线性增长的速率转过 TDC 码,量化误差是一个二次相位的锯齿,其谐波本身是 chirp,
   与延迟副本混频后落在固定拍频上,即固定距离处的鬼目标(FMCW ADPLL 文献里的 DTC / TDC 鬼目标机制);不是 `noise=False` 的产物,
   噪声只把它打散到别的距离。按铁律 6 由 event 引擎背书,引擎里 TDC 没有 dither(pllsim `TDCConfig` 只有 INL / 抖动),所以是悲观一侧。
+  **更正(2026-11-11)**:"没有 dither"说错了——TDC 的抖动 `jitter_rms_s` 就是 dither,是本库的 `build_adpll` 把它留在 0(一个没进 `sources.yaml` 的占位)。
+  noise=True、32 chirp,目标多普勒行上 9.85 / 0.14 m 处:抖动 0 ps −50.3 / −52.3 dBc,1 ps **−61.6 / −60.6**,2 ps −59.7 / −58.2(已是该行的底,中位 −69 dBc),
+  5 ps −53.5 / −51.4(底自己抬到 −63.5)。所以 −45 dBc 的鬼目标是"TDC 抖动为零"这个占位的结果,不是 5 ps TDC 的必然;ROADMAP P1 #1(a)。
