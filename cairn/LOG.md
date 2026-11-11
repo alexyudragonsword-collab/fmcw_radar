@@ -3,6 +3,18 @@
 本文件按倒序记录实质性进展 —— 最新条目在本行正下方。每条保持简短(数字原值、被推翻的判断、下一步),
 结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-11-11 · 三个上游 issue 已提;提之前查出一条自己的错(feat/upstream-issues)
+
+- 已提:**polar_tx#19**(B1 的 495 % 指标 vs 逐周期一致 1.005 ± 0.046,附 SignSignLMS 1.05 → 1.066)、**pll_simulator#76**、**mmw60_trx#14**(消费清单,对照 main@4df0385,它的 D4 在收)。
+- **被推翻的判断**(提之前复核时):"pllsim 没有 TDC dither,所以鬼目标是物理的、要等上游"。`TDCConfig.jitter_rms_s` 就是 dither,本库把它留在 0。
+  noise=True、32 chirp,9.85 m 处:抖动 0 / 1 / 2 / 5 ps → −50.3 / −61.6 / −59.7 / −53.5 dBc(noise=False −45.4;行的底中位 −68.8 / −69.6 / −68.1 / −63.5)。
+  所以 pll_simulator#76 没有要 dither 功能,P1 #1(a) 从"等上游"改成本库的占位问题(加 `lo.tdc_jitter_s`,鬼目标表从带噪声的曲线取)。
+- pll_simulator#76 的内容在它自己的 main(src@00e48a2,adpll 到 675614a 未变)上复现:CW 整数 N,`simulate − analyze` 带内 +15.8 / +13…16 / +9…15 / +5…6 / 0 dB
+  (TDC 抖动 0 / 0.5 / 1 / 2 / 5 ps);相位 0.1329 rad 对 5 ps/√12 的 0.1360;`analyze` 总量不随抖动变(没有抖动项),5 ps 时 `simulate` 在 3–10 MHz 高 4 dB。斜坡上不带抖动也一致(≤ 0.6 dB)。
+- 上游的变化:pll_simulator#71 / #72 已做倍频器剖面;mmw60_trx main@4df0385 带了 ×10 的剖面文件,本库 `lo.profile` 原样读得进(floor140:L(1 MHz) −98.6 dBc/Hz @ 60 GHz,占位 −80.2)。
+  原来"报回上游"里要倍频器模型的那条作废,改成 ROADMAP"等上游"#2(本库去用)。polar_tx 的 `_mod_event` 用的是 `phase_err_out`,0.2.5 修的 `freq_out` 问题只在本库的直驱封装里。
+- 下一步:P1 #1(a)(现在是本库的事)。
+
 ## 2026-11-10 · 0.2.5:LO 噪声的分工(feat/lo-noise-split)
 
 - **被推翻的判断**(0.2.4 那条里的):"noise=True 的逐周期谱在 3–30 MHz 比剖面低 3.5–4.7 dB、低频高得多"——估计器没错,量错了对象:`freq_out` 是调谐字的频率,

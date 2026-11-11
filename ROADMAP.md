@@ -6,74 +6,25 @@
 
 ## 等上游
 
-1. **mmw60_trx 有前端了,但它是通信前端:先写雷达消费清单,再谈换占位**。mmw60_trx main@`caebcde6552ee6f621cdbe5846616266958a02dd`(0.1.0)
-   的 `src/mmw60/frontend/` 有 `Frontend60`(`ScaledRappPA`、`Lo60`、`ConverterLaw`、`IqMismatch`、`EirpLimit`)。本库 24 条 `source: assumed`
-   (`grep -c "source: assumed" src/fmcw_radar/data/sources.yaml`,12 项 × 两个频段)里它只能供 PA、LO 泄漏、LO 剖面形状;天线增益、LNA NF、
-   TX–RX 隔离、倍频器自身底噪它没有。接口按前端对象写(`cfg.frontend_value(name)` / `leakage_value` / `coupling_c1` 各一处换):等它补上缺的面,
-   再按 main 的完整 SHA pin、换占位、重新 pin。下面这张表是消费清单,可直接贴进 mmw60_trx `ROADMAP.md` 的 D 节(由用户转):
-
-   > **fmcw_radar(雷达姊妹库,与 mmw60_trx@caebcde 对照)要从 `Frontend60` 消费的面**,每项是 fmcw_radar `sources.yaml` 的一条 `assumed` 占位(60 GHz 档的数),
-   > "供"= 现有字段可直接读,"部分"= 有字段但语义不同或没有 60 GHz 的数,"缺"= 没有这个面:
-   >
-   > | fmcw_radar 占位(60g_sensing) | 占位值 | `Frontend60` 的对应 | 状态 |
-   > |---|---|---|---|
-   > | `tx_power_dbm` | 10 dBm | `psat_dbm`、`pa_gain_db`、`ScaledRappPA.p1db_out_dbm()`、Rapp 的 p / q1 / q2;`target_pout_dbm()` = Psat − OBO | 供。chirp 是恒包络,工作点在 P1dB 附近而不是 OBO 8 dB,fmcw_radar 自己取回退量 |
-   > | `tx_gain_dbi` | 10 dBi | `antenna_gain_dbi`(默认 0,只进 `EirpLimit.check`) | 部分:有字段无来源 |
-   > | `rx_gain_dbi` | 10 dBi | — | 缺 |
-   > | `rx_gain_db`(RX 链增益) | 40 dB | wifitrx `RxParams.lna_states`(AGC 档位表) | 部分:是 AGC 梯子,不是 60 GHz LNA 的数 |
-   > | `nf_db`(RX NF) | 10 dB | — | 缺 |
-   > | `p1db_dbm`(RX 输入 P1dB) | −20 dBm | `RxParams.nonlin_enabled` 有开关,数是 wifitrx 的(未核实是否 60 GHz) | 缺 |
-   > | `lo_mult`(×N) | 4 | `Lo60` 只有 `carrier_hz` + `profile`;×N 在拓扑 A(A1),倍频器底噪已报 pll_simulator(D 节) | 缺 |
-   > | `dco_pn_dbchz`、`dco_pn_floor_dbchz` | −95 / −140 dBc/Hz | `Lo60.profile`(`NoiseSource`,`from_pole_zero`)是载波处的剖面形状 | 供(载波剖面):fmcw_radar 经 `lo.profile` 文件消费;DCO 自身与 TDC 不在它那 |
-   > | `tdc_res_s` | 5 ps | — | 缺(ADPLL 内部量,属 polar_tx / pll_simulator) |
-   > | `tx_rx_isolation_db` | 25 dB | `Lo60.tx_leak_dbc` 是 LO 到调制器输出的泄漏,不是 TX→RX 天线隔离 | 缺;`tx_leak_dbc` 可作泄漏预算的第三项(LO 泄漏经同一隔离进 RX) |
-   > | `rx_coupling_c1_db`(阵元互耦) | −16 dB | — | 缺(阵列是 array_tx 的面) |
-   >
-   > 另外两项 fmcw_radar 没有占位但可以直接消费:`EirpLimit`(avg / peak dBm、频段、`source`)对照本库的 EIRP 20 dBm;`ConverterLaw.bits(fs)`(ENOB 随采样率)对照 `rx.adc_bits`。
-   > `IqMismatch`(零中频 IQ)本库现在不消费:时域引擎是复包络无 IQ 失配,镜像会在 −拍频处出鬼目标,记在 fmcw_radar P3。
-   > **请 mmw60_trx 补的面(按优先级)**:RX NF 与输入 P1dB(60 GHz LNA)、TX / RX 天线增益(有来源的数)、TX→RX 隔离(dB,同一封装 / 天线);
-   > 倍频器 ×N 与底噪已在 D 节报 pll_simulator,两个消费方。
-
-## 报回上游(等用户转;本库不动那两个库,合并后重新 pin)
-
-格式按对方 ROADMAP:复现方式、数字、本库哪个测试 / 示例在等它。
-
-1. **给 polar_tx ROADMAP B1(event 引擎的有效域指标)**:
-   > **fmcw_radar 的观察(chirp,15 GHz DCO、1 GHz 斜坡、fref 100 MHz;polar_tx@7057738 的 `adpll.py`@d7be4712)**:
-   > 每参考周期相位推进指标读 **4.95 UI/周期(495 %)**——按声明域 event 引擎在任何现实 chirp 上都无效(fref 提到 1 GHz 也是 50 %)。
-   > 但逐周期引擎在斜坡上与线性化引擎逐周期一致:5 % 两点失配的飞回瞬态,飞回后前 40 个周期的误差比值 **1.005 ± 0.046**,初始误差 199.4 vs 200.0 MHz;
-   > 匹配增益时 event 只剩 TDC + DCO 量化底 0.54 MHz RMS(载波处)。fmcw_radar 的判断:指标针对亚周期相位轨迹(GFSK / OFDM 要 TDC 在一个 DCO 周期内分辨相位),
-   > 频率斜坡是环路本职(分数 FCW 就是斜坡),**建议 B1 把有效域按"亚周期相位轨迹"和"频率斜坡"分开写**,或给指标加一个"斜坡分量先扣掉"的变体。
-   > 复现:`fmcw_radar` `python examples/02_chirp_nonlinearity.py`;`tests/test_chirp.py::test_validity_metric_is_measured_and_far_outside_polar_tx_domain`、
-   > `::test_event_and_response_engines_agree_on_the_transient`。等它的:`ChirpResult.ui_per_ref_cycle_p99` 与报表里的 495 % 一直打出来,直到 B1 有定论。
-   >
-   > **附:`dp_cal` 的在线 `SignSignLMS` 在锯齿 chirp 上往错方向走**(同一 config,+5 % 失配,mu 2e-5,20 个 chirp):1.05 → **1.066**。
-   > 原因:斜坡的 EMA 居中回归量几乎恒正,而失配留下的是二阶环对斜坡的常数稳态相位误差,去直流后与回归量不相关——信息只在飞回后 ~25 个参考周期里
-   > (Δe 比匹配时多 +0.47 UI,逐周期衰减到 0.03 UI 的量化底;50–200 周期是符号相反的过冲)。差分 sign-sign 能收敛但慢(1.05 → 1.006 / 20 chirp);
-   > 离线 LS(`estimate_dp_gain_error`)喂 ≥ 2 个连续 chirp 一次到位(估 4.995 %,单 chirp 只到 2.5 %)。fmcw_radar 的处理:离线 LS 为主、自己的
-   > `ChirpFlybackLMS`(飞回后 20 周期、幅值加权)在线,四个 chirp 内 ±5 % → ±0.05 %,无偏;不改 polar_tx。这不是 polar_tx 的 bug——`dp_cal` 的契约是
-   > 调制信号居中回归,chirp 不满足——只建议在 `dp_cal` 的 docstring 里写明"回归量须零均值;频率斜坡不适用"。
-   > 复现:`tests/test_chirp.py::test_online_calibration_converges_in_a_few_chirps_from_both_sides`、`cairn/chirp-engine.md`"dp_cal 在锯齿 chirp 上"。
-
-2. **给 pll_simulator(`docs/roadmap.md`)**:
-   > **TDC dither**(fmcw_radar P1 #1(a)):`TDCConfig` 只有 INL / 抖动,没有 dither。TDC 量化在 chirp 上出确定性鬼目标:fmcw_radar 默认 config
-   > (15 GHz DCO、1 GHz 斜坡、fref 100 MHz、5 ps TDC)5 m 目标在 **±4.85 m 处 −45.3 dBc**,2 ps TDC 时 **−54.9 dBc**;随 TDC 分辨率变、不随 Kdco 变、
-   > 开环路噪声后不消失(2.2 / 7.81 m 处 −49 dBc)。要一个 dither(或亚 LSB 噪声注入)选项把它打散成底噪。
-   > 同一件事的另一面(0.2.5 量的):整数 N、CW、noise=True 时 `simulate` 的带内相噪比 `analyze` 高 **15 dB**(−66 … −69 对 −81 … −85 dBc/Hz @ 60 GHz;
-   > 相位误差 0.133 rad RMS @ DCO = 5 ps / √12):TDC 死区。频率斜坡上两者 0.6 dB 内一致(斜坡自己就是 dither)。`analyze` 的 `tdc_quant` 项在没有 dither 的整数 N 下不成立,
-   > 建议在 `analyze` 的 notes 里标出,或给 TDC 加 dither 后两边才对得上。复现:`build_adpll(RadarConfig()).simulate(400000, noise=True)` 的 `s_phi_psd` 对 `analyze().pn_breakdown`。
-   > 复现:`fmcw_radar` `run_statistical(RadarConfig()).nonlinearity["ghosts"]`,`tests/test_engines.py::test_tdc_ghost_targets_are_reported_and_scale_with_the_tdc`,示例 00 / 02。
-   > 等它的:fmcw_radar ROADMAP P1 #1(a);`StatResult.nonlinearity["ghosts"]` 在那之前是悲观一侧。
-   >
-   > **倍频器 ×N 模型,含 20·log₁₀N 之外的自身底噪**(两个消费方):mmw60_trx ROADMAP D 节已提(拓扑 A 的 LO 链);fmcw_radar 的 LO 是
-   > 15 GHz ADPLL ×4 到 60 GHz,现在倍频器理想(相噪 +20 log N,`lo_mult` 占位 `assumed`),剖面在 fref/2 以上取 DCO 自身。
-   > 等它的:fmcw_radar `LOProfile.from_config`(`lo.py`)一处换;示例 01 / 04 的相噪旁瓣数会动(numbers-move)。
+1. **mmw60_trx 的前端面**(消费清单已提:mmw60_trx#14,对照它的 main@`4df03852bcfce28054a2d313eeb32ba16bbf0fa9`,它的 ROADMAP D4 在收)。本库 24 条 `source: assumed`
+   (12 项 × 两个频段)里:PA(`psat_dbm` / `ScaledRappPA`)与 LO 剖面现在就能用;天线增益有字段无来源;RX 增益 / NF / 压缩点只有 vendored wifitrx 的 sub-7 GHz AGC 梯子;
+   TX→RX 隔离没有。等它补上 TX→RX 隔离、60 GHz 的 NF 与压缩点、带来源的天线增益,再按 main 的完整 SHA pin、换占位
+   (`cfg.frontend_value(name)` / `leakage_value` 各一处)。
+2. **×N 之后的 LO 剖面已经能读,还没用**:pll_simulator#71 / #72 做了倍频器剖面(N²·L_in + 底噪),mmw60_trx 带了
+   `pllsim_wu19_x10_60p48g_floor{130..160}.yaml`。本库 `lo.profile` 原样读得进(floor140:60 GHz 处 L(1 MHz) −98.6 dBc/Hz,6 条杂散;占位 ADPLL −80.2)。
+   要做:把它作为一个 bundled 配置的 LO(注意文件没有分项,见 P1 #1(b)),重跑示例 01 / 04 看相噪旁瓣(numbers-move)。chirp 仍由两点 ADPLL 逐周期生成,换的只是噪声。
+3. **polar_tx#19**(B1 的有效域指标 + `SignSignLMS` 在锯齿上):只是观察,本库不依赖它的结论;B1 有定论前 `ui_per_ref_cycle_p99` 的 495 % 照打。
+4. **pll_simulator#76**(CW 整数 N 下 `simulate` 比 `analyze` 带内高 15 dB;`analyze` 没有 TDC 抖动项):本库只在斜坡上用环路,不依赖;它若给 `analyze` 加了 TDC 抖动项,
+   本库的剖面分项(`LOProfile.components`)要跟着多一项。
 
 ## P1 — 结论的可信度
 
-1. **TDC 量化的鬼目标**(机制与数字见 `cairn/chirp-engine.md`:5 ps TDC 在 ±4.85 m 处 −45.3 dBc,2 ps 时 −54.9 dBc;开环路噪声后不消失)。
+1. **TDC 量化的鬼目标**(机制与数字见 `cairn/chirp-engine.md`:5 ps TDC 在 ±4.85 m 处 −45.3 dBc,2 ps 时 −54.9 dBc;TDC 抖动占位为 0 时开环路噪声后不消失,见 (a))。
    0.2.4 起它进了虚警账:`StatResult.cfar["ghosts"]` 把每个鬼目标当稳态目标算 Pd(`cairn/cfar-statistics.md`)。还没做的:
-   (a) TDC dither(pllsim 没有,已写进"报回上游"#2,等 pll_simulator);
+   (a) **不是等上游的事,是本库的占位**(2026-11-11 更正):pllsim 的 `TDCConfig.jitter_rms_s` 就是 dither,本库 `build_adpll` 把它留在 0,而且这个 0 不在 `sources.yaml` 里。
+       32 chirp、noise=True:TDC 抖动 0 / 1 / 2 ps 时目标多普勒行上 9.85 m 处 −50.3 / −61.6 / −59.7 dBc(noise=False 是 −45.4;1 ps 起已埋进该行的底 −69 dBc 的起伏里)。
+       要做:加 `lo.tdc_jitter_s`(占位进 `sources.yaml`,`assumed`),鬼目标表改从带噪声的曲线取(现在取 noise=False 的单 ramp),重写示例 00 / 06 与报表里的鬼目标数;
+       CW / 空闲段的带内相噪随之也变(抖动 ≈ 1 LSB RMS 才与线性剖面一致,见 pll_simulator#76)。
    (b) 分工做了(0.2.5,`cairn/chirp-engine.md`)。剩下的:带 `lo.profile` 文件的配置没有分项,noise=False 的曲线仍叠在整份剖面上(LO 底高 1.1 dB);
        默认(noise=False)把量化当成每个 chirp 都相同的图样,统计引擎的相噪底表把它当平滑噪声——总量一致,但鬼目标所在的偏移上时域高 0.4–1.2 dB;
        `run_time(chirp_noise=True)` 最准(对闭式 −0.02 … +0.47 dB)但每个 seed 要重跑逐周期引擎(64 chirp 约 4.5 s)。
@@ -81,7 +32,7 @@
        时域 8 帧平均 2.00;+4 dBsm 4.78 对 4.12;车 5 对 5。要更准得从整帧的非线性剖面而不是单 ramp 取电平。
    复现:`run_statistical(cfg).cfar["ghosts"]`;时域对照 `run_time(cfg, chirp, seed=s).cfar_detections` 在鬼目标距离 ±1.5 格内有没有格。
 2. **polar_tx 的 event 有效域指标在 chirp 上读 495 %**,本库的判断是指标不适用(见 `cairn/chirp-engine.md`)。这是本库的读法,
-   报回条目已写在上面"报回上游"#1(等用户转到 polar_tx ROADMAP B1)。B1 有定论之前,`ChirpResult.ui_per_ref_cycle_p99` 和报表都把数打出来。
+   已提 polar_tx#19。B1 有定论之前,`ChirpResult.ui_per_ref_cycle_p99` 和报表都把数打出来。
 
 3. **CFAR 的 Pd 闭式在很短的帧上只准到 ±0.07**(`cfar_pd`:阈值按 Gamma(N_eff)、目标自漏与被测格相关取一阶)。N_eff ≥ 24 时对注入单音的蒙卡 ±0.03;
    8 chirp(N_eff 11.8)13 dB 处 0.86 对 0.93,2 × 4 MIMO 每 TX 4 chirp(N_eff 5.2)5 dB 处 0.77 对 0.83。Pfa 用的是精确式,不受影响。

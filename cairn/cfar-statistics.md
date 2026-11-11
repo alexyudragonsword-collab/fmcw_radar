@@ -63,6 +63,9 @@ authoring_mode: ai_generated
 
 ## TDC 鬼目标进虚警账(P1 #1(c),0.2.4)
 
+> 2026-11-11 更正:下面的鬼目标电平(−45 dBc 一档)是 TDC 抖动占位为 0、取 noise=False 曲线时的数;抖动 1 ps 时降到约 −61 dBc(`cairn/chirp-engine.md`)。
+> 算法(鬼目标 = 稳态目标,SNR + 电平 → Pd)不变,数要等 ROADMAP P1 #1(a) 重取。
+
 - 鬼目标是确定性的、每个 chirp 相同,所以和目标同多普勒、相干累积:当作 SNR = 目标每 look SNR + 电平(dBc)的稳态目标,`cfar_pd` 给它的 Pd,
   视野内的求和就是每帧"既不是目标也不是噪声"的检测数(`StatResult.cfar["ghosts"]`、`ghost_detections_per_frame`,报表有表)。
 - 32 chirp、5 m:人体(每 look 47.1 dB)鬼目标 SNR +1.6 dB,合计 0.03 个 / 帧(时域 4 帧 0 个);0 dBsm 2.78(时域 8 帧平均 2.00);+4 dBsm 4.78(4.12);
