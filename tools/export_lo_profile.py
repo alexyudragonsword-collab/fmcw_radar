@@ -22,7 +22,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "src"))
 
 from fmcw_radar.config import load_config  # noqa: E402
-from fmcw_radar.lo import build_adpll  # noqa: E402
+from fmcw_radar.lo import LOProfile  # noqa: E402
 
 
 def main(argv=None) -> int:
@@ -34,14 +34,15 @@ def main(argv=None) -> int:
     import yaml
 
     cfg = load_config(args.config)
-    pll = build_adpll(cfg)
-    ana = pll.analyze()
-    keep = np.asarray(ana.f) <= 0.5 * cfg.lo.fref_hz
-    s = np.asarray(ana.pn_breakdown["total"])[keep]
-    data = {"f0_hz": float(cfg.dco_center_hz), "f_hz": [float(x) for x in np.asarray(ana.f)[keep]],
+    # the live profile, the TDC-jitter term included, referred back to the DCO; the loop's part only
+    # (above fref / 2 the live profile is the DCO alone, which a reader of the file gets from its own floor rule)
+    prof = LOProfile.from_config(cfg)
+    keep = prof.f_hz <= 0.5 * cfg.lo.fref_hz
+    s = prof.s_phi[keep] / (cfg.lo_mult ** 2)
+    data = {"f0_hz": float(cfg.dco_center_hz), "f_hz": [float(x) for x in prof.f_hz[keep]],
             "l_dbc_hz": [float(x) for x in 10.0 * np.log10(np.maximum(s, 1e-300) / 2.0)], "spurs": [],
             "source": f"fmcw_radar tools/export_lo_profile.py from {args.config.name}: vendored pll_simulator ADPLL "
-                      f"analyze() at {cfg.dco_center_hz / 1e9:.4g} GHz (source: assumed placeholder LO)"}
+                      f"analyze() plus the TDC-jitter term at {cfg.dco_center_hz / 1e9:.4g} GHz (source: assumed placeholder LO)"}
     with open(args.out, "w", encoding="utf-8") as fh:
         fh.write("# pllsim clock phase-noise profile (fmcw_radar export): L(f) = S_phi/2 of the\n"
                  "# linear model in dBc/Hz at the DCO; the config scales it by (center / mult / f0)^2 mult^2.\n")

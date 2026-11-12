@@ -21,14 +21,15 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from ..chirp import ChirpEngine, ChirpResult
+from ..chirp import ChirpEngine, ChirpResult, noisy_chirp
 from ..config.schema import C0, RadarConfig
 from ..link.budget import LinkBudget, link_budget
 from ..link.leakage import LeakageBudget, leakage_budget
 from ..lo import LOProfile
 from ..mimo import VirtualArray
 from ..phase_noise import RangeCorrelation
-from ..processing.cfarstats import cfar_pd, cfar_snr_for_pd, cfar_statistics
+from ..processing.cfar import threshold_factor
+from ..processing.cfarstats import cfar_pd, cfar_snr_for_pd, cfar_statistics, correlation_length
 from ..processing.detection import pd_swerling0, snr_for_pd
 from ..processing.rd import power_db, range_axis_m, range_fft, read_peak, velocity_axis_mps
 from ..processing.windows import (coherent_gain_db, enbw_bins, mainlobe_width_bins, peak_sidelobe_db, range_window, spectrum_db,
@@ -135,26 +136,19 @@ def pn_floor_table(cfg: RadarConfig, offsets_m=REPORT_OFFSETS_M, rc: RangeCorrel
     return out
 
 
-def nonlinearity_profile(cfg: RadarConfig, chirp: ChirpResult, k: int | None = None, pad: int | None = None) -> dict:
-    """The range profile a point target gets from the chirp's frequency
-    error alone: the beat phase perturbation ``psi(t) - psi(t - tau)`` of
-    ramp ``k`` on the ADC grid, on the ideal beat tone, through the config's
-    range window and FFT.  Returns the profile [dB rel. peak] on a range
-    axis relative to the target, its -3 dB and Rayleigh widths in metres,
-    the highest sidelobe and the integrated sidelobe ratio (power outside
-    the mainlobe over the mainlobe's)."""
-    k = chirp.n_chirps - 1 if k is None else k
-    pad = cfg.processing.range_pad if pad is None else pad
+def _ramp_beat(cfg: RadarConfig, chirp: ChirpResult, k: int, psi: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """``(beat on the ADC grid, psi(t) - psi(t - tau) there)`` of ramp ``k``:
+    the chirp's carrier phase error on the ideal beat tone, on the reference
+    grid (the flyback transient's sidebands reach tens of MHz), then the IF
+    brick wall and the ADC rate exactly as the time engine applies them; on
+    the ADC grid directly when the reference is not a multiple of the ADC
+    clock."""
     n = cfg.n_samples
     fs = cfg.rx.adc_fs_hz
     t_ref = np.arange(chirp.f_err_dco_hz.size) / chirp.fref_hz
-    psi = chirp.phase_err_carrier_rad()
+    psi = chirp.phase_err_carrier_rad() if psi is None else psi
     t0 = k * chirp.pri_cycles / chirp.fref_hz
     tau = cfg.tau_s()
-    # the beat on the reference grid (the flyback transient's sidebands reach
-    # tens of MHz), then the IF brick wall and the ADC rate exactly as the
-    # time engine applies them; on the ADC grid directly when the reference
-    # is not a multiple of the ADC clock
     up = chirp.fref_hz / fs
     if abs(up - round(up)) < 1e-9 and round(up) > 1:
         n_fine = n * int(round(up))
@@ -171,6 +165,73 @@ def nonlinearity_profile(cfg: RadarConfig, chirp: ChirpResult, k: int | None = N
         t = np.arange(n) / fs
         dpsi = np.interp(t0 + t, t_ref, psi) - np.interp(t0 + t - tau, t_ref, psi)
         beat = np.exp(1j * (TWOPI * cfg.beat_hz() * t + dpsi))
+    return beat, dpsi
+
+
+def coherent_spurs(cfg: RadarConfig, chirp: ChirpResult, first: int = 1, n_max: int = 6, floor_db: float = -70.0) -> dict:
+    """The chirp's deterministic spurs as a frame sees them: what of the
+    LO's error is the same on every ramp.  The ramps' range spectra are
+    averaged coherently (the zero-Doppler row of a frame at rest) and
+    incoherently; a spur is a local maximum of the coherent mean, beyond the
+    window's own sidelobes and above ``floor_db``, that the ramps' *noise*
+    would not leave in a mean of M.  That noise is ``(incoherent -
+    coherent) / (M - 1)`` per bin, estimated from M - 1 looks, so the test
+    is a CA-CFAR's: the factor ``K (p^(-1/K) - 1)`` with K = M - 1 and p set
+    for one false spur in a hundred searches over the profile's independent
+    bins (15 dB at 8 ramps, 11 dB at 64).  With the loop's noise on, the
+    TDC's jitter dithers its quantisation and little is left; with it off
+    the same search returns the undithered pattern.
+
+    Returns ``ghosts`` [(range offset [m], level [dBc])], the number of
+    ramps, and ``limit_dbc``: the median level under which a spur cannot be
+    told from the LO's noise in that many ramps."""
+    pad = cfg.processing.range_pad
+    ramps = list(range(min(first, chirp.n_chirps - 1), chirp.n_chirps))
+    psi = chirp.phase_err_carrier_rad()
+    spec = np.stack([range_fft(_ramp_beat(cfg, chirp, k, psi)[0], cfg.processing.window_range, pad, cfg.n_blank) for k in ramps])
+    m = len(ramps)
+    coh = np.abs(spec.mean(axis=0)) ** 2
+    inc = np.mean(np.abs(spec) ** 2, axis=0)
+    i = int(np.argmax(coh))
+    n_bins = coh.size
+    axis = (np.arange(n_bins) - n_bins // 2) * (cfg.range_resolution_m / pad)
+    coh_db = np.roll(10.0 * np.log10(np.maximum(coh / coh[i], 1e-300)), n_bins // 2 - i)
+    noise = np.roll(np.maximum(inc - coh, 0.0) / max(m - 1, 1) / coh[i], n_bins // 2 - i)   # in the mean, per bin, rel. the peak
+    far = np.abs(axis) > 15 * cfg.range_resolution_m
+    if m > 1:
+        looks = max(float(np.count_nonzero(far)) / correlation_length(range_window(cfg.processing.window_range, cfg.n_samples,
+                                                                                    cfg.n_blank), pad), 1.0)
+        factor = threshold_factor(m - 1, 1e-2 / looks)
+    else:
+        factor = 0.0                                                       # one ramp: nothing to tell a spur from
+    limit_db = 10.0 * np.log10(np.maximum(factor * noise, 1e-300))
+    # the window's own skirt is coherent too: a spur has to stand 6 dB clear of the error-free response
+    t = np.arange(cfg.n_samples) / cfg.rx.adc_fs_hz
+    clean = np.abs(range_fft(np.exp(1j * TWOPI * cfg.beat_hz() * t), cfg.processing.window_range, pad, cfg.n_blank)) ** 2
+    clean_db = np.roll(10.0 * np.log10(np.maximum(clean / clean.max(), 1e-300)), n_bins // 2 - int(np.argmax(clean)))
+    in_band = np.abs(axis + cfg.target.range_m) < cfg.max_range_m          # either beat sign inside the IF band
+    idx = [j for j in range(1, n_bins - 1)
+           if far[j] and coh_db[j] > floor_db and coh_db[j] > limit_db[j] and coh_db[j] > clean_db[j] + 6.0
+           and coh_db[j] > coh_db[j - 1] and coh_db[j] >= coh_db[j + 1]]
+    idx.sort(key=lambda j: -coh_db[j])
+    sel = far & in_band
+    return {"ghosts": [(float(axis[j]), float(coh_db[j])) for j in idx[:n_max]], "chirps": m,
+            "limit_dbc": float(np.median(limit_db[sel])) if (m > 1 and np.any(sel)) else float("-inf"),
+            "noise": bool(chirp.noise)}
+
+
+def nonlinearity_profile(cfg: RadarConfig, chirp: ChirpResult, k: int | None = None, pad: int | None = None) -> dict:
+    """The range profile a point target gets from the chirp's frequency
+    error alone: the beat phase perturbation ``psi(t) - psi(t - tau)`` of
+    ramp ``k`` on the ADC grid, on the ideal beat tone, through the config's
+    range window and FFT.  Returns the profile [dB rel. peak] on a range
+    axis relative to the target, its -3 dB and Rayleigh widths in metres,
+    the highest sidelobe and the integrated sidelobe ratio (power outside
+    the mainlobe over the mainlobe's)."""
+    k = chirp.n_chirps - 1 if k is None else k
+    pad = cfg.processing.range_pad if pad is None else pad
+    n = cfg.n_samples
+    beat, dpsi = _ramp_beat(cfg, chirp, k)
     prof = power_db(range_fft(beat, cfg.processing.window_range, pad, cfg.n_blank))
     m = n * pad
     # centre the profile on the target so the lobe is contiguous; the axis is
@@ -395,6 +456,14 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
                                                       "phase_rms_rad", "phase_peak_rad", "ramp", "ghosts")}
         res.nonlinearity["engine"] = chirp.engine
         res.nonlinearity["ghosts_vouched"] = chirp.vouches_for_spurs
+        # the single quiet ramp's list is the undithered pattern; what a frame sees is what stays coherent
+        # over its ramps with the loop's noise on (the TDC's jitter dithers the quantisation)
+        res.nonlinearity["ghosts_quiet"] = res.nonlinearity["ghosts"]
+        if chirp.engine == "event":
+            live = chirp if chirp.noise else noisy_chirp(cfg, n_chirps=min(max(cfg.time_chirps(), 5), 64))
+            cs = coherent_spurs(cfg, live)
+            res.nonlinearity.update({"ghosts": cs["ghosts"], "ghost_chirps": cs["chirps"], "ghost_limit_dbc": cs["limit_dbc"],
+                                     "tdc_jitter_s": cfg.lo_value("tdc_jitter_s")[0], "tdc_res_s": cfg.lo_value("tdc_res_s")[0]})
         res.extras["nonlinearity_profile"] = (nl["axis_m"], nl["profile_db"])
     res.cfar.update(cfar_detection(cfg, res))
     return res

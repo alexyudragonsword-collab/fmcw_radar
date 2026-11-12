@@ -20,9 +20,9 @@ authoring_mode: ai_generated
 
 - `RangeCorrelation`:闭式 `residual_psd`、`sidelobe_dbc(offset, enbw)`(= 残余 L(f) + 10 log 窗的每格噪声带宽)、
   合成 `synthesize_lo` → `residual = phi − delayed(phi)`(FFT 域循环延迟,平稳块上精确)。τ = 0 时 `delayed` 返回输入对象本身,减法逐位为零。
-- 闭式 vs 合成:1 / 10 / 100 m 上按倍频程带平均差 **0.114 dB**(24 块 × 16384 点);测试用 32 块 × 65536 点卡 0.1 dB。
+- 闭式 vs 合成:1 / 10 / 100 m 上按倍频程带平均差 **0.113 dB**(24 块 × 16384 点);测试用 32 块 × 65536 点卡 0.1 dB。
   三个距离差值完全相同不是巧合:同一白噪声实现经不同的确定性线性滤波,比值只由实现决定。
-- 默认 60 GHz LO(15 GHz ADPLL ×4 占位剖面):L(1 MHz) ≈ −80 dBc/Hz。目标 5 m(τ 33 ns)时残余 51.7 mrad RMS(LO 自身 186.7 mrad,[10 kHz, 4 MHz]);
+- 默认 60 GHz LO(15 GHz ADPLL ×4 占位剖面):L(1 MHz) ≈ −79.6 dBc/Hz(0.2.6 起含 TDC 抖动 1 ps 的一项;之前 −80.2)。目标 5 m(τ 33 ns)时残余 55.3 mrad RMS(LO 自身 202.0 mrad,[10 kHz, 4 MHz];之前 51.7 / 186.7);
   距离维旁瓣(Hann,每格 15 kHz,单 chirp):+0.25 m 处 −75.2、+1 m −64.3、+5 m −51.9 dBc;距离–多普勒格再低 16.3 dB(64 chirp Hann 的相干增益)。
   随目标距离:同一距离偏移下的旁瓣每 10 倍距离升 20 dB,直到 1/(6τ) 越过该偏移(100 m 时 +5 m 处反而比 +1 m 低)。
 - **一阶公式 S_res/2 只在残余小时成立。** 时域在 100 m(残余 0.3 rad)量到 −56 dBc 的平底,一阶给 −77:带内相噪自拍(φ² 项,谱是 S_res 的自卷积)。

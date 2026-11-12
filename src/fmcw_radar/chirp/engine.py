@@ -290,4 +290,25 @@ class ChirpEngine:
                            noise=bool(noise), osc_phase_dco_rad=self._osc_phase(sim, f_cmd, f_err) if noise else None)
 
 
-__all__ = ["ChirpEngine", "ChirpResult", "command_train", "quadratic_reference", "ui_per_ref_cycle_p99"]
+_NOISY_CACHE: dict = {}
+
+
+def noisy_chirp(cfg: RadarConfig, seed: int | None = None, n_chirps: int | None = None) -> ChirpResult:
+    """The chirp train with the loop's noise sources on, seeded: the LO as
+    the cycle-accurate loop makes it (its noise up to fref / 2, the TDC's
+    jitter dithering its quantisation).  The last few runs are kept, keyed by
+    everything the LO and the ramp depend on, so the statistical engine's
+    spur search and the time engine's frame share one run."""
+    seed = cfg.sim.seed if seed is None else seed
+    n = cfg.time_chirps() if n_chirps is None else n_chirps
+    key = (cfg.band, cfg.chirp.duration_s, cfg.chirp.idle_s, cfg.lo, int(seed), int(n))
+    hit = _NOISY_CACHE.get(key)
+    if hit is None:
+        hit = ChirpEngine(cfg).run(noise=True, seed=seed, n_chirps=n)
+        if len(_NOISY_CACHE) >= 4:
+            _NOISY_CACHE.pop(next(iter(_NOISY_CACHE)))
+        _NOISY_CACHE[key] = hit
+    return hit
+
+
+__all__ = ["ChirpEngine", "ChirpResult", "command_train", "noisy_chirp", "quadratic_reference", "ui_per_ref_cycle_p99"]

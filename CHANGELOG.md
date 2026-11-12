@@ -4,6 +4,19 @@
 
 ---
 
+## [0.2.6] — 2026-11-12 — TDC 抖动:占位、剖面里的一项、相干杂散(P1 #1(a))
+
+- **`lo.tdc_jitter_s`**(None → 占位 1 ps RMS,`assumed`):进 `TDCConfig.jitter_rms_s`。之前它是 0,且不在 `sources.yaml` 里——一个没登记的占位。来源表 24 → 26 条 `assumed`。
+- **LO 剖面多一项 `tdc_jitter`**:与量化同形,功率是 `tdc_quant` 的 12σ²/t_res²(pllsim 的 `analyze()` 没有,pll_simulator#76)。L(1 MHz) −80.2 → −79.6 dBc/Hz。
+  斜坡上逐周期引擎对这个剖面,抖动 0–5 ps、0.3–10 MHz 差 ≤ 0.4 dB。
+- **鬼目标改成"一帧里什么是相干的"**(`coherent_spurs`):开环路噪声跑一帧的 ramp,距离谱相干平均里显著的局部极大(CA-CFAR 式的判据,给出检出限)。
+  不抖动的图样 −45.3 dBc;抖动 0 / 0.5 / 1 / 2 ps:−49 / −51 / −55 dBc / 低于检出限。人体目标每帧鬼目标检测 0.03 → 0.00。原来的单 ramp 列表留作 `ghosts_quiet`。
+- **时域引擎默认用带噪声的逐周期曲线**(LO 是 vendored 环路本身时),与统计引擎的鬼目标表共用一次运行(`noisy_chirp` 缓存)。示例 02 多一张抖动表。
+- 被推翻的判断:"TDC 鬼目标是物理的,要等 pll_simulator 的 dither"——是抖动为零这个占位造成的。`tools/export_lo_profile.py` 改为导出含抖动项的剖面,bundled 的剖面文件重出。
+- 指纹(numbers-move):所有相噪值(剖面多一项)、鬼目标表、带相噪的时域帧动了;预算、chirp 曲线、CFAR 的 Pfa 逐位不变。
+
+---
+
 ## [0.2.5] — 2026-11-10 — LO 噪声在 chirp 曲线与剖面之间的分工(P1 #1(b))
 
 - **时域引擎把 TDC 量化算了两遍**:noise=False 的逐周期曲线就是剖面的 `tdc_quant` + `dco_quant`(1 MHz 处 −85.2 对 −85.3 dBc/Hz),却叠在整份剖面上,

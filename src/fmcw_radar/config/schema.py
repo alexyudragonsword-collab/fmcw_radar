@@ -145,6 +145,8 @@ class LOConfig:
     dco_pn_floor_dbchz: Optional[float] = None  # None -> placeholder
     ref_pn_dbchz: float = -155.0        # reference floor [dBc/Hz]
     tdc_res_s: Optional[float] = None   # TDC resolution [s]; None -> placeholder
+    tdc_jitter_s: Optional[float] = None   # TDC input-referred jitter [s RMS]; None -> placeholder.  It is noise, and it is
+                                           # what dithers the TDC's quantisation (0: an undithered quantiser, ghost targets)
     dp_gain: float = 1.0                # direct-path gain as built: 1 + eps is a two-point mismatch of eps
     dp_cal: Literal["none", "offline", "online"] = "offline"   # two-point gain calibration (chirp linearity)
     dp_cal_iterations: int = 2          # offline: least-squares passes, one chirp each
@@ -173,6 +175,8 @@ class LOConfig:
         _finite(self.ref_pn_dbchz, "lo.ref_pn_dbchz")
         if self.tdc_res_s is not None:
             _finite_pos(self.tdc_res_s, "lo.tdc_res_s")
+        if self.tdc_jitter_s is not None:
+            _finite_nonneg(self.tdc_jitter_s, "lo.tdc_jitter_s")
         _finite_pos(self.dp_gain, "lo.dp_gain")
         _require_in(self.dp_cal, {"none", "offline", "online"}, "lo.dp_cal")
         _require(self.dp_cal_iterations >= 1, "lo.dp_cal_iterations must be >= 1")

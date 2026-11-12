@@ -60,10 +60,11 @@ def build_adpll(cfg: RadarConfig) -> ADPLL:
     pn, _ = cfg.lo_value("dco_pn_dbchz")
     floor, _ = cfg.lo_value("dco_pn_floor_dbchz")
     tres, _ = cfg.lo_value("tdc_res_s")
+    tjit, _ = cfg.lo_value("tdc_jitter_s")
     osc = OscConfig(f0=fout, gain=lo.kdco_hz, pn_dbchz=pn, pn_foffset=lo.dco_pn_offset_hz,
                     pn_f1f3=lo.dco_pn_f1f3_hz, pn_floor_dbchz=floor)
     return ADPLL(ADPLLConfig(fref=lo.fref_hz, fout=fout, osc=osc, dlf=DLFConfig(alpha=alpha, rho=rho),
-                             mode="tdc", tdc=TDCConfig(t_res=tres), ref_pn_dbchz=lo.ref_pn_dbchz,
+                             mode="tdc", tdc=TDCConfig(t_res=tres, jitter_rms_s=tjit), ref_pn_dbchz=lo.ref_pn_dbchz,
                              int_band=(1e3, lo.fref_hz / 2.0)))
 
 
@@ -138,6 +139,14 @@ class LOProfile:
             s = np.concatenate([np.asarray(ana.pn_breakdown["total"], dtype=float)[keep], s_far]) * n * n
             comp = {k: np.concatenate([np.asarray(v, dtype=float)[keep], s_far if k == "dco" else np.zeros(far.size)]) * n * n
                     for k, v in ana.pn_breakdown.items() if k != "total"}
+            # the TDC's jitter: pllsim's analyze() has no term for it (pll_simulator#76).  It is a white timing
+            # error at the node the quantisation error enters, so it has that term's shape and
+            # sigma^2 / (t_res^2 / 12) of its power.
+            t_res = float(pll.cfg.tdc.t_res)
+            t_jit = float(pll.cfg.tdc.jitter_rms_s)
+            if t_jit > 0.0 and "tdc_quant" in comp:
+                comp["tdc_jitter"] = comp["tdc_quant"] * (12.0 * t_jit * t_jit / (t_res * t_res))
+                s = s + comp["tdc_jitter"]
             return cls(np.concatenate([f[keep], far]), s, cfg.band.center_hz, n,
                        f"vendored ADPLL analyze() at {cfg.dco_center_hz / 1e9:.4g} GHz x{n}, the DCO alone above "
                        f"fref/2 (source: assumed)", components=comp)

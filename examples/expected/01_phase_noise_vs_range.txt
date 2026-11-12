@@ -1,26 +1,26 @@
 LO: vendored ADPLL analyze() at 15 GHz x4, the DCO alone above fref/2 (source: assumed)
-  L(1 kHz) = -82.7 dBc/Hz at 60 GHz
-  L(10 kHz) = -84.7 dBc/Hz at 60 GHz
-  L(100 kHz) = -83.8 dBc/Hz at 60 GHz
-  L(1000 kHz) = -80.2 dBc/Hz at 60 GHz
-  L(10000 kHz) = -100.9 dBc/Hz at 60 GHz
+  L(1 kHz) = -81.7 dBc/Hz at 60 GHz
+  L(10 kHz) = -83.2 dBc/Hz at 60 GHz
+  L(100 kHz) = -82.5 dBc/Hz at 60 GHz
+  L(1000 kHz) = -79.6 dBc/Hz at 60 GHz
+  L(10000 kHz) = -100.3 dBc/Hz at 60 GHz
 
 range-FFT noise bandwidth per bin 15.0 kHz (hann); the sidelobe floor [dBc per bin, one chirp] at a range offset from the target -- exact Gaussian-phase spectrum, and in brackets
 the first-order S_res/2 where it differs by more than 1 dB (the in-band noise beating with itself fills in
 near the tone once the residual is no longer small):
   target range [m] | tau [ns] | 1/(6 tau) [kHz] |          +0.25 m |             +1 m |             +5 m | residual RMS [mrad] | carrier loss [dB]
-               0.1 |     0.67 |          249827 | -113.6          |  -98.5          |  -85.9          |                1.04 |            -0.008
-               0.3 |     2.00 |           83276 | -104.0          |  -89.0          |  -76.4          |                3.13 |            -0.009
-                 1 |     6.67 |           24983 |  -93.1          |  -78.5          |  -65.9          |               10.45 |            -0.015
-                 3 |    20.01 |            8328 |  -81.4 ( -84.1) |  -68.9          |  -56.4          |               31.23 |            -0.034
-                10 |    66.71 |            2498 |  -67.0 ( -73.6) |  -58.1          |  -46.0          |              100.09 |            -0.097
-                30 |   200.14 |             833 |  -54.2 ( -64.1) |  -48.0 ( -49.0) |  -37.4          |              222.67 |            -0.251
-               100 |   667.13 |             250 |  -45.8 ( -53.6) |  -38.4          |  -42.9 ( -44.2) |              290.23 |            -0.406
-  (the LO itself: 186.7 mrad RMS over [10 kHz, 4 MHz])
+               0.1 |     0.67 |          249827 | -112.2          |  -97.6          |  -85.3          |                1.12 |            -0.008
+               0.3 |     2.00 |           83276 | -102.6          |  -88.0          |  -75.8          |                3.35 |            -0.009
+                 1 |     6.67 |           24983 |  -91.7          |  -77.5          |  -65.3          |               11.18 |            -0.016
+                 3 |    20.01 |            8328 |  -80.1 ( -82.6) |  -67.9          |  -55.8          |               33.41 |            -0.038
+                10 |    66.71 |            2498 |  -65.8 ( -72.2) |  -57.1          |  -45.4          |              107.10 |            -0.110
+                30 |   200.14 |             833 |  -52.9 ( -62.6) |  -47.0 ( -48.1) |  -36.8          |              238.49 |            -0.287
+               100 |   667.13 |             250 |  -44.4 ( -52.2) |  -37.4          |  -42.1 ( -43.7) |              312.77 |            -0.470
+  (the LO itself: 202.0 mrad RMS over [10 kHz, 4 MHz])
 
 closed form vs synthesised residual (one-sided PSD, averaged over octave bands):
-      1 m: worst band difference 0.114 dB over 24 blocks of 16384
-     10 m: worst band difference 0.114 dB over 24 blocks of 16384
-    100 m: worst band difference 0.114 dB over 24 blocks of 16384
+      1 m: worst band difference 0.113 dB over 24 blocks of 16384
+     10 m: worst band difference 0.113 dB over 24 blocks of 16384
+    100 m: worst band difference 0.113 dB over 24 blocks of 16384
   tau = 0: residual max |phi| = 0 rad
   wrote examples/output/01_phase_noise_vs_range.png
