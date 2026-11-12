@@ -71,6 +71,8 @@ SECTIONS: list[tuple[str, str, list[dict]]] = [
         _f("frontend.nf_db", "Noise figure [dB]", "opt_float"),
         _f("frontend.p1db_oob_dbm", "Input P1dB ahead of the IF high-pass [dBm]", "opt_float"),
         _f("frontend.p1db_inband_dbm", "Input P1dB in band, at this gain [dBm]", "opt_float"),
+        _f("frontend.rx_rapp_p", "Compression knee smoothness (Rapp p)", "opt_float"),
+        _f("frontend.compression", "Model the receiver's compression", "bool"),
     ]),
     ("channel", "Channel", [
         _f("channel.oxygen_db_per_km", "Oxygen attenuation [dB/km] (empty = survey)", "opt_float"),

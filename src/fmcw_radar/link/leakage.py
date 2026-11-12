@@ -50,6 +50,7 @@ import numpy as np
 from ..config.schema import RadarConfig
 from ..processing.iffilter import hpf_attenuation_db
 from ..processing.windows import enbw_bins, range_window, spectrum_db
+from .compression import rapp, small_signal
 from .budget import LinkBudget, link_budget
 
 
@@ -59,9 +60,9 @@ class LeakageTerm:
     delay_s: float
     beat_hz: float
     level_rx_dbm: float          # at the receiver input
-    level_adc_dbm: float         # at the ADC, before the high-pass
+    level_adc_dbm: float         # referred to the ADC, through the stage ahead of the high-pass (compressed), before the filter
     hpf_atten_db: float
-    level_adc_hpf_dbm: float     # at the ADC, after the high-pass
+    level_adc_hpf_dbm: float     # after the high-pass, ahead of the IF stage's compression
     window_sidelobe_at_target_db: float   # the range window's response at the target's bin, relative to the tone
 
 
@@ -85,6 +86,10 @@ class LeakageBudget:
     blank_s: float = 0.0                # what the config blanks
     blank_loss_db: float = 0.0          # the window refitted to the remaining samples: its SNR loss against no blanking
     steady_clipping: bool = False       # the leakage is at or over full scale behind the high-pass: blanking cannot help
+    leakage_compression_db: float = 0.0  # the leakage's own power through the stage ahead of the high-pass (link/compression.py)
+    compression_signal_db: float = 0.0   # what the two stages, driven by the leakage, take off a weak echo's amplitude
+    compression_noise_db: float = 0.0    # ... off the thermal noise's power (less than the echo: the SNR loses the difference)
+    compression_image_dbc: float = -300.0  # the echo's image mirrored about the leakage's beat, relative to the echo (upper bound)
 
     def as_rows(self) -> list[tuple[str, float, str]]:
         rows = [("TX-RX isolation", self.isolation_db, f"dB (source: {self.isolation_source})")]
@@ -93,6 +98,12 @@ class LeakageBudget:
                      (f"{t.name}: level at the ADC", t.level_adc_dbm, "dBm"),
                      (f"{t.name}: high-pass attenuation", t.hpf_atten_db, "dB"),
                      (f"{t.name}: at the ADC after the high-pass", t.level_adc_hpf_dbm, "dBm")]
+        if self.compression_signal_db or self.leakage_compression_db:
+            rows += [("leakage through the stage ahead of the high-pass (its own compression)", self.leakage_compression_db, "dB"),
+                     ("receiver compression: the echo's gain", self.compression_signal_db, "dB"),
+                     ("receiver compression: the thermal noise's power", self.compression_noise_db, "dB"),
+                     ("receiver compression: SNR", self.compression_signal_db - self.compression_noise_db, "dB"),
+                     ("receiver compression: the echo's image about the leakage beat (at most)", self.compression_image_dbc, "dBc")]
         rows += [(f"P1dB margin (input, worst term, {self.p1db_kind} point)", self.p1db_margin_db, "dB"),
                  ("ADC headroom without the high-pass", self.adc_headroom_no_hpf_db, "dB"),
                  ("ADC headroom after the high-pass", self.adc_headroom_db, "dB"),
@@ -127,12 +138,40 @@ def leakage_budget(cfg: RadarConfig, budget: LinkBudget | None = None) -> Leakag
     paths = [("direct leakage", cfg.leakage.path_delay_s, pt - iso)]
     if cfg.leakage.reflector_range_m is not None:
         paths.append(("near reflector", cfg.tau_s(cfg.leakage.reflector_range_m), pt - iso + cfg.leakage.reflector_level_db))
+    # the receiver's two compression stages (link/compression.py), driven by the leakage: its composite
+    # envelope over one chirp on the ADC grid, every term at its beat with the phase the sawtooth gives it
+    # (the time engine's), at the ADC's scale (the stages' points referred there through the receive gain)
+    w_r = range_window(cfg.processing.window_range, n, cfg.n_blank)
+    t_s = np.arange(n) / fs
+    vol = lambda dbm: math.sqrt(10.0 ** ((dbm - 30.0) / 10.0) * 50.0)            # noqa: E731
+    phases = [2.0 * math.pi * ((cfg.band.center_hz - 0.5 * cfg.band.sweep_hz) * tau + cfg.slope_hz_per_s * tau * t_s)
+              - math.pi * cfg.slope_hz_per_s * tau * tau for _, tau, _ in paths]
+    comp = cfg.frontend.compression
+    p_rapp, _ = cfg.frontend_value("rx_rapp_p")
+    x1 = sum(vol(lvl + g_rx) * np.exp(1j * ph) for (_, _, lvl), ph in zip(paths, phases))
+    s1 = small_signal(np.abs(x1), vol(p1_oob + g_rx), p_rapp, w_r) if comp else None
+    strong1 = s1["strong"] if comp else 0.0
     for name, tau, lvl_rx in paths:
         f_beat = cfg.slope_hz_per_s * tau
         att = hpf_attenuation_db(f_beat, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order)
         d_bins = (f_target - f_beat) / df
         side = float(np.interp(abs(d_bins), bins, wspec, right=-300.0)) if abs(d_bins) <= bins[-1] else -300.0
-        terms.append(LeakageTerm(name, tau, f_beat, lvl_rx, lvl_rx + g_rx, att, lvl_rx + g_rx - att, side))
+        lvl_adc = lvl_rx + g_rx + strong1
+        terms.append(LeakageTerm(name, tau, f_beat, lvl_rx, lvl_adc, att, lvl_adc - att, side))
+    # the stage after the high-pass sees what the filter leaves of it (the steady state; the chirp-start
+    # transient is the blank's business) -- and, without the filter, all of it
+    s2 = s2_raw = None
+    if comp:
+        a1_in = vol(p1_in + g_rx)
+        x1c = rapp(x1, vol(p1_oob + g_rx), p_rapp)
+        x2 = sum(vol(t.level_adc_hpf_dbm) * np.exp(1j * ph) for t, ph in zip(terms, phases))
+        s2_raw = small_signal(np.abs(x1c), a1_in, p_rapp, w_r)
+        s2 = small_signal(np.abs(x2), a1_in, p_rapp, w_r) if cfg.rx.hpf_corner_hz > 0.0 else s2_raw
+    # what the ADC sees: the filter's output through the stage after it (its saturation, not the filter, caps it)
+    strong2 = s2["strong"] if comp else 0.0
+    sig_db = (s1["signal"] + s2["signal"]) if comp else 0.0
+    noise_db = (s1["noise"] + s2["noise"]) if comp else 0.0
+    image_dbc = (s1["image"] - s1["signal"]) if comp else -300.0
     strongest = max(terms, key=lambda t: t.level_rx_dbm)
     # which compression point a term meets: one beating below the high-pass corner is taken out before the
     # IF stages and only loads the stages ahead of the filter (the out-of-band point, how the radar chip's
@@ -144,11 +183,14 @@ def leakage_budget(cfg: RadarConfig, budget: LinkBudget | None = None) -> Leakag
     p1_margin, p1_kind = min((p1db_margin(t) for t in terms), key=lambda mk: mk[0])
     strongest_hpf = max(terms, key=lambda t: t.level_adc_hpf_dbm)
     fs_dbm = cfg.rx.adc_fullscale_dbm
-    headroom = fs_dbm - strongest_hpf.level_adc_hpf_dbm
-    headroom0 = fs_dbm - strongest.level_adc_dbm
+    headroom = fs_dbm - strongest_hpf.level_adc_hpf_dbm - strong2
+    headroom0 = fs_dbm - strongest.level_adc_dbm - (s2_raw["strong"] if comp else 0.0)
     att_target = hpf_attenuation_db(f_target, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order)
+    # the target at the ADC: the radar equation's level, less what the leakage's compression takes off a weak echo
+    # (``budget`` is the uncompressed one; run_statistical carries the same loss into the SNR)
+    target_adc = b.ps_adc_dbm - b.compression_signal_db + sig_db - att_target
     # the strongest term's window sidelobe at the target's bin relative to the target's own level
-    at_cell = max(t.level_adc_hpf_dbm + t.window_sidelobe_at_target_db for t in terms) - (b.ps_adc_dbm - att_target)
+    at_cell = max(t.level_adc_hpf_dbm + t.window_sidelobe_at_target_db for t in terms) - target_adc
     # the chirp-start transient: every term's phase jumps by 2 pi f_beat T_c
     # when the sawtooth restarts, a step of 2 A |sin(d_phi / 2)| at the ADC
     # (before the high-pass, which passes a step whole), the terms in phase
@@ -163,7 +205,7 @@ def leakage_budget(cfg: RadarConfig, budget: LinkBudget | None = None) -> Leakag
         tau_hpf = 1.0 / (2.0 * math.pi * cfg.rx.hpf_corner_hz * math.sin(math.pi / (2.0 * cfg.rx.hpf_order)))
         # what the filter leaves of every term in the steady state, in phase at worst: the transient has to
         # decay into the range the ADC has left above it.  Nothing left: the samples clip all chirp long
-        a_ss = sum(math.sqrt(10.0 ** ((t.level_adc_hpf_dbm - 30.0) / 10.0) * 50.0) for t in terms)
+        a_ss = sum(math.sqrt(10.0 ** ((t.level_adc_hpf_dbm + strong2 - 30.0) / 10.0) * 50.0) for t in terms)
         steady = a_ss >= a_fs
         room = a_fs - a_ss
         blank_rec = tau_hpf * (math.log(step_v / room) + 1.0) if (not steady and step_v > room) else 0.0
@@ -173,16 +215,21 @@ def leakage_budget(cfg: RadarConfig, budget: LinkBudget | None = None) -> Leakag
     w_blank = range_window(cfg.processing.window_range, n, cfg.n_blank)
     blank_loss = 10.0 * math.log10(enbw_bins(w_blank) / enbw_bins(w_full))
     return LeakageBudget(tuple(terms), iso, iso_src, p1_margin, p1_kind, headroom, headroom0,
-                         max(0.0, 6.0 - headroom), b.ps_adc_dbm - att_target, at_cell, att_target,
-                         step_v, tau_hpf, blank_rec, cfg.rx.blank_s, blank_loss, steady)
+                         # the attenuation the filter still has to give is read at its own output, ahead of
+                         # the stage that would otherwise saturate on it
+                         max(0.0, 6.0 - (fs_dbm - strongest_hpf.level_adc_hpf_dbm)), target_adc, at_cell, att_target,
+                         step_v, tau_hpf, blank_rec, cfg.rx.blank_s, blank_loss, steady,
+                         strong1, sig_db, noise_db, image_dbc)
 
 
 def leakage_tones(cfg: RadarConfig) -> list[tuple[float, float]]:
-    """``(delay [s], amplitude at the ADC [V])`` of every leakage term for the time engine."""
+    """``(delay [s], amplitude [V])`` of every leakage term for the time engine, at the receiver input
+    referred to the ADC's scale through the receive gain: the engine applies the compression stages itself."""
     lb = leakage_budget(cfg)
     if lb is None:
         return []
-    return [(t.delay_s, math.sqrt(10.0 ** ((t.level_adc_dbm - 30.0) / 10.0) * 50.0)) for t in lb.terms]
+    g_rx, _ = cfg.frontend_value("rx_gain_db")
+    return [(t.delay_s, math.sqrt(10.0 ** ((t.level_rx_dbm + g_rx - 30.0) / 10.0) * 50.0)) for t in lb.terms]
 
 
 __all__ = ["LeakageBudget", "LeakageTerm", "leakage_budget", "leakage_tones"]
