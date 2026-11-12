@@ -71,6 +71,10 @@ LTE-20 的 29 % 不行,polar_tx ROADMAP B1)。任务要求先量一次这个指�
   相位误差 0.133 rad RMS(DCO 处)= 5 ps / √12 的 0.136 rad:TDC 死区,环路看不见一个量化格以内的漂移。斜坡每周期把小数相位扫过量化格,等于给了 dither,
   所以 chirp 时两者才一致。雷达只在斜坡上用 LO,结论不受影响;CW / 空闲段(`chirp.idle_s`)的相噪不能用剖面。已提 pll_simulator#76(在它自己的 main 上复现:
   TDC 抖动 0 / 1 / 2 / 5 ps 时带内差 +15.8 / +10 / +6 / 0 dB;`analyze` 的总量不随抖动变,5 ps 时 `simulate` 在 3–10 MHz 高 4 dB)。
+  **上游的答复(2026-11-12,pll_simulator#77 / #78,main@5564c64,已在它的 main 上复核)**:`analyze()` 加了 `tdc_jitter` 项(与本库自己加的那项相对差 2e-16);
+  dither 不到半个量化格时给死区提示(本库的环路抖动 0 / 1 / 2 ps 是 0.08 / 0.22 / 0.41 格,都被标);另查出 `simulate()` 在整数 N 时把负的 TDC 抖动截掉了,改成回绕——
+  上面"5 ps 时 3–10 MHz 高 4 dB"就是这个截断,修后 +0.6 / +0.8 dB;CW 带内 1 ps +5.5 / +5.9 / +10.9、2 ps +0.1 / +0.9 / +1.6 dB。斜坡上修前修后都在 ±0.7 dB 内
+  (贴着量化格边沿的周期只占 1.5 %)。这些要等 polar_tx 更新 vendored 副本才到本库(ROADMAP"等上游"#4)。
 - 没做的:带 `lo.profile` 文件的配置没有分项,noise=False 的曲线仍叠在整份剖面上(`lo_noise_split` 里写明);response 引擎的 noise=True 没核对过它加了什么,
   时域引擎拒绝它。
 

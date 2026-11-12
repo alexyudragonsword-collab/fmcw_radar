@@ -68,6 +68,22 @@ def build_adpll(cfg: RadarConfig) -> ADPLL:
                              int_band=(1e3, lo.fref_hz / 2.0)))
 
 
+def _with_tdc_jitter(comp: dict, total: np.ndarray, t_res: float, t_jit: float) -> tuple[dict, np.ndarray]:
+    """The breakdown and its total with the TDC's jitter in them.  The
+    jitter is a white timing error at the node the quantisation error
+    enters, so it has ``tdc_quant``'s shape and ``sigma^2 / (t_res^2 / 12)``
+    of its power.  The vendored pllsim's ``analyze()`` (pll_simulator
+    @d7be4712 through polar_tx) has no term for it, so it is added here;
+    pll_simulator has the identical term from 5564c64 on (#76 / #77), and a
+    breakdown that already carries ``tdc_jitter`` is left alone -- counted
+    once whichever copy is vendored."""
+    if t_jit <= 0.0 or "tdc_quant" not in comp or "tdc_jitter" in comp:
+        return comp, total
+    comp = dict(comp)
+    comp["tdc_jitter"] = comp["tdc_quant"] * (12.0 * t_jit * t_jit / (t_res * t_res))
+    return comp, total + comp["tdc_jitter"]
+
+
 @dataclass
 class LOProfile:
     """S_phi(f) of the LO at the carrier, interpolated in (log f, dB) between
@@ -139,14 +155,7 @@ class LOProfile:
             s = np.concatenate([np.asarray(ana.pn_breakdown["total"], dtype=float)[keep], s_far]) * n * n
             comp = {k: np.concatenate([np.asarray(v, dtype=float)[keep], s_far if k == "dco" else np.zeros(far.size)]) * n * n
                     for k, v in ana.pn_breakdown.items() if k != "total"}
-            # the TDC's jitter: pllsim's analyze() has no term for it (pll_simulator#76).  It is a white timing
-            # error at the node the quantisation error enters, so it has that term's shape and
-            # sigma^2 / (t_res^2 / 12) of its power.
-            t_res = float(pll.cfg.tdc.t_res)
-            t_jit = float(pll.cfg.tdc.jitter_rms_s)
-            if t_jit > 0.0 and "tdc_quant" in comp:
-                comp["tdc_jitter"] = comp["tdc_quant"] * (12.0 * t_jit * t_jit / (t_res * t_res))
-                s = s + comp["tdc_jitter"]
+            comp, s = _with_tdc_jitter(comp, s, float(pll.cfg.tdc.t_res), float(pll.cfg.tdc.jitter_rms_s))
             return cls(np.concatenate([f[keep], far]), s, cfg.band.center_hz, n,
                        f"vendored ADPLL analyze() at {cfg.dco_center_hz / 1e9:.4g} GHz x{n}, the DCO alone above "
                        f"fref/2 (source: assumed)", components=comp)

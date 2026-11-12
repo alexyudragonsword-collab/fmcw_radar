@@ -41,6 +41,29 @@ def test_profile_is_the_analysis_times_n_squared(cfg60):
     assert float(prof.l_dbc(1e9)) < float(prof.l_dbc(5e7)) - 10.0
 
 
+def test_tdc_jitter_term_is_counted_once_whichever_pllsim_is_vendored():
+    """pll_simulator gained the same term in analyze() at 5564c64 (#76 / #77).
+    The copy vendored here does not have it, so the profile adds it; once a
+    re-pin brings a breakdown that already carries ``tdc_jitter`` the profile
+    must leave it alone, or the jitter is in the LO twice."""
+    from fmcw_radar.lo import _with_tdc_jitter
+
+    quant = np.array([4.0e-10, 2.0e-10])
+    old = {"ref": np.array([1e-10, 1e-10]), "tdc_quant": quant}
+    comp, total = _with_tdc_jitter(old, sum(old.values()), 5e-12, 1e-12)
+    assert np.allclose(comp["tdc_jitter"], quant * 0.48) and np.allclose(total, sum(comp.values()))
+    assert "tdc_jitter" not in old                                        # the caller's dict is not touched
+    # upstream's own term, the same formula: nothing is added on top
+    new = {**old, "tdc_jitter": quant * 0.48}
+    comp2, total2 = _with_tdc_jitter(new, sum(new.values()), 5e-12, 1e-12)
+    assert comp2 is new and np.allclose(total2, total)
+    # no jitter, or a breakdown without a quantisation term: nothing to add
+    assert _with_tdc_jitter(old, sum(old.values()), 5e-12, 0.0)[0] is old
+    assert _with_tdc_jitter({"ref": quant}, quant, 5e-12, 1e-12)[0] == {"ref": quant}
+    # the vendored copy is still the one without the term (when this fails, the re-pin has happened: drop the note in ROADMAP)
+    assert "tdc_jitter" not in build_adpll(RadarConfig()).analyze().pn_breakdown
+
+
 def test_multiplier_scales_the_phase_noise_by_20_log_n():
     a = LOProfile.from_config(RadarConfig())
     b = LOProfile.from_config(apply_overrides(RadarConfig(), {"lo.mult": 2, "lo.kdco_hz": 100e3}))
