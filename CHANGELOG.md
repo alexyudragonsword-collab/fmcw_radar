@@ -4,6 +4,20 @@
 
 ---
 
+## [0.2.9] — 2026-11-12 — 接收机的两级压缩;×10 LO 的配置;推荐 blanking 不再给无效值
+
+- **接收机压缩模型**(ROADMAP 原 P1 #4,`link/compression.py`):高通之前一级(带外 P1dB)、之后一级(带内 P1dB),各是一个 Rapp 限幅(膝部 `frontend.rx_rapp_p`,占位 2)。
+  时域引擎逐样本过两级;统计引擎用闭式(弱信号在强信号旁:回波保留 (F′ + F/B)/2、噪声 (F′² + (F/B)²)/2),泄漏造成的压缩进所有 SNR(`LinkBudget.compression_*`、
+  `LeakageBudget.compression_*`)。默认档:泄漏 −8 dBm 比带外点高 4 dB → 前级压掉泄漏 5.24 dB,回波 −10.65 dB,SNR −2.3 dB;两个引擎对同一帧差 ≤ 0.35 dB。
+  `frontend.compression: false` 是原来的线性接收机。**更正 0.2.8 的结论**:"1 阶 200 kHz 高通不够、78 % 削波"是线性接收机的;有压缩时 ADC 还有 5.3 dB,代价在回波上。
+- **×10 LO**:`configs/radar_60g_x10lo.yaml` 用 mmw60_trx 的 ×10 剖面(vendored,逐字节校验)。文件剖面下 chirp 发生器的量化只算一次(外来文件在 event 引擎下加上两项量化,
+  导出的文件带分项)——之前时域比闭式高 10–15 dB。结论:带内的底是发生器的 5 ps TDC(L(1 MHz) −85.1),不是 ×10 LO(−98.6)。
+- **推荐 blanking**(原 P1 #5):瞬态要落进 ADC 在稳态泄漏之上还剩的量程;稳态泄漏本身到满幅时不给推荐(`steady_clipping`),改报还缺多少衰减。示例 08 列出没 blank 的情形和原因。
+- 新配置字段 `frontend.rx_rapp_p`、`frontend.compression`;来源表多两条 `rx_rapp_p`(占位,两个频段)。
+- 指纹(numbers-move):带泄漏的三个用例(`radar_60g_mimo`、`leakage_hpf`、`leakage_hpf_blanked`)、文件剖面用例的鬼目标表、新配置;其余逐位不变。
+
+---
+
 ## [0.2.8] — 2026-11-12 — 前端的数有了出处:读 mmw60_trx 的来源表;接收压缩点拆成两个
 
 - **vendor mmw60_trx 的来源表**(`vendor/mmw60/`:`spec.py` + `data/spec/survey.yaml`,pin `ef0f00c`;不 vendor `Frontend60`)。漂移检查现在也逐字节比 vendored 的 YAML;CI 多检出一个姊妹库。

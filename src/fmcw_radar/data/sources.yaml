@@ -68,6 +68,12 @@ entries:
     section: "7.9 RF Specification, Figure 7-2. Noise Figure, In-band P1dB vs Receiver Gain"
     quote: "Figure 7-2 shows variations of noise figure and in-band P1dB parameters with respect to receiver gain programmed."
     note: "输入压缩点之二:带内,目标回波与 IF / ADC 饱和碰到的是它。读图值(±1 dB),在 rx_gain_db 占位的 40 dB 增益档;图上是一条直线,每 dB 增益降 1 dB(30 dB 时 -24,48 dB 时 -42 dBm),config 改了增益时按这个斜率折算(RadarConfig.p1db_inband)。"
+  60g_sensing.rx_rapp_p:
+    value: 2.0
+    unit: ""
+    source: assumed
+    cite: "placeholder: the knee of a Rapp limiter (p = 2, a moderately soft knee); nothing read gives a receiver's AM/AM shape"
+    note: "占位:两个压缩点的膝部平滑度(link/compression.py)。p 越大越接近硬限幅:同一个 1 dB 点下,p = 1 / 2 / 3 时泄漏高出带外点 4 dB 的目标增益损失不同(cairn/frontend-sources.md)。"
   60g_sensing.lo_mult:
     value: 4
     unit: ""
@@ -158,6 +164,12 @@ entries:
     source: assumed
     cite: "placeholder: the single -20 dBm figure this band had before the compression point was split"
     note: "占位:同上;config 改增益时同样按每 dB 增益降 1 dB 折算。"
+  77g_automotive.rx_rapp_p:
+    value: 2.0
+    unit: ""
+    source: assumed
+    cite: "placeholder: the knee of a Rapp limiter (p = 2, a moderately soft knee); nothing read gives a receiver's AM/AM shape"
+    note: "占位:两个压缩点的膝部平滑度(link/compression.py)。p 越大越接近硬限幅:同一个 1 dB 点下,p = 1 / 2 / 3 时泄漏高出带外点 4 dB 的目标增益损失不同(cairn/frontend-sources.md)。"
   77g_automotive.lo_mult:
     value: 4
     unit: ""

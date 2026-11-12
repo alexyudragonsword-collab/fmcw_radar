@@ -5,6 +5,7 @@
 一个 YAML 一个雷达(`configs/*.yaml`),字段与默认值在 `src/fmcw_radar/config/schema.py`,每个字段的表单声明在 `config/form.py`。
 留空(`null` / 不写)的前端、LO 噪声、氧气、RCS 字段按频段从 `src/fmcw_radar/data/sources.yaml` 取,带来源标签;写了就是配置自己的主张。
 `frontend.p1db_oob_dbm`(高通之前的输入压缩点,泄漏碰到的)与 `frontend.p1db_inband_dbm`(带内,回波碰到的;留空时随 `rx_gain_db` 每 dB 降 1 dB,`cfg.p1db_inband()`)是两个字段;0.2.7 及以前的 `frontend.p1db_dbm` 没有了。
+`frontend.compression`(默认 true)让这两个点在两个引擎里都是 Rapp 限幅(膝部 `frontend.rx_rapp_p`,留空取占位 2):泄漏驱动的增益压缩进统计引擎的 SNR,时域引擎逐样本过两级(`run_time(cfg, compress=False)` 单次关掉);`leakage_budget(cfg)` 的 `compression_*` 字段是它对回波、噪声、镜像的数。
 
 ```python
 from fmcw_radar.config import load_config, apply_overrides, RadarConfig

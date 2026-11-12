@@ -23,7 +23,7 @@ import numpy as np
 
 from ..chirp import ChirpEngine, ChirpResult, noisy_chirp
 from ..config.schema import C0, RadarConfig
-from ..link.budget import LinkBudget, link_budget
+from ..link.budget import LinkBudget, link_budget, with_compression
 from ..link.leakage import LeakageBudget, leakage_budget
 from ..lo import LOProfile, parked_lo
 from ..mimo import VirtualArray
@@ -286,7 +286,7 @@ def ideal_profile(cfg: RadarConfig, name: str | None = None) -> dict:
             "peak_sidelobe_db": rp["peak_sidelobe_db"]}
 
 
-def target_rows(cfg: RadarConfig, rc: RangeCorrelation, n_tx: int = 1) -> list[dict]:
+def target_rows(cfg: RadarConfig, rc: RangeCorrelation, n_tx: int = 1, squeeze: tuple[float, float] = (0.0, 0.0)) -> list[dict]:
     """One row per point target: its own budget, cell position, and the
     masking by the others -- the strongest interferer's response at this
     target's cell (the range window's sidelobe at the range offset times
@@ -308,7 +308,7 @@ def target_rows(cfg: RadarConfig, rc: RangeCorrelation, n_tx: int = 1) -> list[d
     rows = []
     for t in cfg.targets:
         c = dataclasses.replace(cfg, target=t, extra_targets=())
-        b = link_budget(c)
+        b = with_compression(link_budget(c), *squeeze)          # every echo is weak against the leakage: the same loss
         rows.append({"kind": t.kind, "range_m": t.range_m, "velocity_mps": t.velocity_mps, "angle_deg": t.angle_deg,
                      "rcs_dbsm": b.rcs_dbsm, "rcs_source": b.inputs["rcs_dbsm"][1], "beat_hz": c.beat_hz(),
                      "doppler_hz": c.doppler_hz(), "ps_adc_dbm": b.ps_adc_dbm,
@@ -397,6 +397,11 @@ def cfar_detection(cfg: RadarConfig, res: "StatResult") -> dict:
 
 def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatResult:
     budget = link_budget(cfg)
+    # the TX leakage drives the receiver's compression stages (link/compression.py): a weak echo loses gain
+    # and the thermal noise less of its power -- every SNR below is the compressed receiver's
+    leak = leakage_budget(cfg, budget)
+    squeeze = (leak.compression_signal_db, leak.compression_noise_db) if leak is not None else (0.0, 0.0)
+    budget = with_compression(budget, *squeeze)
     n = cfg.n_samples
     fs = cfg.rx.adc_fs_hz
     beat = cfg.beat_hz()
@@ -432,9 +437,9 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
     res.extras["pn_residual_total_rad"] = math.sqrt(sb.sigma2)
     res.extras["snr_cell_expected_db"] = (-10.0 * math.log10(thermal_cell + pn_cell)
                                           + res.extras["pn_carrier_loss_db"])
-    res.targets = target_rows(cfg, rc, cfg.mimo.n_tx)
+    res.targets = target_rows(cfg, rc, cfg.mimo.n_tx, squeeze)
     res.angle = angle_metrics(cfg, budget.snr_cell_db, budget.snr_chirp_db, sc_r)
-    res.leakage = leakage_budget(cfg, budget)
+    res.leakage = leak
     res.cfar = cfar_statistics(cfg)
     if cfg.mimo.n_tx > 1:
         res.extras["snr_cell_per_tx_db"] = budget.snr_cell_db - 10.0 * math.log10(cfg.mimo.n_tx)

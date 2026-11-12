@@ -205,7 +205,9 @@ class FrontEndConfig:
     high-pass corner meets, the TX leakage first of all.  ``p1db_inband_dbm``
     is what the echo and the IF / ADC meet; the placeholder is given at the
     band's ``rx_gain_db`` and falls 1 dB per dB of gain above it
-    (:meth:`RadarConfig.p1db_inband`)."""
+    (:meth:`RadarConfig.p1db_inband`).  With ``compression`` on, both points
+    are Rapp limiters of smoothness ``rx_rapp_p`` in the statistical and the
+    time engine (``link/compression.py``)."""
 
     tx_power_dbm: Optional[float] = None
     tx_gain_dbi: Optional[float] = None
@@ -214,12 +216,17 @@ class FrontEndConfig:
     nf_db: Optional[float] = None
     p1db_oob_dbm: Optional[float] = None    # input 1 dB compression ahead of the IF high-pass [dBm]
     p1db_inband_dbm: Optional[float] = None  # input 1 dB compression in band, at this config's gain [dBm]
+    rx_rapp_p: Optional[float] = None       # knee smoothness of both compression stages (Rapp p, link/compression.py)
+    compression: bool = True                # model the two stages (False: a linear receiver, the 0.2.8 behaviour)
 
     def __post_init__(self):
-        for name in ("tx_power_dbm", "tx_gain_dbi", "rx_gain_dbi", "rx_gain_db", "nf_db", "p1db_oob_dbm", "p1db_inband_dbm"):
+        for name in ("tx_power_dbm", "tx_gain_dbi", "rx_gain_dbi", "rx_gain_db", "nf_db", "p1db_oob_dbm", "p1db_inband_dbm",
+                     "rx_rapp_p"):
             v = getattr(self, name)
             if v is not None:
                 _finite(v, f"frontend.{name}")
+        if self.rx_rapp_p is not None:
+            _require(self.rx_rapp_p > 0.0, "frontend.rx_rapp_p must be > 0")
 
 
 @dataclass(frozen=True)

@@ -67,6 +67,8 @@ class LinkBudget:
     enbw_range_hz: float                # the range FFT's noise bandwidth per bin
     p1db_margin_db: float               # in-band input P1dB at this gain - P_r (the echo is in band)
     quant_share_db: float               # how much the ADC adds to the thermal floor
+    compression_signal_db: float = 0.0  # what the receiver's compression by a strong signal (the TX leakage) takes off
+    compression_noise_db: float = 0.0   # ... the echo, and the thermal noise's power (link/compression.py)
 
     def as_rows(self) -> list[tuple[str, float, str]]:
         """``(label, value, unit)`` rows for the report."""
@@ -83,7 +85,10 @@ class LinkBudget:
                 ("SNR, one range-Doppler cell", self.snr_cell_db, "dB"),
                 ("SNR, rectangular windows (matched filter)", self.snr_cell_rect_db, "dB"),
                 ("window loss", self.window_loss_db, "dB"),
-                ("in-band P1dB margin (input, target only)", self.p1db_margin_db, "dB")]
+                ("in-band P1dB margin (input, target only)", self.p1db_margin_db, "dB")] + (
+            [("receiver compression by the TX leakage: the echo", self.compression_signal_db, "dB"),
+             ("receiver compression by the TX leakage: the thermal noise", self.compression_noise_db, "dB")]
+            if (self.compression_signal_db or self.compression_noise_db) else [])
 
 
 def link_budget(cfg: RadarConfig, range_m: float | None = None) -> LinkBudget:
@@ -128,6 +133,28 @@ def link_budget(cfg: RadarConfig, range_m: float | None = None) -> LinkBudget:
         p1db_margin_db=p1 - pr, quant_share_db=n0_tot - n0_th_adc)
 
 
+def with_compression(b: LinkBudget, signal_db: float, noise_db: float) -> LinkBudget:
+    """The budget with the receiver compressed by a strong signal: the echo
+    loses ``signal_db`` of amplitude and the thermal noise ``noise_db`` of
+    power ahead of the ADC, whose quantisation noise comes after and loses
+    nothing.  Everything downstream (C/N0, the SNRs, the quantisation share)
+    follows; the received power and the inputs do not move."""
+    import dataclasses
+
+    if not (signal_db or noise_db):
+        return b
+    ps_adc = b.ps_adc_dbm + signal_db
+    n0_th_adc = b.n0_thermal_adc_dbm_hz + noise_db
+    n0_tot = w_to_dbm(dbm_to_w(n0_th_adc) + dbm_to_w(b.n0_quant_adc_dbm_hz))
+    d_cn0 = (ps_adc - n0_tot) - b.cn0_dbhz
+    return dataclasses.replace(b, ps_adc_dbm=ps_adc, n0_thermal_adc_dbm_hz=n0_th_adc, n0_total_adc_dbm_hz=n0_tot,
+                               cn0_dbhz=b.cn0_dbhz + d_cn0, snr_chirp_db=b.snr_chirp_db + d_cn0,
+                               snr_cell_db=b.snr_cell_db + d_cn0, snr_cell_rect_db=b.snr_cell_rect_db + d_cn0,
+                               quant_share_db=n0_tot - n0_th_adc,
+                               compression_signal_db=b.compression_signal_db + signal_db,
+                               compression_noise_db=b.compression_noise_db + noise_db)
+
+
 def snr_vs_range(cfg: RadarConfig, ranges_m) -> np.ndarray:
     """Cell SNR [dB] at each range (the radar equation's R^-4 and the oxygen line)."""
     return np.array([link_budget(cfg, r).snr_cell_db for r in ranges_m])
@@ -145,4 +172,4 @@ def adc_amplitudes(cfg: RadarConfig, budget: LinkBudget) -> tuple[float, float, 
     return a_s, a_fs, n0_w * 50.0
 
 
-__all__ = ["LinkBudget", "link_budget", "snr_vs_range", "adc_amplitudes", "db", "dbm_to_w", "w_to_dbm"]
+__all__ = ["LinkBudget", "link_budget", "snr_vs_range", "adc_amplitudes", "with_compression", "db", "dbm_to_w", "w_to_dbm"]

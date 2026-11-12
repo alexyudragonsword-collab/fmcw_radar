@@ -133,7 +133,7 @@ def _hpf(order: int, corner_hz: float = 200e3, **ov):
     the band's sourced figures give (12 dBm, 20 dB: -8 dBm) is
     test_sourced_leakage_level_and_what_the_high_pass_must_do's subject."""
     return _leak(**{"rx.hpf_corner_hz": corner_hz, "rx.hpf_order": order, "frontend.tx_power_dbm": 10.0,
-                    "leakage.isolation_db": 25.0, **ov})
+                    "leakage.isolation_db": 25.0, "frontend.compression": False, **ov})
 
 
 def test_sourced_leakage_level_and_what_the_high_pass_must_do():
@@ -142,8 +142,10 @@ def test_sourced_leakage_level_and_what_the_high_pass_must_do():
     pair (10 dBm, 25 dB).  A first-order 200 kHz high-pass then leaves it at
     the ADC's full scale -- it clips for good, blanked or not; a second-order
     one has 28 dB in hand and only the chirp-start transient clips, which the
-    recommended blank covers."""
-    sourced = lambda order: _leak(**{"rx.hpf_corner_hz": 200e3, "rx.hpf_order": order})      # noqa: E731
+    recommended blank covers.  That is the linear receiver's picture; with
+    the front stage compressing the leakage (the default since 0.2.9) the
+    first-order filter has room -- test_compression.py has that side."""
+    sourced = lambda order: _leak(**{"rx.hpf_corner_hz": 200e3, "rx.hpf_order": order, "frontend.compression": False})  # noqa: E731
     one, two = leakage_budget(sourced(1)), leakage_budget(sourced(2))
     assert one.terms[0].level_rx_dbm == pytest.approx(-8.0)
     assert one.adc_headroom_db == pytest.approx(0.0, abs=0.1) and two.adc_headroom_db == pytest.approx(27.9, abs=0.1)
@@ -252,7 +254,7 @@ def test_recommended_blank_counts_what_the_steady_leakage_leaves_of_the_adc_rang
     leaves the sourced leakage 2.9 dB under full scale: the blank is longer
     than the step alone would ask for and still covers the clipped run; at
     240 kHz the two terms in phase reach full scale and no blank is named."""
-    near = _leak(**{"rx.hpf_corner_hz": 280e3, "rx.hpf_order": 1})
+    near = _leak(**{"rx.hpf_corner_hz": 280e3, "rx.hpf_order": 1, "frontend.compression": False})
     lb = leakage_budget(near)
     assert lb.adc_headroom_db == pytest.approx(2.9, abs=0.1) and not lb.steady_clipping
     a_fs = math.sqrt(10.0 ** ((near.rx.adc_fullscale_dbm - 30.0) / 10.0) * 50.0)
@@ -263,9 +265,10 @@ def test_recommended_blank_counts_what_the_steady_leakage_leaves_of_the_adc_rang
     sat = (np.abs(tm0.frame.real) >= a_fs - step / 2) | (np.abs(tm0.frame.imag) >= a_fs - step / 2)
     run = max(int(np.flatnonzero(sat[m, :500]).max()) + 1 for m in range(tm0.frame.shape[0]))
     assert 0 < run <= lb.blank_recommended_s * near.rx.adc_fs_hz < 2.0 * run
-    edge = leakage_budget(_leak(**{"rx.hpf_corner_hz": 240e3, "rx.hpf_order": 1}))
+    lin240 = {"rx.hpf_corner_hz": 240e3, "rx.hpf_order": 1, "frontend.compression": False}
+    edge = leakage_budget(_leak(**lin240))
     assert edge.adc_headroom_db > 0.0 and edge.steady_clipping and edge.blank_recommended_s == 0.0
-    assert run_time(_leak(**{"rx.hpf_corner_hz": 240e3, "rx.hpf_order": 1}), phase_noise=False, noise=False).extras["clipped_fraction"] > 0.05
+    assert run_time(_leak(**lin240), phase_noise=False, noise=False).extras["clipped_fraction"] > 0.05
 
 
 def test_blanking_zero_is_the_old_path_bit_for_bit():

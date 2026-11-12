@@ -6,7 +6,8 @@ to be sampled)::
 
     TX(t) = exp(j [Phi(t) + psi(t)])                  Phi: the ideal sweep, psi: LO error (chirp + phase noise)
     RX(t) = A TX(t - tau(t))                           tau(t) = 2 (R + v t) / c, the carrier term 2 pi f_c tau included
-    beat  = TX conj(RX) + noise -> brick-wall IF filter -> ADC rate -> quantiser
+    beat  = TX conj(RX) + noise -> compression (ahead of the high-pass) -> brick-wall IF filter -> ADC rate
+            -> high-pass -> compression (in band) -> quantiser
 
 The ideal part of ``Phi(t) - Phi(t - tau)`` is written out exactly (a
 quadratic in t, nothing is sampled at RF); the LO's error phase ``psi`` is a
@@ -35,6 +36,7 @@ import numpy as np
 from ..chirp import ChirpEngine, ChirpResult, noisy_chirp
 from ..config.schema import RadarConfig
 from ..link.budget import adc_amplitudes, link_budget
+from ..link.compression import rapp
 from ..link.leakage import leakage_tones
 from ..lo import LOProfile
 from ..mimo import VirtualArray
@@ -69,7 +71,8 @@ class TimeResult:
 
 def beat_frame(cfg: RadarConfig, chirp: ChirpResult | None, *, noise: bool = True, phase_noise: bool = True,
                quantise: bool = True, seed: int | None = None, n_chirps: int | None = None,
-               rc: RangeCorrelation | None = None, leakage: bool = True, hpf: bool = True) -> tuple[np.ndarray, dict]:
+               rc: RangeCorrelation | None = None, leakage: bool = True, hpf: bool = True,
+               compress: bool = True) -> tuple[np.ndarray, dict]:
     """The ADC frame and a dict of what was used: ``(n_chirps, n_samples)``
     for one TX and one RX (milestone 1, bit for bit), ``(n_chirps, n_rx,
     n_samples)`` otherwise -- chirp m is transmitted by TX ``m % n_tx``
@@ -143,6 +146,13 @@ def beat_frame(cfg: RadarConfig, chirp: ChirpResult | None, *, noise: bool = Tru
     clipped_kept = 0
     n_blank = cfg.n_blank
     use_hpf = hpf and cfg.rx.hpf_corner_hz > 0.0
+    # the receiver's two compression stages (link/compression.py), their 1 dB points referred to the ADC's scale
+    use_comp = compress and cfg.frontend.compression
+    g_rx, _ = cfg.frontend_value("rx_gain_db")
+    p_rapp, _ = cfg.frontend_value("rx_rapp_p")
+    vol = lambda dbm: math.sqrt(10.0 ** ((dbm - 30.0) / 10.0) * 50.0)            # noqa: E731
+    a1_oob = vol(cfg.frontend_value("p1db_oob_dbm")[0] + g_rx)
+    a1_in = vol(cfg.p1db_inband()[0] + g_rx)
     sos = hpf_sos(cfg.rx.adc_fs_hz, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order) if use_hpf else None
     hpf_state = [hpf_initial_state(sos) for _ in range(n_rx)] if use_hpf else None
     x_tx = va.tx.x_m if multi else np.zeros(1)
@@ -188,6 +198,8 @@ def beat_frame(cfg: RadarConfig, chirp: ChirpResult | None, *, noise: bool = Tru
             c = va.c_rx
             ys = [sum(c[k, j] * ys[j] for j in range(n_rx)) if np.any(c[k] != np.eye(n_rx)[k]) else ys[k] for k in range(n_rx)]
         for n, x in enumerate(ys):
+            if use_comp:
+                x = rapp(x, a1_oob, p_rapp)                          # the LNA / mixer: the RF envelope is the beat's
             spec = np.fft.fft(x)
             spec = np.where(keep, spec, 0.0)
             y = np.fft.ifft(spec[idx_adc]) * (n_adc / n_w)
@@ -196,6 +208,8 @@ def beat_frame(cfg: RadarConfig, chirp: ChirpResult | None, *, noise: bool = Tru
                     # warm the filter up on the first chirp (the receiver has been running), then filter it for real
                     _, hpf_state[n] = apply_hpf(y, cfg.rx.adc_fs_hz, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order, hpf_state[n], sos)
                 y, hpf_state[n] = apply_hpf(y, cfg.rx.adc_fs_hz, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order, hpf_state[n], sos)
+            if use_comp:
+                y = rapp(y, a1_in, p_rapp)                           # the IF stages after the high-pass
             if quantise:
                 over = (np.abs(y.real) > a_fs) | (np.abs(y.imag) > a_fs)
                 clipped += int(np.count_nonzero(over))
@@ -212,7 +226,8 @@ def beat_frame(cfg: RadarConfig, chirp: ChirpResult | None, *, noise: bool = Tru
     info = {"fs_wave_hz": fs_w, "n_wave": n_w, "signal_amplitude_v": a_s, "fullscale_v": a_fs,
             "noise_sigma_wave_v": sigma, "adc_step_v": step, "budget": budget, "n_chirps": m_chirps,
             "clipped_fraction": clipped / float(frame.size), "n_targets": len(tgt), "n_leakage_tones": len(leaks),
-            "clipped_fraction_after_blanking": clipped_kept / float(frame.size), "n_blank": n_blank, "lo_noise_split": split}
+            "clipped_fraction_after_blanking": clipped_kept / float(frame.size), "n_blank": n_blank, "lo_noise_split": split,
+            "compression": use_comp}
     return frame, info
 
 
@@ -420,7 +435,7 @@ def measured_pn_sidelobes(cfg: RadarConfig, offsets_m, n_chirps: int = 32, seed:
     name = cfg.processing.window_range if window_name is None else window_name
     rc = RangeCorrelation(LOProfile.from_config(cfg), cfg.tau_s())
     sb = beat_sideband(cfg, rc)
-    frame, _ = beat_frame(cfg, chirp, noise=False, phase_noise=True, quantise=False, seed=seed, n_chirps=n_chirps,
+    frame, _ = beat_frame(cfg, chirp, noise=False, phase_noise=True, quantise=False, compress=False, seed=seed, n_chirps=n_chirps,
                           rc=rc if chirp is None else None)
     spec = range_fft(frame, name, 1, cfg.n_blank)
     p = np.mean(np.abs(spec) ** 2, axis=0)

@@ -31,7 +31,7 @@ def test_grep_lists_every_sourced_number():
 def test_every_front_end_placeholder_exists_for_every_band():
     for band in ("60g_sensing", "77g_automotive"):
         for name in ("tx_power_dbm", "tx_gain_dbi", "rx_gain_dbi", "rx_gain_db", "nf_db", "p1db_oob_dbm", "p1db_inband_dbm",
-                     "lo_mult", "dco_pn_dbchz", "dco_pn_floor_dbchz", "tdc_res_s", "tdc_jitter_s", "tx_rx_isolation_db",
+                     "rx_rapp_p", "lo_mult", "dco_pn_dbchz", "dco_pn_floor_dbchz", "tdc_res_s", "tdc_jitter_s", "tx_rx_isolation_db",
                      "rx_coupling_c1_db"):
             e = sources.frontend_placeholder(band, name)
             sourced = band == "60g_sensing" and name in SOURCED_60G

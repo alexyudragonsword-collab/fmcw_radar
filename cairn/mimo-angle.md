@@ -59,6 +59,12 @@ authoring_mode: ai_generated
 > 0.2.8 起本节的数是有出处的前端数(发射 12 dBm、隔离 20 dB,`cairn/frontend-sources.md`):泄漏在接收端 −8 dBm。0.2.7 及以前用占位(10 dBm、25 dB,−15 dBm),
 > 所有电平低 7 dB;当时的数在括号里注明。机制没变,**一条结论变了**:1 阶 200 kHz 高通不再够用。
 
+>
+> **0.2.9 起默认接收机会压缩**(`cairn/frontend-sources.md` 的"接收机的压缩"一节)。本节下面的数是**线性接收机**的(`frontend.compression: false`,机制测试也这样跑);
+> 默认(有压缩,示例 08)对应:前级把泄漏压掉 5.24 dB,ADC 处 26.8 dBm(线性 32.0);2 阶 200 kHz 后 −29.2 dBm、裕量 +33.2 dB、削波 3.6 %;阶跃 8.78 V、推荐 blanking 4.77 µs、
+> blank 后 0.1 %(每 chirp 末尾 1 个样本);1 阶 200 kHz 裕量 5.3 dB、削波 3.1 %、blank 4.2 µs 后 0.1 %——**下面"1 阶不够"那条坑是线性接收机的结论**;2 阶 50 kHz 推荐 21.3 µs,能 blank。
+> 代价在回波上:−10.65 dB,目标对图峰 −28.2 dB(线性 −23.0);无噪声的 2–4 m 底相对目标 blank 后 −43.2 dB(无泄漏参照 −54.2)——回波低了 10.7 dB,"相对目标"的底跟着高 10.7 dB,
+> 不是瞬态没盖住;有噪声时 −34.0 对参照 −35.8,差的是 SNR 的 2.3 dB。
 - `link/leakage.py`:直接泄漏(τ 0.2 ns → 拍频 8 kHz)+ 近端反射体(2 cm,−10 dB 相对)。经同一 LO,τ ≈ 0 的 range correlation 让它几乎不带相噪
   (`window_sidelobe_at_target_db` −117 dBc:泄漏在目标格只剩窗旁瓣),但幅度:接收端 −8 dBm,ADC 裕量 **−28 dB**(满幅削波,时域引擎 `clipped_fraction` > 0.9)。
 - **压缩点是两个量(contains:decision)**:拍频低于高通截止的项在 IF 级之前就被滤掉,只压高通之前的那几级 → 对带外压缩点(−12 dBm);没有高通、或拍频高于截止(够远的反射体)
