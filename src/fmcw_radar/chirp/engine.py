@@ -22,21 +22,29 @@ loop's own response to that ramp, and from nothing else:
 ``engine: ideal``
     no error: the reference the resolution acceptance is measured against.
 
-Validity.  polar_tx declares the event engine valid only while the phase
-advances much less than one UI per reference cycle (its ``ui_per_ref_cycle``
-metric, the DCO-cycle deviation per reference cycle): a GFSK trajectory is a
-sub-cycle phase excursion the TDC must resolve.  A chirp is a different
-object: a deviation of ``B / 2N`` reads 5 UI per cycle on the 60 GHz
-default (495 %, measured), but the counter-assisted ADPLL counts whole DCO
-cycles and the TDC only the fraction, so a ramp is the loop's native
-operation (a fractional FCW is one).  The chirp engine therefore measures
-the metric, reports it in :attr:`ChirpResult.ui_per_ref_cycle_p99`, and
-checks the event engine against the linearised one on the mismatch
-transient (tests/test_chirp.py: step and decay agree cycle by cycle); the
-warning polar_tx raises inside ``ADPLLTwoPoint`` event mode is not
-triggered because the engine drives ``ADPLL.simulate`` directly.  What the
-metric does flag -- a sub-cycle trajectory -- a chirp does not have.
-cairn/chirp-engine.md records the measurement.
+Validity.  Until polar_tx a6c65f0 its event engine was declared valid only
+while the phase advances much less than one UI per reference cycle (the
+``ui_per_ref_cycle`` number, DCO-cycle deviation per reference cycle).  A
+chirp reads 5 UI per cycle on the 60 GHz default (495 %, measured) and the
+engine tracks it cycle by cycle against the linearised one
+(tests/test_chirp.py), which is what this library reported upstream
+(polar_tx#19).  The answer: the advance was never the limit.  The
+counter-assisted ADPLL counts whole DCO cycles and reads only the fraction
+with the TDC, so what it needs is a TDC that spans one DCO period;
+polar_tx's one failing preset had a quarter of one.  ``ADPLLTwoPoint`` now
+refuses such a TDC and the advance is a description of the modulation
+(:attr:`ChirpResult.ui_per_ref_cycle_p99`), nothing more.
+
+What a ramp does cost is in :attr:`ChirpResult.dco_dev_frac_p99`: the
+vendored TDC turns its code into a fraction of a cycle with the *nominal*
+DCO period, and the ramp takes the DCO ``B / 2N f_dco`` away from it (3.3 %
+on the default), so every reading is off by ``fraction x df/f``.  Measured
+on the default ramp by normalising with the actual period instead (a
+scratch edit, not shipped): frequency error 514 -> 498 kHz RMS at the
+carrier, the strongest quiet ghost -45.7 -> -48.1 dBc.  A real ADPLL
+normalising by a fixed period has the same term, so it stays as modelled;
+cairn/chirp-engine.md has the numbers and ROADMAP the open question (the
+vendored TDC-period calibrator).
 
 The analytic quadratic (``quadratic_reference``) is a *reference group*
 only: a frequency error of the same RMS shaped ``a (t/T - 1/2)^2``, for
@@ -73,7 +81,10 @@ class ChirpResult:
     dp_gain_used: float                 # direct-path gain the engine ran with (after calibration)
     dp_cal_trace: np.ndarray | None = None
     dp_cal_passes: list[dict] = field(default_factory=list)
-    ui_per_ref_cycle_p99: float = 0.0   # polar_tx's event-validity metric on this ramp
+    ui_per_ref_cycle_p99: float = 0.0   # DCO cycles of phase advance per reference cycle [UI]: a description of the
+                                        # ramp, not a validity limit (polar_tx#19)
+    dco_dev_frac_p99: float = 0.0       # |DCO deviation| / DCO centre: the error of a TDC normalised by the nominal
+                                        # period is the fraction read times this
     cpu_s: float = 0.0
     vouches_for_spurs: bool = False     # invariant #6: only the cycle-accurate engine does
     note: str = ""
@@ -160,7 +171,8 @@ def command_train(cfg: RadarConfig) -> tuple[np.ndarray, int, int]:
 
 
 def ui_per_ref_cycle_p99(f_cmd_dco: np.ndarray, fref: float) -> float:
-    """polar_tx's event-validity metric: DCO deviation per reference cycle [UI]."""
+    """DCO deviation per reference cycle [UI] (polar_tx's ``ui_per_ref_cycle_p99``: a
+    description of the modulation since polar_tx a6c65f0, not a validity limit)."""
     ui = np.abs(f_cmd_dco) / fref
     return float(np.percentile(ui, 99)) if ui.size else 0.0
 
@@ -203,6 +215,7 @@ class ChirpEngine:
         else:
             res = self._event(f_cmd, nc, n_ramp, n_idle, noise, seed, ui99)
         res.cpu_s = time.time() - t0
+        res.dco_dev_frac_p99 = float(np.percentile(np.abs(f_cmd), 99)) / float(self.pll.cfg.fout) if f_cmd.size else 0.0
         return res
 
     # ------------------------------------------------------------ response

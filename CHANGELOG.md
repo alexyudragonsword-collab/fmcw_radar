@@ -4,6 +4,21 @@
 
 ---
 
+## [0.2.7] — 2026-11-12 — 重新 pin polar_tx(b007e60):上游的 TDC 抖动项、内核里的 dp_cal、有效域的定论
+
+- **vendor 重新 pin**:polar_tx `7057738` → `b007e60`(嵌套的 pllsim 整体到 pll_simulator@5564c64;多一个 `core/tdcspurs.py`)。polar_tx#19 的答复(B1 的真因、C5)都在里面。
+- **TDC 抖动项用上游的**:`analyze()` 自带 `tdc_jitter`(pll_simulator#77),本库 `lo.py` 自己加的那段删了(同一个式子,相对差 2e-16);`simulate()` 的 TDC 抖动跨边沿回绕(#78)。
+- **`ChirpFlybackLMS` 改成步进内核**(`flyback_dp_step` + `kernel_view` / `kernel_done`):polar_tx 把 `dp_cal` 搬进了 ADPLL 的逐周期内核,只有 `.step/.value` 的对象会抛 `TypeError`。
+  校准轨迹与改前逐位相同;装了 numba 时编译与解释逐位一致。
+- **有效域**:495 % UI/周期不再是越界——polar_tx 查到真正的条件是 TDC 量程盖住一个 DCO 周期(本库 9.5 个)。`build_adpll` 拒绝盖不住的 TDC(三个引擎都拒绝);
+  报表的措辞改成描述量,并多一个 `ChirpResult.dco_dev_frac_p99`(DCO 偏离标称 ±3.3 %)。
+- **量了上游的一条推断**:TDC 按标称周期归一化在斜坡上不是"被环路吃掉":不抖动时频率误差 513.8 对 498.4 kHz RMS,最强静态鬼目标 −45.7 对 −48.1 dBc;
+  带 1 ps 抖动时看不出。保持建模,记在 ROADMAP P1 #2(可接 vendored 的 `TdcPeriodCal`)。
+- 指纹(numbers-move):1838 值里 253 个。chirp 曲线与静态鬼目标逐位不变;相噪旁瓣只动末位(≤ 1.75e-11 dB);带噪声的曲线只在抖动非零时动(回绕),
+  随之时域帧 SNR ≤ 0.09 dB、峰值旁瓣 ≤ 0.43 dB、检测数 ±3,示例 02 的 1 ps 行 −54.6 → −54.8 dBc(换了位置)。
+
+---
+
 ## [0.2.6] — 2026-11-12 — TDC 抖动:占位、剖面里的一项、相干杂散(P1 #1(a))
 
 - **`lo.tdc_jitter_s`**(None → 占位 1 ps RMS,`assumed`):进 `TDCConfig.jitter_rms_s`。之前它是 0,且不在 `sources.yaml` 里——一个没登记的占位。来源表 24 → 26 条 `assumed`。

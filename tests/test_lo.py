@@ -19,9 +19,10 @@ def test_adpll_is_built_from_the_config_alone(cfg60):
 
 
 def test_profile_is_the_analysis_times_n_squared(cfg60):
-    """...plus the one term pllsim's analyze() does not have: the TDC's
-    jitter, a white timing error at the node the quantisation error enters,
-    so that term's shape and 12 sigma^2 / t_res^2 of its power."""
+    """The TDC's jitter is analyze()'s own term since the re-pin to polar_tx
+    b007e60 (pll_simulator #77); this library used to add it.  Either way it
+    is a white timing error at the node the quantisation error enters: that
+    term's shape and 12 sigma^2 / t_res^2 of its power, once."""
     quiet_tdc = apply_overrides(cfg60, {"lo.tdc_jitter_s": 0.0})
     prof = LOProfile.from_config(quiet_tdc)
     ana = build_adpll(quiet_tdc).analyze()
@@ -33,35 +34,13 @@ def test_profile_is_the_analysis_times_n_squared(cfg60):
     assert cfg60.lo_value("tdc_jitter_s") == (1e-12, "assumed") and build_adpll(cfg60).cfg.tdc.jitter_rms_s == 1e-12
     assert np.allclose(live.components["tdc_jitter"], live.components["tdc_quant"] * 12.0 * (1.0 / 5.0) ** 2, rtol=1e-9)
     assert np.allclose(live.s_phi, prof.s_phi + live.components["tdc_jitter"], rtol=1e-9)
+    assert np.allclose(live.s_phi, sum(live.components.values()), rtol=1e-12)            # in the total once
     assert float(live.l_dbc(f)) - float(prof.l_dbc(f)) == pytest.approx(0.6, abs=0.15)      # a third of the in-band noise, half as much again
     # the sampled loop's images are cut: beyond fref/2 the DCO alone (Leeson 1/f^2 down to its floor)
     osc = build_adpll(cfg60).cfg.osc
     for f in (1e8, 1e9):
         assert float(prof.l_dbc(f)) == pytest.approx(10 * np.log10(osc.leeson("dco").psd(f) * 16 / 2), abs=0.05)
     assert float(prof.l_dbc(1e9)) < float(prof.l_dbc(5e7)) - 10.0
-
-
-def test_tdc_jitter_term_is_counted_once_whichever_pllsim_is_vendored():
-    """pll_simulator gained the same term in analyze() at 5564c64 (#76 / #77).
-    The copy vendored here does not have it, so the profile adds it; once a
-    re-pin brings a breakdown that already carries ``tdc_jitter`` the profile
-    must leave it alone, or the jitter is in the LO twice."""
-    from fmcw_radar.lo import _with_tdc_jitter
-
-    quant = np.array([4.0e-10, 2.0e-10])
-    old = {"ref": np.array([1e-10, 1e-10]), "tdc_quant": quant}
-    comp, total = _with_tdc_jitter(old, sum(old.values()), 5e-12, 1e-12)
-    assert np.allclose(comp["tdc_jitter"], quant * 0.48) and np.allclose(total, sum(comp.values()))
-    assert "tdc_jitter" not in old                                        # the caller's dict is not touched
-    # upstream's own term, the same formula: nothing is added on top
-    new = {**old, "tdc_jitter": quant * 0.48}
-    comp2, total2 = _with_tdc_jitter(new, sum(new.values()), 5e-12, 1e-12)
-    assert comp2 is new and np.allclose(total2, total)
-    # no jitter, or a breakdown without a quantisation term: nothing to add
-    assert _with_tdc_jitter(old, sum(old.values()), 5e-12, 0.0)[0] is old
-    assert _with_tdc_jitter({"ref": quant}, quant, 5e-12, 1e-12)[0] == {"ref": quant}
-    # the vendored copy is still the one without the term (when this fails, the re-pin has happened: drop the note in ROADMAP)
-    assert "tdc_jitter" not in build_adpll(RadarConfig()).analyze().pn_breakdown
 
 
 def test_multiplier_scales_the_phase_noise_by_20_log_n():

@@ -19,8 +19,11 @@ Two calibrators, both running on the vendored engines without touching them:
   dividing ``dp_gain`` by ``1 + eps_hat``; one pass takes a 5 % mismatch to
   1e-4 on the event engine.  The default (``lo.dp_cal: offline``).
 * :class:`ChirpFlybackLMS` -- an online LMS with polar_tx's ``dp_cal``
-  contract (``.step(err, reg)`` per reference cycle, ``.value`` read by the
-  engine) that updates only in a window of ``window_cycles`` after each
+  contract.  Since polar_tx b007e60 that is a step kernel run inside the
+  ADPLL's per-cycle loop (``kernel_view`` hands over ``flyback_dp_step``
+  and its state, ``kernel_done`` takes the state and the trace back); the
+  object's own ``.step(err, reg)`` calls the same kernel, so there is one
+  update rule.  It updates only in a window of ``window_cycles`` after each
   flyback (a regressor step larger than ``step_threshold``), by the
   magnitude of the phase-error difference times the flyback's sign.  The
   vendored ``SignSignLMS`` walks the wrong way on a sawtooth (1.05 ->
@@ -37,37 +40,67 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..vendor.polartx.vendor.pllsim.core.jit import kernel
+
+
+@kernel
+def flyback_dp_step(st: np.ndarray, pr: np.ndarray, err: float, reg: float,
+                    rec: np.ndarray, n: int) -> float:
+    """:class:`ChirpFlybackLMS` as the ADPLL kernel's dp_cal step.  ``st`` is
+    (value, previous err, previous reg, cycles left in the window, flyback
+    sign, seen a cycle, flybacks); ``pr`` is (mu, window_cycles, step_threshold)."""
+    if st[5] != 0.0:
+        de = err - st[1]
+        dr = reg - st[2]
+        if abs(dr) > pr[2]:
+            st[3] = pr[1]
+            st[4] = 1.0 if dr > 0.0 else -1.0
+            st[6] += 1.0
+        elif st[3] > 0.0:
+            # the gain too high: the DCO undershoots a negative step and the
+            # phase error (reference minus DCO) rises -- de > 0, sign < 0
+            st[0] += pr[0] * de * st[4]
+            st[3] -= 1.0
+    st[1] = err
+    st[2] = reg
+    st[5] = 1.0
+    rec[n, 0] = st[0]
+    return st[0]
+
 
 class ChirpFlybackLMS:
     """value += mu x d(err) x sign(flyback step), on the ``window_cycles`` after each flyback."""
 
     def __init__(self, init: float, mu: float, window_cycles: int, step_threshold: float):
-        self.value = float(init)
         self.mu = float(mu)
         self.window_cycles = int(window_cycles)
         self.step_threshold = float(step_threshold)
         self.trace: list[float] = []
-        self.flybacks = 0
-        self._err = None
-        self._reg = None
-        self._left = 0
-        self._sign = 0.0
+        self._st = np.array([float(init), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        self._pr = np.array([self.mu, float(self.window_cycles), self.step_threshold])
+        self._rec = np.empty((1, 1))
+
+    @property
+    def value(self) -> float:
+        return float(self._st[0])
+
+    @property
+    def flybacks(self) -> int:
+        return int(self._st[6])
 
     def step(self, err: float, reg: float) -> float:
-        if self._err is not None:
-            de, dr = err - self._err, reg - self._reg
-            if abs(dr) > self.step_threshold:
-                self._left = self.window_cycles
-                self._sign = float(np.sign(dr))
-                self.flybacks += 1
-            elif self._left > 0:
-                # the gain too high: the DCO undershoots a negative step and the
-                # phase error (reference minus DCO) rises -- de > 0, sign < 0
-                self.value += self.mu * de * self._sign
-                self._left -= 1
-        self._err, self._reg = float(err), float(reg)
-        self.trace.append(self.value)
-        return self.value
+        v = float(flyback_dp_step(self._st, self._pr, float(err), float(reg), self._rec, 0))
+        self.trace.append(v)
+        return v
+
+    def kernel_view(self, n_cycles: int):
+        """(step, state, params, record) for the ADPLL kernel: one value per cycle in the record."""
+        return flyback_dp_step, self._st, self._pr, np.empty((n_cycles, 1))
+
+    def kernel_done(self, st: np.ndarray, rec: np.ndarray, n_steps: int) -> None:
+        """Take the state and the per-cycle values back after a run."""
+        self._st = st
+        self.trace.extend(rec[:n_steps, 0].tolist())
 
 
 def offline_dp_gain(pm, phase_cmd: np.ndarray, phase_out: np.ndarray, fs: float) -> dict:

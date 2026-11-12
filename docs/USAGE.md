@@ -37,7 +37,7 @@ blanking 的时长,0.2.1:距离窗按剩下的样本重配,`cfg.n_blank` 是样�
   `cfar_pd_swerling1`、`cfar_statistics(cfg)` / `cfar_statistics_2d(..., n_looks)` / `cfar_pd(snr_db, stats)` / `cfar_snr_for_pd`(`processing.cfarstats`)、
   `threshold_factor(n, pfa, n_looks)` / `ca_cfar_2d(..., n_looks)` / `cfar_window(shape, guard, train)`、`hpf_attenuation_db` / `apply_hpf`;`range_window(name, n, n_blank)` 是 blanking 后的距离窗(所有距离 FFT 与窗统计都走它)。
 - `ChirpEngine(cfg).run(noise=False, n_chirps=None)` → `ChirpResult`:`f_err_dco_hz` 整帧曲线、`ramp(k)` / `ramp_carrier(k)`、`metrics(k)`
-  (峰值、RMS、底、建立时间)、`dp_cal_passes` / `dp_cal_trace`、`ui_per_ref_cycle_p99`、`vouches_for_spurs`;`run(noise=True, seed=…)` 时 `noise`、`osc_phase_dco_rad`、
+  (峰值、RMS、底、建立时间)、`dp_cal_passes` / `dp_cal_trace`、`ui_per_ref_cycle_p99` / `dco_dev_frac_p99`(斜坡的两个描述量:每参考周期相位推进、DCO 偏离标称的比例)、`vouches_for_spurs`;`run(noise=True, seed=…)` 时 `noise`、`osc_phase_dco_rad`、
   `lo_noise_in_curve`(all / quantisation / none / unverified)。`noisy_chirp(cfg, seed, n_chirps)` 是带缓存的 noise=True 运行;`coherent_spurs(cfg, chirp)`
   (`engine.statistical`)在它上面找一帧里相干的杂散。`lo.tdc_jitter_s`(TDC 抖动,None → 占位 1 ps)。
 - `RangeCorrelation(profile, tau)`:`residual_psd(f)`、`sidelobe_dbc(offset_hz, enbw_hz)`、`synthesize_residual(n, fs, rng)`、`measured_residual_psd`。

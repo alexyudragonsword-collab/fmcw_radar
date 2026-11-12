@@ -1,12 +1,12 @@
 window alone (hann): -3 dB width 5.34 cm, peak sidelobe -32.2 dB; c/2B = 3.75 cm
 DCO 15 GHz x4, ramp 1000 MHz at the DCO in 100 us, fref 100 MHz, loop 1 MHz
 
-matched, event (loop + quantisation) [event, 0.20 s]
+matched, event (loop + quantisation) [event, 0.23 s]
   ramp 2: initial error 0.200 MHz settled to +-2680 kHz in 0 ns; peak 1.400 MHz, RMS 513.2 kHz, floor 536.0 kHz RMS (carrier)
   range response: -3 dB width 5.34 cm, peak sidelobe -31.5 dB, ISLR -28.6 dB, beat phase perturbation 56.1 mrad RMS
   this ramp's pattern, undithered (offset m, dBc): +4.86 / -45.5, -4.86 / -45.8, -12.18 / -46.1, -3.93 / -47.7
 
-5 % mismatch, event, no cal [event, 0.20 s]
+5 % mismatch, event, no cal [event, 0.31 s]
   ramp 2: initial error 199.401 MHz settled to +-3988 kHz in 1470 ns; peak 199.400 MHz, RMS 6187.8 kHz, floor 544.2 kHz RMS (carrier)
   range response: -3 dB width 5.34 cm, peak sidelobe -31.5 dB, ISLR -29.0 dB, beat phase perturbation 1070.0 mrad RMS
   this ramp's pattern, undithered (offset m, dBc): -15.93 / -47.7, -13.31 / -48.1, +6.18 / -48.1, +7.32 / -48.2
@@ -16,12 +16,12 @@ matched, event (loop + quantisation) [event, 0.20 s]
   range response: -3 dB width 5.34 cm, peak sidelobe -31.5 dB, ISLR -33.0 dB, beat phase perturbation 1064.4 mrad RMS
   this ramp's pattern, undithered (offset m, dBc): +10.01 / -62.4, +17.46 / -65.7  [linearised curve: not vouched for]
 
-5 % mismatch, event, offline cal x2 [event, 0.60 s] passes eps=0.0500,0.0001
+5 % mismatch, event, offline cal x2 [event, 0.70 s] passes eps=0.0500,0.0001
   ramp 2: initial error 0.200 MHz settled to +-2702 kHz in 0 ns; peak 1.400 MHz, RMS 514.1 kHz, floor 540.5 kHz RMS (carrier)
   range response: -3 dB width 5.34 cm, peak sidelobe -31.5 dB, ISLR -28.4 dB, beat phase perturbation 57.1 mrad RMS
   this ramp's pattern, undithered (offset m, dBc): +7.68 / -47.2, -3.93 / -47.2, +3.93 / -47.3, -7.69 / -47.4
 
-5 % mismatch, event, online cal [event, 0.24 s] online gain 1.05 -> 1.0311 -> 1.0082 -> 1.0023 -> 1.0004 over 4 chirps (post-flyback LMS)
+5 % mismatch, event, online cal [event, 0.31 s] online gain 1.05 -> 1.0311 -> 1.0082 -> 1.0023 -> 1.0004 over 4 chirps (post-flyback LMS)
   ramp 2: initial error 32.599 MHz settled to +-2689 kHz in 810 ns; peak 32.600 MHz, RMS 957.4 kHz, floor 537.8 kHz RMS (carrier)
   range response: -3 dB width 5.34 cm, peak sidelobe -31.5 dB, ISLR -28.4 dB, beat phase perturbation 135.9 mrad RMS
   this ramp's pattern, undithered (offset m, dBc): +4.86 / -45.2, -4.86 / -45.6, +7.68 / -46.2, -2.81 / -46.2
@@ -33,7 +33,7 @@ reference group: analytic quadratic of the same RMS (6188 kHz at the carrier): -
 the pattern above is one noise-off ramp.  With the loop's noise on, over 32 ramps, what stays coherent (TDC 5 ps; its own jitter dithers the quantisation and is noise in the LO profile):
   TDC jitter [ps RMS] | strongest coherent spurs (offset m / dBc)             | search limit [dBc] | LO L(1 MHz) [dBc/Hz]
                   0.0 | -12.19 / -49.1, +7.68 / -49.7, -7.69 / -49.8         |              -57.3 |                -80.2
-                  0.5 | +7.68 / -51.3, -7.69 / -51.4, +9.18 / -52.1          |              -57.0 |                -80.0
-                  1.0 | +7.68 / -54.6, -7.69 / -54.9, -11.81 / -55.5         |              -56.2 |                -79.6  <- the placeholder
+                  0.5 | +7.68 / -50.7, -7.69 / -50.7, +9.18 / -51.8          |              -56.9 |                -80.0
+                  1.0 | -11.81 / -54.8, -9.20 / -56.1, +9.19 / -56.4         |              -56.2 |                -79.6  <- the placeholder
                   2.0 | none above the limit                                 |              -54.8 |                -78.1
   wrote examples/output/02_chirp_nonlinearity.png

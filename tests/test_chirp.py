@@ -29,13 +29,29 @@ def test_command_train_is_a_sawtooth_of_b_over_n(cfg60):
 
 
 def test_validity_metric_is_measured_and_far_outside_polar_tx_domain(cfg60):
-    """polar_tx's event domain is < 10 % UI per reference cycle; a 1 GHz ramp
-    at 100 MHz fref reads 495 % -- measured, reported, and not what decides
-    (see the engine docstring and cairn/chirp-engine.md)."""
+    """polar_tx's event domain used to be < 10 % UI per reference cycle; a
+    1 GHz ramp at 100 MHz fref reads 495 % and tracks, which is what took the
+    limit away upstream (polar_tx#19, a6c65f0): the number is a description
+    now.  What a ramp does cost is the DCO's distance from its nominal
+    period, 3.3 % here (see the engine docstring and cairn/chirp-engine.md)."""
     f, _, _ = command_train(cfg60)
     assert ui_per_ref_cycle_p99(f, cfg60.lo.fref_hz) == pytest.approx(4.95, abs=0.01)
     r = ChirpEngine(_cfg(**{"lo.engine": "ideal"})).run()
     assert r.ui_per_ref_cycle_p99 == pytest.approx(4.95, abs=0.01)
+    assert r.dco_dev_frac_p99 == pytest.approx(0.495e9 / 15e9, rel=1e-3)
+
+
+def test_tdc_must_span_a_dco_period():
+    """polar_tx's finding behind its B1: the counter reads whole cycles and
+    the TDC the fraction, so a TDC shorter than one DCO period saturates.
+    Ours spans 9.5 periods; one that does not is refused, not simulated."""
+    from fmcw_radar.lo import build_adpll
+
+    pll = build_adpll(RadarConfig())
+    assert pll.cfg.tdc.t_res * (2 ** pll.cfg.tdc.n_bits - 1) * pll.cfg.fout == pytest.approx(9.525, abs=0.01)
+    for engine in ("event", "response", "ideal"):                 # 51 ps against 66.7 ps: no engine takes it
+        with pytest.raises(ValueError, match="must span one period"):
+            build_adpll(apply_overrides(RadarConfig(), {"lo.tdc_res_s": 0.4e-12, "lo.engine": engine}))
 
 
 def test_ideal_engine_has_no_error():
@@ -115,6 +131,36 @@ def test_flyback_lms_contract():
     cal.step(0.6, -0.8)
     cal.step(1.0, -0.7)      # the window has closed
     assert cal.value == pytest.approx(1.0 - 1e-2 * 0.6) and len(cal.trace) == 6
+
+
+def test_flyback_lms_in_the_kernel_is_the_object_step_for_step():
+    """polar_tx b007e60 runs dp_cal inside the ADPLL kernel.  The calibrator's
+    kernel view and its own .step() are one function: the same errors and
+    regressors give the same values, bit for bit, and the state comes back."""
+    rng = np.random.default_rng(3)
+    n = 400
+    reg = np.tile(np.concatenate([np.linspace(-1.0, 1.0, 100)]), 4)
+    err = 0.05 * rng.standard_normal(n)
+    a = ChirpFlybackLMS(1.03, 1e-2, window_cycles=20, step_threshold=0.5)
+    for e, r in zip(err, reg):
+        a.step(e, r)
+    b = ChirpFlybackLMS(1.03, 1e-2, window_cycles=20, step_threshold=0.5)
+    step, st, pr, rec = b.kernel_view(n)
+    for i in range(n):
+        step(st, pr, float(err[i]), float(reg[i]), rec, i)
+    b.kernel_done(st, rec, n)
+    assert a.trace == b.trace and a.value == b.value and a.flybacks == b.flybacks == 3
+    assert a.value != 1.03
+    # an object with only .step / .value is refused by the engine, by name
+    class Old:
+        value = 1.0
+
+        def step(self, err, reg):
+            return 1.0
+
+    from fmcw_radar.lo import build_adpll
+    with pytest.raises(TypeError, match="kernel_view"):
+        build_adpll(RadarConfig()).simulate(50, noise=False, mod_freq=np.zeros(50), dp_cal=Old())
 
 
 def test_quadratic_reference_is_labelled_and_scaled():

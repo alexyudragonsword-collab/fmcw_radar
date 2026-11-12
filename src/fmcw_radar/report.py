@@ -86,7 +86,9 @@ def to_markdown(rep: dict) -> str:
                   f"Engine `{C['engine']}`{' (cycle-accurate: may vouch for spurs)' if C.get('vouches_for_spurs') else ' (linearised: cannot vouch for spurs)'}; "
                   f"direct-path gain used {C['dp_gain_used']:.5f}"
                   + (f" after offline passes eps = {', '.join(f'{e:.2e}' for e in C['dp_cal_passes'])}" if C.get('dp_cal_passes') else "")
-                  + f"; polar_tx's event-validity metric {100 * C['ui_per_ref_cycle_p99']:.0f} % UI per reference cycle.",
+                  + f"; the ramp advances the phase {100 * C['ui_per_ref_cycle_p99']:.0f} % of a UI per reference cycle (a description, "
+                  f"not a limit: the TDC spans the DCO period) and takes the DCO {100 * C.get('dco_dev_frac_p99', 0.0):.1f} % off its centre "
+                  "(the TDC reads the fraction of a cycle against the nominal period, so each reading is off by that share of it).",
                   "",
                   f"Frequency error at the carrier (ramp {N.get('ramp', '?')}): peak {C['peak_hz'] / 1e3:.1f} kHz, RMS "
                   f"{C['rms_hz'] / 1e3:.1f} kHz, floor {C['floor_rms_hz'] / 1e3:.1f} kHz RMS, initial error after the "
