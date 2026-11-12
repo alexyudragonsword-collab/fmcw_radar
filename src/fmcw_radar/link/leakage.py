@@ -31,8 +31,13 @@ filter has attenuated anything -- the first microseconds of every chirp
 clip whatever the steady-state headroom says.  The closed form here is the
 step's size (every term's ``2 A |sin(d_phi / 2)|``, summed) and the time
 its decay through a Butterworth of order k (slowest pole damping
-``sin(pi / 2k)``) takes to fall under the ADC's full scale, plus one time
-constant: ``blank_recommended_s``, what ``rx.blank_s`` should be.
+``sin(pi / 2k)``) takes to fall under what the ADC has left above the
+steady leakage (full scale less the terms' amplitudes after the filter),
+plus one time constant: ``blank_recommended_s``, what ``rx.blank_s`` should
+be.  When the steady leakage itself reaches full scale behind the filter
+there is nothing a blank can do -- the samples clip for the whole chirp --
+and the budget says so (``steady_clipping``) instead of naming a time; the
+figure to read then is the attenuation still needed.
 """
 
 from __future__ import annotations
@@ -75,9 +80,11 @@ class LeakageBudget:
     hpf_atten_at_target_db: float       # what the high-pass costs the target's own beat (noise and tone alike)
     transient_step_v: float = 0.0       # the leakage phase jump at the chirp start as a step at the ADC [V], worst case
     hpf_time_constant_s: float = 0.0    # 1 / (2 pi f_c sin(pi / 2k)): the high-pass's slowest decay
-    blank_recommended_s: float = 0.0    # for the step to fall under full scale, plus one time constant (0: no clipping)
+    blank_recommended_s: float = 0.0    # for the step to fall under the ADC's remaining range, plus one time constant
+                                        # (0: nothing to blank -- no transient clips, or the leakage clips for good)
     blank_s: float = 0.0                # what the config blanks
     blank_loss_db: float = 0.0          # the window refitted to the remaining samples: its SNR loss against no blanking
+    steady_clipping: bool = False       # the leakage is at or over full scale behind the high-pass: blanking cannot help
 
     def as_rows(self) -> list[tuple[str, float, str]]:
         rows = [("TX-RX isolation", self.isolation_db, f"dB (source: {self.isolation_source})")]
@@ -95,7 +102,8 @@ class LeakageBudget:
                  ("high-pass at the target's beat", self.hpf_atten_at_target_db, "dB"),
                  ("chirp-start step at the ADC (leakage phase jump)", self.transient_step_v, "V"),
                  ("high-pass time constant", self.hpf_time_constant_s * 1e6, "us"),
-                 ("blanking recommended (step under full scale + 1 time constant)", self.blank_recommended_s * 1e6, "us"),
+                 ("blanking recommended: none, the steady leakage clips behind this high-pass" if self.steady_clipping else
+                  "blanking recommended (step under the ADC's remaining range + 1 time constant)", self.blank_recommended_s * 1e6, "us"),
                  ("blanking configured", self.blank_s * 1e6, "us"),
                  ("blanking SNR loss (window on the remaining samples)", self.blank_loss_db, "dB")]
         return rows
@@ -153,15 +161,20 @@ def leakage_budget(cfg: RadarConfig, budget: LinkBudget | None = None) -> Leakag
         step_v += 2.0 * amp * abs(math.sin(math.pi * t.beat_hz * cfg.chirp.duration_s))
     if cfg.rx.hpf_corner_hz > 0.0:
         tau_hpf = 1.0 / (2.0 * math.pi * cfg.rx.hpf_corner_hz * math.sin(math.pi / (2.0 * cfg.rx.hpf_order)))
-        blank_rec = tau_hpf * (math.log(step_v / a_fs) + 1.0) if step_v > a_fs else 0.0
+        # what the filter leaves of every term in the steady state, in phase at worst: the transient has to
+        # decay into the range the ADC has left above it.  Nothing left: the samples clip all chirp long
+        a_ss = sum(math.sqrt(10.0 ** ((t.level_adc_hpf_dbm - 30.0) / 10.0) * 50.0) for t in terms)
+        steady = a_ss >= a_fs
+        room = a_fs - a_ss
+        blank_rec = tau_hpf * (math.log(step_v / room) + 1.0) if (not steady and step_v > room) else 0.0
     else:
-        tau_hpf, blank_rec = 0.0, 0.0                                 # no filter: the leakage itself clips, not a transient
+        tau_hpf, blank_rec, steady = 0.0, 0.0, False                 # no filter: the leakage itself clips, not a transient
     w_full = range_window(cfg.processing.window_range, n)
     w_blank = range_window(cfg.processing.window_range, n, cfg.n_blank)
     blank_loss = 10.0 * math.log10(enbw_bins(w_blank) / enbw_bins(w_full))
     return LeakageBudget(tuple(terms), iso, iso_src, p1_margin, p1_kind, headroom, headroom0,
                          max(0.0, 6.0 - headroom), b.ps_adc_dbm - att_target, at_cell, att_target,
-                         step_v, tau_hpf, blank_rec, cfg.rx.blank_s, blank_loss)
+                         step_v, tau_hpf, blank_rec, cfg.rx.blank_s, blank_loss, steady)
 
 
 def leakage_tones(cfg: RadarConfig) -> list[tuple[float, float]]:
