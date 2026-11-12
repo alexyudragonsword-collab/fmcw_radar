@@ -105,14 +105,38 @@ def test_file_profile_reads_back_the_live_analysis(cfg60):
 
 
 def test_file_profile_scales_to_the_dco_frequency(tmp_path):
-    """A 10 GHz profile read at a 15 GHz DCO: (15/10)^2, then x N^2."""
+    """A 10 GHz profile read at a 15 GHz DCO: (15/10)^2, then x N^2 (the
+    ideal chirp engine: nothing of a chirp generator is added to the file)."""
     import yaml
 
     p = tmp_path / "ten.yaml"
     yaml.safe_dump({"f0_hz": 10e9, "f_hz": [1e3, 1e6, 5e7], "l_dbc_hz": [-80.0, -100.0, -130.0], "source": "t"},
                    p.open("w"))
-    prof = LOProfile.from_config(apply_overrides(RadarConfig(), {"lo.profile": str(p)}))
+    prof = LOProfile.from_config(apply_overrides(RadarConfig(), {"lo.profile": str(p), "lo.engine": "ideal"}))
     assert float(prof.l_dbc(1e6)) == pytest.approx(-100 + 20 * np.log10(1.5) + 20 * np.log10(4), abs=1e-6)
+    assert prof.components is None
+
+
+def test_foreign_noise_file_gets_the_chirp_generators_quantisation_once(cfg60):
+    """Under the event engine the chirp is still this library's two-point
+    ADPLL, whose cycle-accurate curve carries its TDC and DCO quantisation
+    whatever noise file is named.  The file does not know of it, so the
+    profile adds the live analysis's two terms (the statistical engine then
+    counts them) and the time engine takes them back out of what it
+    synthesises (the curve already is them): once in each engine."""
+    x10 = "vendor/mmw60/data/clock_profiles/pllsim_wu19_x10_60p48g_floor150.yaml"
+    bare = LOProfile.from_config(apply_overrides(cfg60, {"lo.profile": x10, "lo.engine": "ideal"}))
+    prof = LOProfile.from_config(apply_overrides(cfg60, {"lo.profile": x10}))
+    live = LOProfile.from_config(cfg60)
+    f = np.array([1e5, 1e6, 4e6])
+    assert np.allclose(bare.l_dbc(f), [-92.1, -98.6, -110.3], atol=0.05)          # mmw60_trx's x10 file at 60.48 GHz, read at 60
+    assert set(prof.components) == {"file", "tdc_quant", "dco_quant"} and np.allclose(sum(prof.components.values()), prof.s_phi)
+    q = live.components["tdc_quant"] + live.components["dco_quant"]
+    assert np.allclose(prof.components["tdc_quant"] + prof.components["dco_quant"],
+                       np.interp(prof.f_hz, live.f_hz, q) * (prof.f_hz <= 0.5 * cfg60.lo.fref_hz), rtol=1e-6)
+    assert np.allclose(prof.without("tdc_quant", "dco_quant").l_dbc(f), bare.l_dbc(f), atol=1e-6)
+    # the generator's quantisation, not the x10 LO, is the floor in band: -85.1 against the file's -98.6 at 1 MHz
+    assert float(prof.l_dbc(1e6)) == pytest.approx(-85.1, abs=0.1) and prof.notes and len(prof.spurs) == 6
 
 
 def test_bad_profile_file_is_refused(tmp_path):

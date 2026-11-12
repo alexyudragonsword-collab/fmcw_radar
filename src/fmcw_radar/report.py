@@ -135,6 +135,10 @@ def to_markdown(rep: dict) -> str:
                       f"the LO's noise in that many ramps."
                       + (f" Undithered (the noise-off curve) the strongest is {quiet[0][1]:.1f} dBc at {quiet[0][0]:+.2f} m." if quiet else "")
                       + ("" if ghosts else " None found.")]
+        elif ghosts and N.get("ghosts_vouched"):
+            lines += ["", "Ghost targets of the chirp's frequency error: the undithered pattern of the cycle-accurate curve. The LO's "
+                      "noise is a file's here, so the chirp generator runs with its own noise off and nothing is known to dither "
+                      "its TDC; with the loop's own noise (no `lo.profile`) the frame's coherent spurs are what is listed instead:"]
         elif ghosts:
             lines += ["", "Ghost targets of the chirp's frequency error (local maxima of that response beyond the "
                       "window's sidelobes; from a linearised curve: NOT vouched for, invariant #6):"]

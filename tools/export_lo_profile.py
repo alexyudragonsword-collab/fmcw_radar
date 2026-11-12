@@ -41,6 +41,10 @@ def main(argv=None) -> int:
     s = prof.s_phi[keep] / (cfg.lo_mult ** 2)
     data = {"f0_hz": float(cfg.dco_center_hz), "f_hz": [float(x) for x in prof.f_hz[keep]],
             "l_dbc_hz": [float(x) for x in 10.0 * np.log10(np.maximum(s, 1e-300) / 2.0)], "spurs": [],
+            # what the total is made of, by source, in the same units: a reader that knows the split (fmcw_radar's
+            # time engine) can leave out what a cycle-accurate chirp curve already carries; others ignore the key
+            "components": {k: [float(x) for x in 10.0 * np.log10(np.maximum(v[keep] / (cfg.lo_mult ** 2), 1e-300) / 2.0)]
+                           for k, v in prof.components.items()},
             "source": f"fmcw_radar tools/export_lo_profile.py from {args.config.name}: vendored pll_simulator ADPLL "
                       f"analyze() plus the TDC-jitter term at {cfg.dco_center_hz / 1e9:.4g} GHz (source: assumed placeholder LO)"}
     with open(args.out, "w", encoding="utf-8") as fh:

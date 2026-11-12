@@ -124,7 +124,7 @@ def beat_frame(cfg: RadarConfig, chirp: ChirpResult | None, *, noise: bool = Tru
             prof = prof.without("tdc_quant", "dco_quant")
             split = "curve: TDC and DCO quantisation (cycle-accurate); profile: everything else"
         elif content == "quantisation":
-            split = "curve: TDC and DCO quantisation; profile: a file with no breakdown, synthesised whole (quantisation counted twice)"
+            split = "curve: TDC and DCO quantisation; profile: no breakdown to take them out of, synthesised whole"
         else:
             split = "profile: everything"
         rc = RangeCorrelation(prof, cfg.tau_s())

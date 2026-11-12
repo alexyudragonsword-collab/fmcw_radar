@@ -1,0 +1,51 @@
+# 60 GHz sensing radar with mmw60_trx's x10 LO: the same radar as radar_60g_sensing.yaml,
+# its LO noise read from mmw60_trx's pllsim_wu19_x10_60p48g_floor150.yaml (a 6.048 GHz
+# fractional-N PLL, pllsim's Wu 2019 preset, behind a x10 multiplier with a -150 dBc/Hz
+# floor: mmw60_trx's baseline), vendored under src/fmcw_radar/vendor/mmw60/.  The chirp is
+# still this library's two-point ADPLL (lo.engine: event), so its TDC and DCO quantisation
+# stays in the curve and is added to the file's profile (cairn/chirp-engine.md): in band it,
+# not the x10 LO, is the floor.  lo.engine: ideal reads the file alone.
+schema_version: 1
+band:
+  kind: 60g_sensing
+  center_hz: 60.0e9
+  sweep_hz: 4.0e9
+chirp:
+  shape: sawtooth
+  duration_s: 100.0e-6
+  idle_s: 0.0
+  n_chirps: 64
+lo:
+  fref_hz: 100.0e6
+  loop_bw_hz: 1.0e6
+  phase_margin_deg: 60.0
+  kdco_hz: 50.0e3
+  dp_gain: 1.0
+  dp_cal: offline
+  dp_cal_iterations: 2
+  engine: event
+  profile: vendor/mmw60/data/clock_profiles/pllsim_wu19_x10_60p48g_floor150.yaml
+frontend: {}
+channel:
+  extra_loss_db: 0.0
+target:
+  kind: human
+  range_m: 5.0
+  velocity_mps: 2.0
+rx:
+  if_bw_hz: 4.0e6
+  adc_fs_hz: 10.0e6
+  adc_bits: 12
+  adc_fullscale_dbm: 4.0
+processing:
+  window_range: hann
+  window_doppler: hann
+  range_pad: 4
+  doppler_pad: 1
+  cfar_guard: 2
+  cfar_train: 8
+  cfar_pfa: 1.0e-4
+sim:
+  seed: 1
+  engine: statistical
+  time_osr: 1.25

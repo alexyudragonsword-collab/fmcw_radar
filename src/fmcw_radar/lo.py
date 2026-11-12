@@ -125,8 +125,11 @@ class LOProfile:
     integer-N loop, the file's table otherwise.
 
     ``components`` is the same PSD by source on the same grid (the ADPLL's
-    own breakdown: ``ref``, ``dco``, ``tdc_quant``, ``dco_quant``; None for a
-    profile read from a file).  It is what lets the time engine split the
+    own breakdown: ``ref``, ``dco``, ``tdc_quant``, ``dco_quant``,
+    ``tdc_jitter``).  A profile read from a file has the file's own breakdown
+    if it carries one; a file without one read under the event chirp engine
+    is ``file`` plus the chirp generator's two quantisation terms, which the
+    file does not know of and the chirp curve carries; otherwise None.  It is what lets the time engine split the
     LO's noise with the chirp engine without counting anything twice: the
     cycle-accurate error curve already *is* the TDC's and the DCO's
     quantisation (``without("tdc_quant", "dco_quant")`` is what is left to
@@ -209,7 +212,37 @@ class LOProfile:
         amp = np.sqrt(scale)
         spurs = tuple((float(r["f_hz"]), 2.0 * 10.0 ** ((float(r["dbc"]) + cfg.lo.profile_shift_db) / 20.0) * amp)
                       for r in (d.get("spurs") or []))
-        return cls(f, s, cfg.band.center_hz, n, f"{p.name}: {d.get('source', '')} x{n}", spurs)
+        source = f"{p.name}: {d.get('source', '')} x{n}"
+        comp, notes = None, ()
+        if d.get("components"):
+            # a file that says what its total is made of (tools/export_lo_profile.py writes it): the same
+            # split as the live analysis, nothing to add
+            comp = {str(k): 2.0 * 10.0 ** ((np.asarray(v, dtype=float) + cfg.lo.profile_shift_db) / 10.0) * scale
+                    for k, v in d["components"].items()}
+            if any(v.shape != f.shape for v in comp.values()):
+                raise ValueError(f"{p}: every component must be on the f_hz grid")
+            if not np.allclose(sum(comp.values()), s, rtol=1e-6):
+                raise ValueError(f"{p}: the components do not sum to l_dbc_hz")
+        elif cfg.lo.engine == "event":
+            # another synthesiser's noise under this library's chirp generator.  The cycle-accurate chirp
+            # curve carries the generator's TDC and DCO quantisation whatever noise file is named, and the
+            # file knows nothing of it: it is added here once, as the same two terms the live analysis has,
+            # so both engines count it and neither counts it twice (the time engine takes it back out of
+            # what it synthesises, because the curve already is it)
+            pll = build_adpll(cfg)
+            below = f <= 0.5 * cfg.lo.fref_hz
+            bd = pll.analyze(f[below]).pn_breakdown
+            comp = {"file": s}
+            for name in ("tdc_quant", "dco_quant"):
+                if name in bd:
+                    q = np.zeros_like(s)
+                    q[below] = np.asarray(bd[name], dtype=float) * n * n
+                    comp[name] = q
+            s = sum(comp.values())
+            source += "; plus the chirp generator's TDC and DCO quantisation (the vendored ADPLL's analyze())"
+            notes = ("The noise is a file's, the chirp is this library's two-point ADPLL's: the generator's TDC and DCO "
+                     "quantisation is added to the file's profile (the cycle-accurate chirp curve carries it, the file does not).",)
+        return cls(f, s, cfg.band.center_hz, n, source, spurs, comp, notes)
 
     def psd(self, f) -> np.ndarray:
         """S_phi(f) [rad^2/Hz, DSB] at the carrier on any grid."""
