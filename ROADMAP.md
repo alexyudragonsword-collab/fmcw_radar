@@ -24,7 +24,9 @@
    (b) 带 `lo.profile` 文件的配置没有分项,曲线保持确定性(noise=False)并叠在整份剖面上:量化算两遍(LO 底高 1 dB),鬼目标是不抖动的 −45 dBc。
    (c) CW / `chirp.idle_s` 空闲段:TDC 抖动 1 ps 时带内相噪仍比线性剖面高(死区):`simulate − analyze` 在 30 / 100 / 300 kHz 是 +5.5 / +5.9 / +10.9 dB
        (0.2.7 重新 pin 之后经本库 vendored 的副本量的,与在 pll_simulator@5564c64 上量的一致;pin 之前 +9 … +15);要到约半个量化格(2.5 ps)才对得上(2 ps:+0.1 … +1.6 dB)。
-       现在空闲段的 LO 误差没有进帧,用了再说。
+       0.2.7 起报表在相噪一节下标出来(`lo.parked_lo` / "The LO while it is not ramping":载波处与斜坡起点各自的 FCW 是否整数、抖动几格、空闲占 PRI 多少,
+       附上游 `analyze()` 的原话);默认 config 载波处 FCW 150 在死区,起点 FCW 145 也是。还没做的是**数**:停着时的相噪没有剖面(要用就得从逐周期引擎的 CW 段取),
+       空闲段的 LO 误差也没有进帧。判据本身偏保守:2 ps(0.41 格)仍被标,而那里只差 +0.1 … +1.6 dB。
    复现:`run_statistical(cfg).nonlinearity["ghosts"]` / `["ghosts_quiet"]` / `["ghost_limit_dbc"]`;`python examples/02_chirp_nonlinearity.py` 末尾的表。
 2. **TDC 按标称周期归一化,斜坡把 DCO 带离标称 ±3.3 %**(`ChirpResult.dco_dev_frac_p99`;polar_tx#19 的答复里点出的效应,它推断"在锯齿上被环路吃掉",
    在本库的配置上量了,不成立)。vendored 的 `_sim_tdc` 用 `code / cpp_nom` 把 TDC 码换成小数周期,读数差 `小数 × Δf/f`。默认 config、匹配增益、noise=False:

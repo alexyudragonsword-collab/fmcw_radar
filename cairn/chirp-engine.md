@@ -80,6 +80,9 @@ LTE-20 的 29 % 不行,polar_tx ROADMAP B1)。任务要求先量一次这个指�
   (贴着量化格边沿的周期只占 1.5 %)。这些要等 polar_tx 更新 vendored 副本才到本库(ROADMAP"等上游"#4)。
   **0.2.7 已到**(polar_tx b007e60):经本库 vendored 的副本重量,CW 带内 0 / 1 / 2 / 5 ps 是 +15.8 / +15.8 / +15.3、+5.5 / +5.9 / +10.9、+0.1 / +0.9 / +1.6、+0.1 / +1.7 / −1.1 dB,
   与在上游量的逐项相同;`analyze().notes` 对 0 / 1 / 2 ps 给死区提示,5 ps 不给。
+  报表现在把这条接出来(`lo.parked_lo`、`LOProfile.notes`,相噪一节下的"The LO while it is not ramping"):死区只在 LO **停着**的频率是参考的整数倍时才有,
+  所以分开看载波处(CW,默认 FCW 150)和斜坡起点(`chirp.idle_s` 停在那里,默认 FCW 145);2 GHz 扫频的起点是 147.5,分数 N,不在死区。
+  测试用两条独立实现守着这个标记:被标的(1 ps)逐周期引擎在 30–300 kHz 平均比线性分析高 > 4 dB(量到 +7.8),没被标的(5 ps)在 ±2 dB 内(量到 +0.5)。
 - 没做的:带 `lo.profile` 文件的配置没有分项,noise=False 的曲线仍叠在整份剖面上(`lo_noise_split` 里写明);response 引擎的 noise=True 没核对过它加了什么,
   时域引擎拒绝它。
 

@@ -29,6 +29,7 @@ from .config.schema import RadarConfig
 from .vendor.polartx.vendor.pllsim.arch.adpll import ADPLL, ADPLLConfig, DLFConfig
 from .vendor.polartx.vendor.pllsim.blocks.oscillator import OscConfig
 from .vendor.polartx.vendor.pllsim.blocks.tdc import TDCConfig
+from .vendor.polartx.vendor.pllsim.core.boundaries import tdc_dead_zone
 from .vendor.polartx.vendor.pllsim.core.tdcspurs import code_span
 from .vendor.polartx.vendor.pllsim.synth import design_adpll_dlf
 
@@ -77,6 +78,43 @@ def build_adpll(cfg: RadarConfig) -> ADPLL:
                              int_band=(1e3, lo.fref_hz / 2.0)))
 
 
+def parked_lo(cfg: RadarConfig) -> dict:
+    """The LO while it is *not* ramping, which the linear profile does not
+    vouch for (ROADMAP P1 #1(c)).
+
+    An integer-N TDC loop with less than half a TDC bin of RMS dither at
+    the TDC's input parks inside one bin: the loop cannot see the DCO drift
+    there, and the cycle-accurate engine reads more in-band phase noise
+    than ``analyze()`` -- pllsim's ``tdc_dead_zone`` (pll_simulator #77),
+    measured on the default loop through the vendored copy: +15.8 dB at 30
+    kHz with no TDC jitter, +5.5 dB at the 1 ps placeholder (0.22 bin),
+    +0.1 dB at 2 ps (0.41 bin: flagged, already harmless), none at 5 ps.
+    A frequency ramp sweeps the fraction of a cycle the TDC reads across
+    its bins every reference cycle, which is a dither: on the ramp the
+    engine and the profile agree within 0.6 dB (tests/test_lo_noise_split.py),
+    so the radar's own use of the LO is covered.  What is not: the LO
+    parked at the carrier (CW), and the ``chirp.idle_s`` it spends at the
+    ramp's start frequency between ramps.  Each is in the dead zone only if
+    *that* frequency is an integer multiple of the reference.
+
+    Returns ``known`` (False for a profile read from a file: its loop is
+    not ours to analyse), ``dither_bins``, ``fcw_center`` / ``fcw_idle``,
+    ``dead_zone_center`` / ``dead_zone_idle``, ``idle_s`` and the share of
+    the PRI spent idle."""
+    out = {"known": cfg.lo.profile is None, "idle_s": cfg.chirp.idle_s, "idle_fraction": cfg.chirp.idle_s / cfg.chirp.pri_s,
+           "dither_bins": None, "fcw_center": None, "fcw_idle": None, "dead_zone_center": None, "dead_zone_idle": None}
+    if not out["known"]:
+        return out
+    pll = build_adpll(cfg)
+    t_res = float(pll.cfg.tdc.t_res)
+    dither = float(pll.tdc_dither_rms_s())
+    fcw_c = cfg.dco_center_hz / cfg.lo.fref_hz
+    fcw_i = (cfg.dco_center_hz - 0.5 * cfg.dco_sweep_hz) / cfg.lo.fref_hz
+    out.update(dither_bins=dither / t_res, fcw_center=fcw_c, fcw_idle=fcw_i,
+               dead_zone_center=bool(tdc_dead_zone(fcw_c, t_res, dither)), dead_zone_idle=bool(tdc_dead_zone(fcw_i, t_res, dither)))
+    return out
+
+
 @dataclass
 class LOProfile:
     """S_phi(f) of the LO at the carrier, interpolated in (log f, dB) between
@@ -102,6 +140,7 @@ class LOProfile:
     source: str
     spurs: tuple[tuple[float, float], ...] = ()
     components: dict | None = None      # name -> rad^2/Hz on f_hz, summing to s_phi
+    notes: tuple[str, ...] = ()         # the loop's own analysis notes, verbatim (none for a profile read from a file)
 
     def without(self, *names: str) -> "LOProfile":
         """The profile less the named sources (those it does not have are
@@ -113,7 +152,7 @@ class LOProfile:
             return self
         s = np.maximum(self.s_phi - sum(self.components[k] for k in drop), 1e-300)
         rest = {k: v for k, v in self.components.items() if k not in drop}
-        return LOProfile(self.f_hz, s, self.carrier_hz, self.mult, f"{self.source}; less {', '.join(drop)}", self.spurs, rest)
+        return LOProfile(self.f_hz, s, self.carrier_hz, self.mult, f"{self.source}; less {', '.join(drop)}", self.spurs, rest, self.notes)
 
     def above(self, f_split_hz: float) -> "LOProfile":
         """The profile above ``f_split_hz`` only (nothing below it)."""
@@ -150,7 +189,7 @@ class LOProfile:
                     for k, v in ana.pn_breakdown.items() if k != "total"}
             return cls(np.concatenate([f[keep], far]), s, cfg.band.center_hz, n,
                        f"vendored ADPLL analyze() at {cfg.dco_center_hz / 1e9:.4g} GHz x{n}, the DCO alone above "
-                       f"fref/2 (source: assumed)", components=comp)
+                       f"fref/2 (source: assumed)", components=comp, notes=tuple(str(x) for x in ana.notes))
         import yaml
 
         p = resolve_data_file(cfg.lo.profile)
@@ -190,4 +229,4 @@ class LOProfile:
         return float(np.sqrt(trap(self.psd(f), f)))
 
 
-__all__ = ["build_adpll", "LOProfile", "resolve_data_file"]
+__all__ = ["build_adpll", "LOProfile", "parked_lo", "resolve_data_file"]

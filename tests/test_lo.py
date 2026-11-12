@@ -5,7 +5,7 @@ import pytest
 from conftest import REPO
 
 from fmcw_radar.config import RadarConfig, apply_overrides
-from fmcw_radar.lo import LOProfile, build_adpll
+from fmcw_radar.lo import LOProfile, build_adpll, parked_lo
 
 
 def test_adpll_is_built_from_the_config_alone(cfg60):
@@ -41,6 +41,46 @@ def test_profile_is_the_analysis_times_n_squared(cfg60):
     for f in (1e8, 1e9):
         assert float(prof.l_dbc(f)) == pytest.approx(10 * np.log10(osc.leeson("dco").psd(f) * 16 / 2), abs=0.05)
     assert float(prof.l_dbc(1e9)) < float(prof.l_dbc(5e7)) - 10.0
+
+
+def test_parked_lo_names_the_dead_zone_where_the_parked_frequency_is_integer_n(cfg60):
+    """ROADMAP P1 #1(c): the profile is the loop's linear analysis, and an
+    integer-N loop with under half a TDC bin of dither does not follow it
+    while parked.  Whether the LO is in that state depends on where it is
+    parked: the carrier (CW) or the ramp's start frequency (chirp.idle_s)."""
+    k = parked_lo(cfg60)
+    assert k["known"] and k["fcw_center"] == 150.0 and k["dead_zone_center"]
+    assert k["dither_bins"] == pytest.approx(0.22, abs=0.02) and k["idle_s"] == 0.0
+    assert LOProfile.from_config(cfg60).notes and "dead zone" in LOProfile.from_config(cfg60).notes[0]
+    half_a_bin = apply_overrides(cfg60, {"lo.tdc_jitter_s": 2.6e-12})                   # the TDC's own jitter dithers it
+    assert not parked_lo(half_a_bin)["dead_zone_center"] and not LOProfile.from_config(half_a_bin).notes
+    idle = parked_lo(apply_overrides(cfg60, {"chirp.idle_s": 10e-6}))                   # 14.5 GHz / 100 MHz = 145
+    assert idle["fcw_idle"] == 145.0 and idle["dead_zone_idle"] and idle["idle_fraction"] == pytest.approx(10.0 / 110.0)
+    half = parked_lo(apply_overrides(cfg60, {"chirp.idle_s": 10e-6, "band.sweep_hz": 2e9}))   # 14.75 GHz: 147.5, fractional
+    assert half["fcw_idle"] == pytest.approx(147.5) and not half["dead_zone_idle"] and half["dead_zone_center"]
+    file = parked_lo(apply_overrides(cfg60, {"lo.profile": "data/clock_profiles/adpll_15g_fingerprint.yaml"}))
+    assert not file["known"] and file["dead_zone_center"] is None                       # not our loop to analyse
+
+
+def test_the_dead_zone_flag_is_where_the_cycle_accurate_loop_leaves_the_profile(cfg60):
+    """Two implementations of the same parked loop: where parked_lo says dead
+    zone the cycle-accurate engine reads several dB more in band than the
+    linear analysis (CW, 30 kHz - 300 kHz: +7 to +8 dB at the 1 ps
+    placeholder, +15.8 with no jitter); where it does not, they agree."""
+    fq = np.array([3e4, 1e5, 3e5])
+
+    def excess_db(jitter_s):
+        cfg = apply_overrides(cfg60, {"lo.tdc_jitter_s": jitter_s})
+        pll = build_adpll(cfg)
+        ana = np.asarray(pll.analyze(fq).pn_breakdown["total"])
+        sim = pll.simulate(200000, noise=True, seed=3)
+        s = np.interp(fq, np.asarray(sim.f_psd), np.asarray(sim.s_phi_psd))
+        return float(np.mean(10.0 * np.log10(s / ana))), parked_lo(cfg)["dead_zone_center"]
+
+    parked, flagged = excess_db(1e-12)
+    assert flagged and parked > 4.0, parked
+    dithered, flagged = excess_db(5e-12)
+    assert not flagged and abs(dithered) < 2.0, dithered
 
 
 def test_multiplier_scales_the_phase_noise_by_20_log_n():

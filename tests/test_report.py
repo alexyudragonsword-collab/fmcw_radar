@@ -22,6 +22,25 @@ def test_report_carries_every_section_and_source(cfg60):
     assert "| 60g_sensing.nf_db |" in sources_markdown()
 
 
+def test_report_says_where_the_lo_profile_stops_being_the_answer(cfg60):
+    """ROADMAP P1 #1(c): parked, the default loop is in the TDC's dead zone.
+    The report says so, with the loop's own note, and says which parked
+    state the config actually has."""
+    cfg = apply_overrides(cfg60, {"chirp.n_chirps": 3})
+    rep = report(cfg, run_statistical(cfg))
+    md = to_markdown(rep)
+    assert rep["phase_noise"]["parked"]["dead_zone_center"] and len(rep["phase_noise"]["notes"]) == 1
+    for word in ("### The LO while it is not ramping", "FCW 150, an integer: **in the dead zone**", "no idle time between ramps",
+                 "No number in this report describes the LO there.", "> TDC dead zone: integer-N (FCW 150)"):
+        assert word in md, word
+    idle = apply_overrides(cfg, {"chirp.idle_s": 10e-6, "band.sweep_hz": 2e9, "lo.tdc_jitter_s": 2.6e-12})
+    md = to_markdown(report(idle, run_statistical(idle)))
+    assert "`chirp.idle_s` = 10 us, 9.1 % of the PRI" in md and "FCW 147.5: not in the dead zone (fractional-N)" in md
+    assert "FCW 150: not in the dead zone (enough dither)" in md and "No number in this report" not in md and "> TDC dead zone" not in md
+    file = apply_overrides(cfg, {"lo.profile": "data/clock_profiles/adpll_15g_fingerprint.yaml"})
+    assert "its loop is not analysed here" in to_markdown(report(file, run_statistical(file)))
+
+
 def test_cli_writes_markdown_and_json(tmp_path):
     spec = importlib.util.spec_from_file_location("budget_report", REPO / "tools" / "budget_report.py")
     mod = importlib.util.module_from_spec(spec)

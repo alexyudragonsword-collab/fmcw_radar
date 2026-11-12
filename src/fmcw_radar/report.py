@@ -37,7 +37,8 @@ def report(cfg: RadarConfig, st: StatResult) -> dict:
         "detection": {"snr_cell_db": st.snr_cell_db, "snr_chirp_db": st.snr_chirp_db, "pfa": cfg.processing.cfar_pfa,
                       "pd": st.pd, "quant_share_db": b.quant_share_db},
         "phase_noise": {"lo_rms_rad": st.lo_rms_rad, "residual_rms_rad": st.pn_rms_rad,
-                        "floor": [{"offset_m": dr, "per_bin_dbc": v[0], "per_cell_dbc": v[1]} for dr, v in st.pn_floor.items()]},
+                        "floor": [{"offset_m": dr, "per_bin_dbc": v[0], "per_cell_dbc": v[1]} for dr, v in st.pn_floor.items()],
+                        "notes": list(st.extras.get("lo_notes") or []), "parked": st.extras.get("lo_parked")},
         "chirp": st.chirp, "nonlinearity": st.nonlinearity,
         "targets": st.targets, "angle": st.angle, "cfar": {**st.cfar, "range_pad": cfg.processing.range_pad},
         "leakage": None if st.leakage is None else {"rows": [{"term": lab, "value": v, "unit": u} for lab, v, u in st.leakage.as_rows()],
@@ -48,6 +49,32 @@ def report(cfg: RadarConfig, st: StatResult) -> dict:
                                                      "blank_s": st.leakage.blank_s},
     }
     return out
+
+
+def _parked_lines(K: dict | None, notes: list) -> list:
+    """The LO while it is not ramping (lo.parked_lo): where the profile above stops being the answer."""
+    if not K:
+        return []
+    lines = ["", "### The LO while it is not ramping", ""]
+    if not K["known"]:
+        return lines + ["The profile is read from a file, so its loop is not analysed here: nothing in this report says whether it "
+                        "holds while the LO is parked (CW, or `chirp.idle_s` between ramps)."]
+
+    def where(dz: bool, fcw: float) -> str:
+        if dz:
+            return f"FCW {fcw:g}, an integer: **in the dead zone**"
+        return f"FCW {fcw:g}: not in the dead zone (" + ("fractional-N" if abs(fcw - round(fcw)) >= 1e-9 else "enough dither") + ")"
+
+    idle = (f"between ramps (`chirp.idle_s` = {K['idle_s'] * 1e6:g} us, {100 * K['idle_fraction']:.1f} % of the PRI, at the ramp's start "
+            f"frequency) {where(K['dead_zone_idle'], K['fcw_idle'])}" if K["idle_s"] > 0 else "no idle time between ramps in this config")
+    lines += [f"The profile above is the loop's linear analysis. On the ramp the sweep carries the TDC across its bins every reference "
+              f"cycle and the cycle-accurate engine agrees with it. Parked, an integer-N loop with under half a TDC bin of RMS dither at "
+              f"the TDC ({K['dither_bins']:.2f} bin here) sits inside one bin and reads more in-band phase noise than this profile: "
+              f"at the carrier (CW) {where(K['dead_zone_center'], K['fcw_center'])}; {idle}."
+              + (" No number in this report describes the LO there." if K["dead_zone_center"] or (K["idle_s"] > 0 and K["dead_zone_idle"]) else "")]
+    if notes:
+        lines += ["", "The loop's own analysis notes:", ""] + [f"> {n}" for n in notes]
+    return lines
 
 
 def to_markdown(rep: dict) -> str:
@@ -80,6 +107,7 @@ def to_markdown(rep: dict) -> str:
               "| offset [m] | per range bin, one chirp [dBc] | per range-Doppler cell [dBc] |", "|---:|---:|---:|"]
     for row in P["floor"]:
         lines.append(f"| {row['offset_m']:g} | {row['per_bin_dbc']:.1f} | {row['per_cell_dbc']:.1f} |")
+    lines += _parked_lines(P.get("parked"), P.get("notes") or [])
     C, N = rep["chirp"], rep["nonlinearity"]
     if C:
         lines += ["", "## Chirp linearity (from the vendored ADPLL loop)", "",
