@@ -462,7 +462,9 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
         # the single quiet ramp's list is the undithered pattern; what a frame sees is what stays coherent
         # over its ramps with the loop's noise on (the TDC's jitter dithers the quantisation)
         res.nonlinearity["ghosts_quiet"] = res.nonlinearity["ghosts"]
-        if chirp.engine == "event":
+        # ... when the LO is the loop itself.  Under a noise file the chirp generator runs with its own noise off
+        # (the noise is the file's), nothing is known to dither its TDC, and the undithered list stands
+        if chirp.engine == "event" and (chirp.noise or cfg.lo.profile is None):
             live = chirp if chirp.noise else noisy_chirp(cfg, n_chirps=min(max(cfg.time_chirps(), 5), 64))
             cs = coherent_spurs(cfg, live)
             res.nonlinearity.update({"ghosts": cs["ghosts"], "ghost_chirps": cs["chirps"], "ghost_limit_dbc": cs["limit_dbc"],

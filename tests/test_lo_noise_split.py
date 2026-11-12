@@ -66,11 +66,37 @@ def test_profile_breakdown_sums_to_the_total_and_can_be_split(cfg):
     hi = prof.above(split)
     assert hi.psd(np.array([1e6, 0.9 * split]))[1] < 1e-200 and hi.psd(np.array([2 * split]))[0] == pytest.approx(prof.psd(np.array([2 * split]))[0])
     assert hi.rms_phase_rad(split, 2.5e9) == pytest.approx(prof.rms_phase_rad(split, 2.5e9), rel=1e-3)
-    # a profile read from a file has no breakdown: nothing to take out
+    # a profile exported by tools/export_lo_profile.py carries the breakdown: the same split as the live one
     from conftest import REPO
 
     file_prof = LOProfile.from_config(apply_overrides(cfg, {"lo.profile": str(REPO / "src/fmcw_radar/data/clock_profiles/adpll_15g_fingerprint.yaml")}))
-    assert file_prof.components is None and file_prof.without("tdc_quant") is file_prof
+    assert set(file_prof.components) == set(prof.components)
+    f = np.array([1e5, 1e6, 1e7])
+    assert np.allclose(file_prof.without("tdc_quant", "dco_quant").l_dbc(f), rest.l_dbc(f), atol=0.05)
+    # a profile with nothing to split (a foreign file under the ideal chirp engine) is returned as it is
+    bare = LOProfile.from_config(apply_overrides(cfg, {"lo.profile": "vendor/mmw60/data/clock_profiles/pllsim_wu19_x10_60p48g_floor150.yaml",
+                                                      "lo.engine": "ideal"}))
+    assert bare.components is None and bare.without("tdc_quant") is bare
+
+
+def test_foreign_noise_file_is_counted_once_by_both_engines():
+    """ROADMAP P1 #1(b): with a noise file and the event chirp engine the time
+    engine used to lay the curve's quantisation over the whole file and the
+    statistical engine counted none of it -- the floor 1-5 m from the target
+    read 10-15 dB over the closed form.  Now the closed form has the
+    generator's quantisation and the time engine leaves it to the curve.
+    What remains is the curve's undithered pattern (nothing dithers the TDC
+    under a file: its ghosts sit at 3-5 m), a dB or two over the closed form."""
+    from fmcw_radar.chirp import ChirpEngine
+    from fmcw_radar.engine.timedomain import measured_pn_sidelobes
+
+    cfg = apply_overrides(RadarConfig(), {"lo.profile": "vendor/mmw60/data/clock_profiles/pllsim_wu19_x10_60p48g_floor150.yaml"})
+    quiet = ChirpEngine(cfg).run(noise=False, n_chirps=32)
+    offs = (1.0, 2.0, 3.0, 5.0)
+    m = measured_pn_sidelobes(cfg, offs, n_chirps=32, seed=3, window_name="blackman", half_bins=12, chirp=quiet)
+    gap = [m[o]["measured_dbc"] - m[o]["closed_form_dbc"] for o in offs]
+    assert all(-1.0 < g < 2.5 for g in gap) and 0.0 < float(np.mean(gap)) < 1.8, gap
+    assert m[1.0]["closed_form_dbc"] > -67.0                                        # was -75.9 without the generator's terms
 
 
 def test_noisy_curve_is_the_profile_on_a_ramp(cfg, noisy):
@@ -143,7 +169,10 @@ def test_time_engine_says_who_carries_what(cfg, noisy):
     assert run_time(small).extras["lo_noise_split"].startswith("curve: the loop to fref/2")
     assert run_time(small, chirp_noise=False).extras["lo_noise_split"].startswith("curve: TDC and DCO quantisation")
     filed = apply_overrides(small, {"lo.profile": "data/clock_profiles/adpll_15g_fingerprint.yaml"})
-    assert "a file with no breakdown" in run_time(filed).extras["lo_noise_split"]     # another LO's file: the curve stays deterministic
+    # a file: the curve stays deterministic (nothing dithers the TDC) and the profile is split like the live one
+    assert run_time(filed).extras["lo_noise_split"] == "curve: TDC and DCO quantisation (cycle-accurate); profile: everything else"
+    foreign = apply_overrides(small, {"lo.profile": "vendor/mmw60/data/clock_profiles/pllsim_wu19_x10_60p48g_floor150.yaml"})
+    assert run_time(foreign).extras["lo_noise_split"] == "curve: TDC and DCO quantisation (cycle-accurate); profile: everything else"
     assert run_time(apply_overrides(small, {"lo.engine": "ideal"})).extras["lo_noise_split"] == "profile: everything"
     assert run_time(small, phase_noise=False).extras["lo_noise_split"] == "no phase noise"
     lin = ChirpEngine(apply_overrides(small, {"lo.engine": "response"})).run(noise=True, seed=1)

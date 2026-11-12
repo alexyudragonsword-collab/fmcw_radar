@@ -20,7 +20,9 @@
    (a) 1 ps 这个占位决定了结论(−55 dBc、每帧 0.00 个);它是 `assumed`,等 polar_tx / pll_simulator 的 TDC 实测或文献数。1 ps 时哪几个杂散过检出限随 seed 变,
        也随抖动的实现变(0.2.7 重新 pin 后示例 02 的 32 个 ramp:−11.81、−9.20、+9.19 m,−54.8 … −56.4 dBc;pin 之前是另外三个位置),
        离 32 / 64 个 ramp 的检出限(−56 / −59 dBc)只有 1–3 dB。
-   (b) 带 `lo.profile` 文件的配置没有分项,曲线保持确定性(noise=False)并叠在整份剖面上:量化算两遍(LO 底高 1 dB),鬼目标是不抖动的 −45 dBc。
+   (b) 带 `lo.profile` 文件的配置:0.2.9 起量化只算一次(导出的文件带分项;外来文件在 event 引擎下由剖面加上发生器的两项量化,`cairn/chirp-engine.md`)。
+       剩下的:文件下逐周期曲线不开噪声,没有东西给 TDC dither,鬼目标是不抖动的 −45.3 dBc(±4.85 m),一帧里 3–5 m 的底比闭式高 1.3–2.1 dB
+       (示例 04 末表,`configs/radar_60g_x10lo.yaml`)。要做:只开 TDC 抖动跑曲线(pllsim 的噪声开关是全开全关,需要它分开),或者在报表里把文件档的鬼目标标成"上限"。
    (c) CW / `chirp.idle_s` 空闲段:TDC 抖动 1 ps 时带内相噪仍比线性剖面高(死区):`simulate − analyze` 在 30 / 100 / 300 kHz 是 +5.5 / +5.9 / +10.9 dB
        (0.2.7 重新 pin 之后经本库 vendored 的副本量的,与在 pll_simulator@5564c64 上量的一致;pin 之前 +9 … +15);要到约半个量化格(2.5 ps)才对得上(2 ps:+0.1 … +1.6 dB)。
        0.2.7 起报表在相噪一节下标出来(`lo.parked_lo` / "The LO while it is not ramping":载波处与斜坡起点各自的 FCW 是否整数、抖动几格、空闲占 PRI 多少,
@@ -59,11 +61,6 @@
 3. **时域引擎按 chirp 独立合成相噪**(块 500k 点,最低 10 kHz),chirp 间 LO 低频相关没有表示;对多普勒维噪底无影响的论证见 `cairn/range-correlation.md`,
    但慢目标 / 长帧(PRF 10 kHz 以下的相噪)没有验证。
 4. **性能**:时域引擎 64 chirp × 500k 包络样本约 7 s(4 核);fingerprint 9 s;全套测试约 3 分钟,`test_engines.py` 占一半。
-
-5. **×N 之后的 LO 剖面已经能读,还没用**(原"等上游"#2;上游已交付:pll_simulator#71 / #72 的倍频器剖面,mmw60_trx 带了
-   `pllsim_wu19_x10_60p48g_floor{130..160}.yaml`,它的基准档是 floor150)。本库 `lo.profile` 原样读得进:60 GHz 处 L(100 kHz / 1 MHz) −92.1 / −98.6 dBc/Hz,6 条杂散;
-   占位 ADPLL 是 −82.5 / −79.6。四档在 1 MHz 以内相同,到 100 MHz 才差开(−128.5 … −133.6),IF 带宽 4 MHz,所以选哪一档对雷达没有影响。
-   要做:把它作为一个 bundled 配置的 LO(注意文件没有分项,见 P1 #1(b)),重跑示例 01 / 04 看相噪旁瓣(numbers-move)。chirp 仍由两点 ADPLL 逐周期生成,换的只是噪声。
 
 ## P3 — 能力扩展
 

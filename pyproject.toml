@@ -24,7 +24,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 # the source table travels with the package (configs and examples read it by key)
-fmcw_radar = ["data/*.yaml", "data/clock_profiles/*.yaml", "vendor/mmw60/data/spec/*.yaml"]
+fmcw_radar = ["data/*.yaml", "data/clock_profiles/*.yaml", "vendor/mmw60/data/spec/*.yaml", "vendor/mmw60/data/clock_profiles/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

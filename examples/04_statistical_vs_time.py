@@ -9,7 +9,7 @@ error curve fed into one FFT vs the full time engine on the same curve).
 """
 
 import numpy as np
-from _common import CONFIG, SMOKE
+from _common import CONFIG, CONFIGS, SMOKE
 
 from fmcw_radar.chirp import ChirpEngine
 from fmcw_radar.config import load_config
@@ -71,6 +71,16 @@ def band_floor(fr):
 print(f"  the same curve laid over the *whole* profile (what the time engine did up to 0.2.4): {band_floor(fr_old) - band_floor(fr_new):+.2f} dB "
       f"on the 1-5 m floor -- the TDC's quantisation once as the curve's pattern and once more as the profile's noise term")
 print(f"  ({info['lo_noise_split']})")
+
+# the same check with another synthesiser's noise file (mmw60_trx's x10 LO): the curve is still the generator's
+x10 = load_config(CONFIGS / "radar_60g_x10lo.yaml")
+quiet_x = ChirpEngine(x10).run(noise=False, n_chirps=n_split)
+print("  with mmw60_trx's x10 noise file (configs/radar_60g_x10lo.yaml; the closed form is the file plus the generator's quantisation):")
+for label, kw in (("profile: everything (no curve)", {}), ("curve: TDC + DCO quantisation (noise off); profile: the file", {"chirp": quiet_x})):
+    mm = measured_pn_sidelobes(x10, wide, n_chirps=n_split, half_bins=12, window_name="blackman", **kw)
+    g = [mm[o]["measured_dbc"] - mm[o]["closed_form_dbc"] for o in wide]
+    print(f"  {label:77s} | " + " | ".join(f"{v:+5.2f}" for v in g) + f" | {np.mean(g):+.2f}")
+print("  (no dither under a file: the curve's pattern stays coherent, and its ghosts sit 3-5 m out)")
 
 print("\nchirp nonlinearity: the ADPLL curve fed into one FFT vs the time engine mixing the same curve "
       "(5 % mismatch, no calibration, no noise, target at rest so both lobes sit on the same bins):")

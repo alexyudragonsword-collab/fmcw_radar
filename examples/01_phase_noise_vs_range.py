@@ -7,12 +7,19 @@ sidelobe floor around a target follows: at a given range offset the beat
 frequency offset is fixed, so the floor rises with the target's range
 until ``1 / (6 tau)`` crosses that offset.  The closed form is checked
 against synthesised sequences (band-averaged) at 1, 10 and 100 m.
+
+The last table puts mmw60_trx's x10 LO (configs/radar_60g_x10lo.yaml: a
+6 GHz fractional-N PLL behind a x10 multiplier, read from its profile
+file) beside the placeholder ADPLL: the file alone (the ideal chirp), and
+the file with this library's chirp generator, whose TDC and DCO
+quantisation the cycle-accurate curve carries whatever the noise is.
 """
 
 import numpy as np
-from _common import CONFIG, OUT, SMOKE, plt_or_none, rel
+from _common import CONFIG, CONFIGS, OUT, SMOKE, plt_or_none, rel
 
 from fmcw_radar.config import load_config
+from fmcw_radar.engine import run_statistical
 from fmcw_radar.lo import LOProfile
 from fmcw_radar.phase_noise import RangeCorrelation, correlation_factor
 from fmcw_radar.processing.windows import enbw_bins, window
@@ -62,6 +69,22 @@ for r in (1.0, 10.0, 100.0):
     print(f"  {r:5g} m: worst band difference {worst:.3f} dB over {blocks} blocks of {n}")
 rc0 = RangeCorrelation(prof, 0.0)
 print(f"  tau = 0: residual max |phi| = {np.max(np.abs(rc0.synthesize_residual(n, fs, np.random.default_rng(1)))):g} rad")
+
+# mmw60_trx's x10 LO against the placeholder: the noise a file gives, and what the chirp generator adds to it
+X10 = CONFIGS / "radar_60g_x10lo.yaml"
+print("\nthe LO: the placeholder ADPLL against mmw60_trx's x10 LO (a 6.048 GHz fractional-N PLL x10, floor -150 dBc/Hz), "
+      f"the target at {cfg.target.range_m:g} m:")
+print("  LO                                                   | L(100 kHz) | L(1 MHz) | L(4 MHz) | LO RMS [mrad] | residual RMS [mrad] | floor +1 m / +5 m [dBc/bin]")
+for label, c in (("placeholder 15 GHz ADPLL x4 (its own analysis)", cfg),
+                 ("x10 file alone (lo.engine: ideal)", load_config(X10, {"lo.engine": "ideal", "chirp.n_chirps": 3})),
+                 ("x10 file + the chirp generator's quantisation", load_config(X10, {"chirp.n_chirps": 3}))):
+    p_ = LOProfile.from_config(c)
+    st_ = run_statistical(c)
+    l_ = [float(p_.l_dbc(f)) for f in (1e5, 1e6, 4e6)]
+    print(f"  {label:52s} | {l_[0]:10.1f} | {l_[1]:8.1f} | {l_[2]:8.1f} | {st_.lo_rms_rad * 1e3:13.1f} | {st_.pn_rms_rad * 1e3:19.2f} | "
+          f"{st_.pn_floor[1.0][0]:7.1f} / {st_.pn_floor[5.0][0]:6.1f}")
+print("  (in band the generator's 5 ps TDC, not the x10 LO, sets the floor: its quantisation is in the chirp curve whatever noise\n"
+      "   file is named, and the file does not know of it -- the profile adds the two terms once; the file's 6 spurs ride on top)")
 
 plt = plt_or_none()
 if plt is not None:
