@@ -14,8 +14,10 @@
    `pllsim_wu19_x10_60p48g_floor{130..160}.yaml`。本库 `lo.profile` 原样读得进(floor140:60 GHz 处 L(1 MHz) −98.6 dBc/Hz,6 条杂散;占位 ADPLL −79.6)。
    要做:把它作为一个 bundled 配置的 LO(注意文件没有分项,见 P1 #1(b)),重跑示例 01 / 04 看相噪旁瓣(numbers-move)。chirp 仍由两点 ADPLL 逐周期生成,换的只是噪声。
 3. **polar_tx#19**(B1 的有效域指标 + `SignSignLMS` 在锯齿上):只是观察,本库不依赖它的结论;B1 有定论前 `ui_per_ref_cycle_p99` 的 495 % 照打。
-4. **pll_simulator#76**(CW 整数 N 下 `simulate` 比 `analyze` 带内高 15 dB;`analyze` 没有 TDC 抖动项):本库只在斜坡上用环路,不依赖。
-   0.2.6 起本库自己在剖面里加了 `tdc_jitter` 一项(`tdc_quant` × 12σ²/t_res²);上游若给 `analyze` 加了这一项,本库的要拿掉,否则算两遍。
+4. **pll_simulator 的 TDC 抖动改动要经 polar_tx 才到本库**(pll_simulator#76 已关:#77 给 `analyze()` 加了 `tdc_jitter` 项与整数 N 死区提示,#78 把 `simulate()` 里被截掉的
+   TDC 抖动改成回绕;main@`5564c64`)。本库跑的是 polar_tx vendored 的 `adpll.py`@d7be4712,要等 polar_tx 更新这份副本(它的 ROADMAP C5,结构性的:上游把逐周期循环搬进了编译内核;
+   已在 polar_tx#19 下留言)再重新 pin。到时:本库 `lo.py::_with_tdc_jitter` 见到已有 `tdc_jitter` 就不再加(同一个式子,相对差 2e-16,有测试守着,
+   `tests/test_lo.py` 末尾那条断言会在 re-pin 后失败,提醒删掉本条);带噪声的 chirp 曲线与鬼目标的数会小动(numbers-move)。
 
 ## P1 — 结论的可信度
 
@@ -24,7 +26,8 @@
    (a) 1 ps 这个占位决定了结论(−55 dBc、每帧 0.00 个);它是 `assumed`,等 polar_tx / pll_simulator 的 TDC 实测或文献数。1 ps 时哪几个杂散过检出限随 seed 变
        (seed 1:±9.18、−12.18 m;seed 2:±3.93 m),电平都在 −54 … −56 dBc,离 32 / 64 个 ramp 的检出限(−56 / −59 dBc)只有 1–3 dB。
    (b) 带 `lo.profile` 文件的配置没有分项,曲线保持确定性(noise=False)并叠在整份剖面上:量化算两遍(LO 底高 1 dB),鬼目标是不抖动的 −45 dBc。
-   (c) CW / `chirp.idle_s` 空闲段:TDC 抖动 1 ps 时带内相噪仍比线性剖面高 9–15 dB(死区,pll_simulator#76);现在空闲段的 LO 误差没有进帧,用了再说。
+   (c) CW / `chirp.idle_s` 空闲段:TDC 抖动 1 ps 时带内相噪仍比线性剖面高(死区):本库 vendored 的副本 +9 … +15 dB,pll_simulator@5564c64(抖动回绕之后)+5.5 … +10.9 dB;
+       要到约半个量化格(2.5 ps)才对得上(2 ps:+0.1 … +1.6 dB)。现在空闲段的 LO 误差没有进帧,用了再说。
    复现:`run_statistical(cfg).nonlinearity["ghosts"]` / `["ghosts_quiet"]` / `["ghost_limit_dbc"]`;`python examples/02_chirp_nonlinearity.py` 末尾的表。
 2. **polar_tx 的 event 有效域指标在 chirp 上读 495 %**,本库的判断是指标不适用(见 `cairn/chirp-engine.md`)。这是本库的读法,
    已提 polar_tx#19。B1 有定论之前,`ChirpResult.ui_per_ref_cycle_p99` 和报表都把数打出来。
