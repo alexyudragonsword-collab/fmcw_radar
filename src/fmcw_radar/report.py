@@ -46,6 +46,7 @@ def report(cfg: RadarConfig, st: StatResult) -> dict:
                                                      "p1db_margin_db": st.leakage.p1db_margin_db, "p1db_kind": st.leakage.p1db_kind,
                                                      "required_hpf_atten_db": st.leakage.required_hpf_atten_db,
                                                      "blank_recommended_s": st.leakage.blank_recommended_s,
+                                                     "steady_clipping": st.leakage.steady_clipping,
                                                      "blank_s": st.leakage.blank_s},
     }
     return out

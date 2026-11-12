@@ -148,8 +148,13 @@ def test_sourced_leakage_level_and_what_the_high_pass_must_do():
     assert one.terms[0].level_rx_dbm == pytest.approx(-8.0)
     assert one.adc_headroom_db == pytest.approx(0.0, abs=0.1) and two.adc_headroom_db == pytest.approx(27.9, abs=0.1)
     assert one.transient_step_v == pytest.approx(7.2 * 10.0 ** (7.0 / 20.0), rel=0.01)      # the step grows with the level
-    tm1 = run_time(apply_overrides(sourced(1), {"rx.blank_s": one.blank_recommended_s}), phase_noise=False, noise=False)
+    # ... so the budget names no blank for it (there is none that helps) and says why; a blank the old
+    # formula would have named (the step under full scale plus a time constant, 3.8 us) leaves it clipping
+    assert one.steady_clipping and one.blank_recommended_s == 0.0 and one.required_hpf_atten_db == pytest.approx(6.0, abs=0.1)
+    assert any("none, the steady leakage clips" in lab for lab, _, _ in one.as_rows())
+    tm1 = run_time(apply_overrides(sourced(1), {"rx.blank_s": 3.8e-6}), phase_noise=False, noise=False)
     assert tm1.extras["clipped_fraction_after_blanking"] > 0.5
+    assert not two.steady_clipping and two.blank_recommended_s == pytest.approx(5.47e-6, abs=0.02e-6)
     cb = apply_overrides(sourced(2), {"rx.blank_s": two.blank_recommended_s})
     tm2 = run_time(cb, phase_noise=False, noise=False)
     a_fs, step = tm2.extras["fullscale_v"], tm2.extras["adc_step_v"]
@@ -239,6 +244,28 @@ def test_recommended_blank_covers_the_clipped_run_and_restores_the_floor(order):
         assert rel(tm0) > rel(tm) + 8.0
     f = tm.extras["targets_found"][0]
     assert f is not None and f[0] == pytest.approx(5.0, abs=0.04)
+
+
+def test_recommended_blank_counts_what_the_steady_leakage_leaves_of_the_adc_range():
+    """The transient has to decay into the range the ADC has left above the
+    steady leakage, not under full scale.  A first-order high-pass at 280 kHz
+    leaves the sourced leakage 2.9 dB under full scale: the blank is longer
+    than the step alone would ask for and still covers the clipped run; at
+    240 kHz the two terms in phase reach full scale and no blank is named."""
+    near = _leak(**{"rx.hpf_corner_hz": 280e3, "rx.hpf_order": 1})
+    lb = leakage_budget(near)
+    assert lb.adc_headroom_db == pytest.approx(2.9, abs=0.1) and not lb.steady_clipping
+    a_fs = math.sqrt(10.0 ** ((near.rx.adc_fullscale_dbm - 30.0) / 10.0) * 50.0)
+    step_only = lb.hpf_time_constant_s * (math.log(lb.transient_step_v / a_fs) + 1.0)
+    assert lb.blank_recommended_s > step_only + 0.9 * lb.hpf_time_constant_s
+    tm0 = run_time(near, phase_noise=False, noise=False)
+    step = tm0.extras["adc_step_v"]
+    sat = (np.abs(tm0.frame.real) >= a_fs - step / 2) | (np.abs(tm0.frame.imag) >= a_fs - step / 2)
+    run = max(int(np.flatnonzero(sat[m, :500]).max()) + 1 for m in range(tm0.frame.shape[0]))
+    assert 0 < run <= lb.blank_recommended_s * near.rx.adc_fs_hz < 2.0 * run
+    edge = leakage_budget(_leak(**{"rx.hpf_corner_hz": 240e3, "rx.hpf_order": 1}))
+    assert edge.adc_headroom_db > 0.0 and edge.steady_clipping and edge.blank_recommended_s == 0.0
+    assert run_time(_leak(**{"rx.hpf_corner_hz": 240e3, "rx.hpf_order": 1}), phase_noise=False, noise=False).extras["clipped_fraction"] > 0.05
 
 
 def test_blanking_zero_is_the_old_path_bit_for_bit():

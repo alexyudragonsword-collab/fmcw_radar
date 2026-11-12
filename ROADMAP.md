@@ -44,9 +44,6 @@
    泄漏压缩前级时目标回波的增益压缩、互调,帧里都没有。所以默认配置下时域引擎的 SNR / 检测结论隐含"隔离够"(≥ 24 dB 才到 0 dB 裕量;文章里的 EBG 是 40 dB)。
    要做:要么给接收机一个压缩模型(Rapp / 三阶,读两个压缩点),要么在报表里把负裕量标成"时域结论不成立"。另:NF 取表值 12 dB 不随增益变,图 7-2 上 40 dB 增益是 11.0 dB(差 1 dB,没接)。
    复现:`python examples/08_tx_leakage.py` 的预算表;`tests/test_leakage.py::test_leakage_budget_levels_and_flags`。
-5. **1 阶 200 kHz 高通在有出处的泄漏电平下不够**(0.2.8 发现):8 kHz 处只衰 28 dB,泄漏在 ADC 正好满幅,稳态削波 78 %,blanking 无效;占位电平时还有 7 dB。
-   这是结论不是 bug,但 `blank_recommended_s` 在这种情形仍给一个数(3.8 µs),没有说"削波是稳态的,blank 没用"。要做:预算在高通后裕量 < 6 dB 时不给推荐 blanking,改报还缺多少衰减。
-   复现:示例 08 的"1st order 200 kHz"两行;`tests/test_leakage.py::test_sourced_leakage_level_and_what_the_high_pass_must_do`。
 
 ## P2 — 一致性与能力
 

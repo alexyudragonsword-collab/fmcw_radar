@@ -45,9 +45,18 @@ print("\ntime engine: clipped ADC samples and the target, with and without the h
 print("  high-pass                        | blank [us] | clipped [%] | after blanking [%] | floor 2-4 m rel. target, noise on / off [dB] | target found | at [m] | level rel. map peak [dB]")
 cases = [("none", {"rx.hpf_corner_hz": 0.0}), ("1st order 200 kHz", {"rx.hpf_order": 1}),
          ("2nd order 200 kHz", {}), ("2nd order 50 kHz", {"rx.hpf_corner_hz": 50e3})]
+not_blanked = []
 for label, ov in list(cases):
-    rec = run_statistical(load_config(MIMO, {**base, **ov})).leakage.blank_recommended_s
-    if rec > 0.0:
+    c_ = load_config(MIMO, {**base, **ov})
+    lk = run_statistical(c_).leakage
+    rec = lk.blank_recommended_s
+    if lk.steady_clipping:
+        not_blanked.append(f"{label}: no blank helps, the steady leakage is {-lk.adc_headroom_db:+.1f} dB re full scale behind it "
+                           f"({lk.required_hpf_atten_db:.1f} dB more attenuation needed)")
+    elif rec > 0.25 * c_.chirp.duration_s:
+        not_blanked.append(f"{label}: the budget asks for {rec * 1e6:.1f} us, over the quarter of a chirp rx.blank_s allows "
+                           f"(the leakage is left {lk.adc_headroom_db:.1f} dB under full scale, so the transient decays into little room)")
+    elif rec > 0.0:
         cases.append((f"{label}, blanked", {**ov, "rx.blank_s": round(rec * 1e7) / 1e7}))
 for label, ov in cases:
     c = load_config(MIMO, {**base, **ov})
@@ -62,4 +71,6 @@ ref = run_time(load_config(MIMO, base), leakage=False)
 quiet_ref = run_time(load_config(MIMO, base), leakage=False, noise=False, phase_noise=False)
 print(f"  (reference, no leakage at all: floor {far_floor_db(ref):.1f} / {far_floor_db(quiet_ref):.1f} dB rel. the target, noise on / off."
       f" With the filter the clipped samples are the flyback transient at each chirp's start and the budget's recommended blank covers"
-      f" them; what remains after the blank is the chirp's last sample, where the engine's circular IF filter rings the next step back)")
+      f" them; what remains after the blank is the chirp's last samples, where the engine's circular IF filter rings the next step back)")
+for line in not_blanked:
+    print(f"  not blanked -- {line}")
