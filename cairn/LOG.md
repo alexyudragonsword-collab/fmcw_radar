@@ -3,6 +3,18 @@
 本文件按倒序记录实质性进展 —— 最新条目在本行正下方。每条保持简短(数字原值、被推翻的判断、下一步),
 结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-11-12 · mmw60_trx#14 的答复:确认、没排期、它也没有出处(feat/mmw60-reply)
+
+- 它的答复(main 仍是 4df0385,没有代码改动):清单属实;D4 轮到了但没开始;补三样(TX→RX 隔离、60 GHz RX 增益 / NF / 压缩点、发 / 收天线增益两个字段);倍频器底噪从 D4 划掉;
+  基准档是 floor150;PA 输出 P1dB 5.5 dBm(Psat 15、增益 20,后两个在它的 config 里核到,5.5 没跑它的代码)。它问本库有没有带出处的数——没有,全是 `assumed`。
+- 核对:`p1db_out_dbm` 是属性(本库 issue / ROADMAP 里写成了方法,**更正**);四个 floor 文件经本库加载器 100 kHz / 1 MHz 都是 −92.1 / −98.6 dBc/Hz,100 MHz 处 −128.5 / −132.8 / −133.5 / −133.6:
+  IF 4 MHz 之内没有差别。
+- 查了一轮公开数字贴回 #14(`cairn/Reference/2026-11-12-frontend-survey.md`,**全部未核实**:只读到搜索摘要,ti.com / infineon.com 本会话打不开):
+  IWR6843 NF 12 dB、带外 P1dB −12 dBm、RX 增益 30–48 dB、TX 12 dBm;BGT60TR13C 封装内天线 2.0 / 3.5 / 5.0 dBi;ISK 板上阵约 7 dBi(论坛转述);
+  TX→RX 隔离没有手册给,TU/e 2018 摘要:57–64 GHz 加 EBG 40 dB、比不加好 15–20 dB(即 20–25 dB)。对照占位:天线增益各 10 dBi 偏高,隔离 25 dB 在范围里。
+- 没动 `sources.yaml`:等它的 `Frontend60` 落地一次换,免得同一个量换两次。ROADMAP:"等上游"只剩这一条;×10 LO 剖面挪到 P2 #5(上游已交付,是本库自己的活)。
+- 下一步(待定):×10 剖面做成 bundled 配置;或 P2 #0 的因果 IF 滤波器。
+
 ## 2026-11-12 · 0.2.7:polar_tx#19 的答复,重新 pin 到 b007e60(feat/repin-polar-tx)
 
 - polar_tx 的答复:B1 真因是 LTE-20 的 TDC 量程只盖 0.25 个 DCO 周期,不是推进量(本库的 495 % 斜坡是反例);C5 把 vendored pllsim 整体提到 5564c64;`dp_cal` 进了内核。
