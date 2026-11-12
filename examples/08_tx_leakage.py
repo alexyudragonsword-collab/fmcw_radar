@@ -1,10 +1,12 @@
 """Example 08: TX-to-RX leakage and the IF high-pass.
 
-The transmitter's own signal reaches the receiver 25 dB down (source:
-assumed, until mmw60_trx's package says otherwise) and a near reflector
-at 2 cm adds another 10 dB lower; both beat at a few kHz, a hundred dB
-above the target.  The statistical budget: levels at the receiver and the
-ADC, the P1dB margin, the ADC headroom with and without the high-pass, the
+The transmitter's own signal reaches the receiver through the isolation of
+a board array without an isolation structure (the band's sourced figure,
+printed with its tag) and a near reflector at 2 cm adds another 10 dB
+lower; both beat at a few kHz, a hundred dB above the target.  The
+statistical budget: levels at the receiver and the ADC, the margin to the
+compression point the leakage meets (the one ahead of the high-pass when
+there is a high-pass), the ADC headroom with and without the high-pass, the
 attenuation still needed.  The time engine: the ADC clips without the
 filter and the target is gone; with a second-order high-pass at 200 kHz
 it is back, and the flyback's transient through the filter is what still

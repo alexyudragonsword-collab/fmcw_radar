@@ -30,13 +30,16 @@ polar_tx(main,现 pin b007e60;最初 7057738)被 vendor 进来做 chirp 发生�
    时域引擎(5 GS/s 包络、真混频、砖墙 IF、ADC 量化)只做一致性检查:三个距离 < 1 dB(实测 −0.3 … −0.4 dB,见 LOG)。
 4. **chirp 非线性从环路来。** `chirp/engine.py` 直接驱动 vendored `ADPLL.simulate(mod_freq=...)`,`freq_out` 就是瞬时频率误差曲线;
    解析二次项是 `quadratic_reference`,带 `engine="quadratic"` 标签,引擎目录里没有任何调用(`test_law4_*`)。
-5. **目标是输入不是模型。** 点目标四个数由 config 给;RCS 取 `rcs.<kind>_dbsm`(survey)。
+5. **目标是输入不是模型。** 点目标四个数由 config 给;RCS 取 `rcs.<kind>_dbsm`(survey)。外部来源的数全在 `data/sources.yaml`;0.2.8 起其中五条(60 GHz 的发射功率、NF、两个压缩点、隔离)
+   带 `upstream:`,指向 vendored 的 mmw60_trx 来源表,加载时核对相等(`tests/test_sources.py`、`cairn/frontend-sources.md`)。
 6. **杂散只认逐周期引擎。** `ChirpResult.vouches_for_spurs` 只有 `event` 为真;`response` 的 note 写明"线性化,不能背书"。
 7. **数值指纹。** `tools/fingerprint.py` 记两个 bundled config + 7 个合成用例共 639 个值(标量 repr、数组 SHA-256),
    CI 对比 base 与 head,动了数要在提交信息里写 `(numbers-move: 为什么)`。
 
 ## 决策记录
 
+- **mmw60_trx 只 vendor 来源表,不 vendor `Frontend60`**(0.2.8):`Frontend60` 站在 wifitrx 的整条收发链上,雷达只读几个数;它的基准前端选的是通信收发机,
+  雷达要的带外压缩点在那一档是空的。所以按条目读它的 `survey.yaml`(雷达芯片的两条、隔离的一条),不读对象。代价:不是"同一个 `Frontend60` 实例",数和出处是同一份。见 `frontend-sources.md`。
 - **vendor 的 pin 指向 polar_tx 而不是 pll_simulator**:polar_tx 自己嵌套的 pllsim 子树连同它的 `# Vendored from pll_simulator@...` 头一起拷进来,
   `vendor_check.py` 只剥最外层头(array_tx 的做法),剩下的和 polar_tx 的文件逐字节比。好处是 CI 只需检出一个姊妹库、一个 SHA。
 - **chirp 引擎绕过 `ADPLLTwoPoint` 的 event 模式**:它做载波恢复式去趋势,雷达要的是 `freq_out` 本身。

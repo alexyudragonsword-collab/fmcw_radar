@@ -1,9 +1,11 @@
 # 外部来源与占位数字表 —— 本库里每一个不是用户在 config 里定的数都在这里，一条一个，带来源标签。
 #
-#   assumed  前端占位值:mmw60_trx 的前端模块到位之前先用一个数(增益、NF、P1dB、LO 相噪剖面),
-#            到位后换成它的前端对象并重新 pin。没有任何实测或文献依据,只是量级合理。
+#   assumed  占位值:没有任何实测或文献依据,只是量级合理(天线增益、RX 增益档、LO 相噪、TDC、77 GHz 一档的全部)。
 #   survey   外部文献 / 标准的数,只读到二手转述或摘要,未核对原文(note 里写"未核实")。
-#   spec     已对照原文的数(需要 quote 与 section)。目前没有。
+#   spec     已对照原文的数(需要 quote 与 section)。0.2.8 起有五条:60 GHz 雷达前端的发射功率、NF、两个接收压缩点、收发隔离。
+#
+# upstream 一栏(可选)= 这个数在姊妹库来源表里的条目:"mmw60_trx:<条目>#<字段>",指向 vendored 的
+# src/fmcw_radar/vendor/mmw60/data/spec/survey.yaml。数在这里也写一遍(这张表要能单独读),加载时核对两边相等,不等就拒绝加载。
 #
 # 用 grep 数标签行(README 里写的那条命令,tests/test_sources.py 跑它)得到的数必须等于表里的条目数:
 # 所以文件头里不出现"标签名 + 冒号"这个字串。
@@ -11,43 +13,61 @@
 
 entries:
 
-  # ---------------------------------------------------------------- 60 GHz 感知雷达前端占位(全部 assumed)
+  # ---------------------------------------------------------------- 60 GHz 感知雷达前端(0.2.8:接收机 / 发射功率 / 隔离读 mmw60_trx 的来源表;其余仍是占位)
   60g_sensing.tx_power_dbm:
-    value: 10.0
+    value: 12.0
     unit: dBm
-    source: assumed
-    cite: "placeholder for the mmw60_trx PA / front end (not born yet); a 60 GHz CMOS PA at a few mW per element"
-    note: "占位:mmw60_trx 前端到位后由它的 PA 对象给出。"
+    source: spec
+    upstream: "mmw60_trx:rx60.radar_iwr6843#tx_power_dbm"
+    cite: "TI IWR6843 / IWR6443 datasheet SWRS219F (Oct. 2018, revised Apr. 2025), a single-chip 60-64 GHz FMCW radar sensor"
+    section: "7.9 RF Specification, p. 32"
+    quote: "Transmitter: Output power, TYP 12 dBm; Power backoff range 26 dB"
+    note: "一颗雷达芯片的典型值,在芯片端口,不含天线。0.2.7 及以前是 10 dBm 的占位。mmw60_trx 自己的 PA(Psat 15 dBm)是它的假设,雷达不读。"
   60g_sensing.tx_gain_dbi:
     value: 10.0
     unit: dBi
     source: assumed
-    cite: "placeholder: a small in-package antenna / sub-array at 60 GHz"
-    note: "占位:mmw60_trx 的阵列 / 封装模块到位后替换。"
+    cite: "placeholder: a small in-package antenna / sub-array at 60 GHz; read so far: 2 dBi in package (mmw60_trx: rx60.comm_asada2011), about 12 dBi measured for an 8-element board array (Adela et al., IEEE TAP 66(10), 2018)"
+    note: "占位:天线增益是设计选择(封装内单元 2 dBi 到板上 8 元阵 12 dBi 差 10 dB,而 MIMO 阵元两者都不是),mmw60_trx 的面落地后有意没有换;对 SNR 是 1 dB 对 1 dB。"
   60g_sensing.rx_gain_dbi:
     value: 10.0
     unit: dBi
     source: assumed
-    cite: "placeholder: same aperture as the transmit side"
-    note: "占位。"
+    cite: "placeholder: same aperture as the transmit side (see tx_gain_dbi for what has been read)"
+    note: "占位:同 tx_gain_dbi。"
   60g_sensing.rx_gain_db:
     value: 40.0
     unit: dB
     source: assumed
-    cite: "placeholder: LNA + mixer + IF amplifier to the ADC"
-    note: "占位:只影响 ADC 量化噪声与 P1dB 裕量的折算,不影响热噪声 SNR。"
+    cite: "this library's pick of a gain setting; the radar chip read for the receiver (mmw60_trx: rx60.radar_iwr6843) offers 30 to 48 dB in 2 dB steps"
+    note: "占位:增益档是设计选择,不是器件常数;40 dB 在那颗雷达芯片的 30–48 dB 范围内,也是图 7-2 上的一个读数点。只影响 ADC 量化噪声与带内压缩点的折算,不影响热噪声 SNR。"
   60g_sensing.nf_db:
-    value: 10.0
+    value: 12.0
     unit: dB
-    source: assumed
-    cite: "placeholder: 60 GHz CMOS LNA + mixer receiver noise figure"
-    note: "占位:mmw60_trx 的 LNA 对象到位后替换。"
-  60g_sensing.p1db_dbm:
-    value: -20.0
+    source: spec
+    upstream: "mmw60_trx:rx60.radar_iwr6843#nf_db"
+    cite: "TI IWR6843 / IWR6443 datasheet SWRS219F (Oct. 2018, revised Apr. 2025), a single-chip 60-64 GHz FMCW radar sensor"
+    section: "7.9 RF Specification, p. 32"
+    quote: "Receiver: Noise figure, 60 to 64 GHz, TYP 12 dB"
+    note: "表里的典型值。同一节图 7-2 上 NF 随增益变(30 / 40 / 48 dB 增益时目读 15.6 / 11.0 / 10.3 dB);这里取表值,不随 rx_gain_db 变。0.2.7 及以前是 10 dB 的占位。"
+  60g_sensing.p1db_oob_dbm:
+    value: -12.0
     unit: dBm
-    source: assumed
-    cite: "placeholder: receiver input-referred 1 dB compression"
-    note: "占位:里程碑 1 只报裕量;TX 泄漏 / 自干扰在里程碑 2。"
+    source: spec
+    upstream: "mmw60_trx:rx60.radar_iwr6843#p1db_in_oob_dbm"
+    cite: "TI IWR6843 / IWR6443 datasheet SWRS219F (Oct. 2018, revised Apr. 2025), a single-chip 60-64 GHz FMCW radar sensor"
+    section: "7.9 RF Specification, p. 32, footnote (1)"
+    quote: "1-dB compression point (Out Of Band), TYP -12 dBm. (1) 1-dB Compression Point (Out Of Band) is measured by feed a Continuous wave Tone (10 kHz) well below the lowest HPF cut-off frequency."
+    note: "输入压缩点之一:基带高通之前的那几级。拍频低于高通截止的信号(发射泄漏、极近的反射体)碰到的是它。0.2.7 及以前只有一个 p1db_dbm = -20 dBm 的占位,两处共用。"
+  60g_sensing.p1db_inband_dbm:
+    value: -34.0
+    unit: dBm
+    source: spec
+    upstream: "mmw60_trx:rx60.radar_iwr6843_fig7_2#p1db_inband_dbm@gain_db=40"
+    cite: "TI IWR6843 / IWR6443 datasheet SWRS219F (Oct. 2018, revised Apr. 2025), a single-chip 60-64 GHz FMCW radar sensor"
+    section: "7.9 RF Specification, Figure 7-2. Noise Figure, In-band P1dB vs Receiver Gain"
+    quote: "Figure 7-2 shows variations of noise figure and in-band P1dB parameters with respect to receiver gain programmed."
+    note: "输入压缩点之二:带内,目标回波与 IF / ADC 饱和碰到的是它。读图值(±1 dB),在 rx_gain_db 占位的 40 dB 增益档;图上是一条直线,每 dB 增益降 1 dB(30 dB 时 -24,48 dB 时 -42 dBm),config 改了增益时按这个斜率折算(RadarConfig.p1db_inband)。"
   60g_sensing.lo_mult:
     value: 4
     unit: ""
@@ -80,11 +100,14 @@ entries:
     note: "占位:TDC 自身的抖动既是噪声(线性模型里与量化同一节点的白时间误差,功率比 12 sigma^2 / t_res^2),也是量化的 dither;取 0 时量化不被打散,chirp 上出确定性鬼目标(cairn/chirp-engine.md)。"
 
   60g_sensing.tx_rx_isolation_db:
-    value: 25.0
+    value: 20.0
     unit: dB
-    source: assumed
-    cite: "placeholder: on-chip / in-package TX-to-RX isolation of a 60 GHz transceiver without cancellation (milestone 2)"
-    note: "占位:mmw60_trx 的封装 / 阵列模块到位后由它的 TX-RX 隔离给出;SIC 之前的数。"
+    source: spec
+    upstream: "mmw60_trx:isolation.tx_rx_tue2018#with_ebg_db-improvement_max_db"
+    cite: "B. B. Adela, M. C. van Beurden, P. van Zeijl, A. B. Smolders, 'High-Isolation Array Antenna Integration for Single-Chip Millimeter-Wave FMCW Radar', IEEE Trans. Antennas Propag., vol. 66, no. 10, Oct. 2018, DOI 10.1109/TAP.2018.2854286"
+    section: "Abstract; Section V-B, Figs. 16 and 17"
+    quote: "Measurement results in the 57-64 GHz band show the TX-RX isolation of 40 dB, which is 15-20 dB better than the isolation between TX and RX arrays without EBG structures."
+    note: "不加隔离结构的板上收发阵。20 dB 不是原文里的一个数,是引文里两个数相减的低端(40 - 20),与 mmw60_trx 的取法相同。正文:整机不加 EBG 没有实测(图 17 是仿真,57-64 GHz 目读 21-27 dB),实测的不加 EBG 只有天线级(图 16,21-28 dB);所以 20 dB 比读到的范围低 1 dB,偏保守。加 EBG 整机实测 40-50 dB。0.2.7 及以前是 25 dB 的占位。SIC 之前的数。"
   60g_sensing.rx_coupling_c1_db:
     value: -16.0
     unit: dB
@@ -123,12 +146,18 @@ entries:
     source: assumed
     cite: "placeholder"
     note: "占位。"
-  77g_automotive.p1db_dbm:
+  77g_automotive.p1db_oob_dbm:
     value: -20.0
     unit: dBm
     source: assumed
-    cite: "placeholder"
-    note: "占位。"
+    cite: "placeholder: the single -20 dBm figure this band had before the compression point was split"
+    note: "占位:77 GHz 一档没有读过任何出处;两个压缩点都沿用拆分前的同一个数。"
+  77g_automotive.p1db_inband_dbm:
+    value: -20.0
+    unit: dBm
+    source: assumed
+    cite: "placeholder: the single -20 dBm figure this band had before the compression point was split"
+    note: "占位:同上;config 改增益时同样按每 dB 增益降 1 dB 折算。"
   77g_automotive.lo_mult:
     value: 4
     unit: ""

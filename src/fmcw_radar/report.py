@@ -43,7 +43,7 @@ def report(cfg: RadarConfig, st: StatResult) -> dict:
         "targets": st.targets, "angle": st.angle, "cfar": {**st.cfar, "range_pad": cfg.processing.range_pad},
         "leakage": None if st.leakage is None else {"rows": [{"term": lab, "value": v, "unit": u} for lab, v, u in st.leakage.as_rows()],
                                                      "adc_headroom_db": st.leakage.adc_headroom_db,
-                                                     "p1db_margin_db": st.leakage.p1db_margin_db,
+                                                     "p1db_margin_db": st.leakage.p1db_margin_db, "p1db_kind": st.leakage.p1db_kind,
                                                      "required_hpf_atten_db": st.leakage.required_hpf_atten_db,
                                                      "blank_recommended_s": st.leakage.blank_recommended_s,
                                                      "blank_s": st.leakage.blank_s},

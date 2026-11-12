@@ -194,20 +194,29 @@ class LOConfig:
 
 @dataclass(frozen=True)
 class FrontEndConfig:
-    """The analytic front-end placeholder (one number each, source: assumed)
-    standing in for mmw60_trx's PA / LNA / array / package objects.  Every
-    ``None`` takes the band's entry from sources.yaml; a set value is the
-    config's own claim."""
+    """The analytic front end: one number each.  Every ``None`` takes the
+    band's entry from sources.yaml -- for the 60 GHz band the transmit power,
+    the noise figure and the two compression points are a radar chip's
+    figures read through mmw60_trx's sourced table, the rest placeholders
+    (source: assumed); a set value is the config's own claim.
+
+    The receiver has two input compression points.  ``p1db_oob_dbm`` is the
+    stages ahead of the IF high-pass: what a signal beating below the
+    high-pass corner meets, the TX leakage first of all.  ``p1db_inband_dbm``
+    is what the echo and the IF / ADC meet; the placeholder is given at the
+    band's ``rx_gain_db`` and falls 1 dB per dB of gain above it
+    (:meth:`RadarConfig.p1db_inband`)."""
 
     tx_power_dbm: Optional[float] = None
     tx_gain_dbi: Optional[float] = None
     rx_gain_dbi: Optional[float] = None
     rx_gain_db: Optional[float] = None      # LNA + mixer + IF gain to the ADC [dB]
     nf_db: Optional[float] = None
-    p1db_dbm: Optional[float] = None        # input-referred 1 dB compression [dBm]
+    p1db_oob_dbm: Optional[float] = None    # input 1 dB compression ahead of the IF high-pass [dBm]
+    p1db_inband_dbm: Optional[float] = None  # input 1 dB compression in band, at this config's gain [dBm]
 
     def __post_init__(self):
-        for name in ("tx_power_dbm", "tx_gain_dbi", "rx_gain_dbi", "rx_gain_db", "nf_db", "p1db_dbm"):
+        for name in ("tx_power_dbm", "tx_gain_dbi", "rx_gain_dbi", "rx_gain_db", "nf_db", "p1db_oob_dbm", "p1db_inband_dbm"):
             v = getattr(self, name)
             if v is not None:
                 _finite(v, f"frontend.{name}")
@@ -469,7 +478,7 @@ class RadarConfig:
 
     def frontend_value(self, name: str) -> tuple[float, str]:
         """``(value, source)`` of a front-end number: the config's own
-        (``config``) or the band's placeholder (``assumed``)."""
+        (``config``) or the band's entry in sources.yaml with its tag."""
         from ..sources import frontend_placeholder
 
         v = getattr(self.frontend, name)
@@ -477,6 +486,22 @@ class RadarConfig:
             return float(v), "config"
         e = frontend_placeholder(self.band.kind, name)
         return float(e.value), e.source
+
+    def p1db_inband(self) -> tuple[float, str]:
+        """``(value, source)`` of the in-band input compression point at this
+        config's receive gain.  The band's entry is the figure at the band's
+        own ``rx_gain_db``; a config that sets another gain moves it 1 dB
+        down per dB of gain (the radar chip's Figure 7-2 is that straight
+        line: the in-band compression is a fixed level at the output).  A
+        config that sets ``frontend.p1db_inband_dbm`` is taken at its word."""
+        from ..sources import frontend_placeholder
+
+        if self.frontend.p1db_inband_dbm is not None:
+            return float(self.frontend.p1db_inband_dbm), "config"
+        e = frontend_placeholder(self.band.kind, "p1db_inband_dbm")
+        g_ref = float(frontend_placeholder(self.band.kind, "rx_gain_db").value)
+        g, _ = self.frontend_value("rx_gain_db")
+        return float(e.value) - (g - g_ref), e.source
 
     def lo_value(self, name: str) -> tuple[float, str]:
         from ..sources import frontend_placeholder

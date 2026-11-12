@@ -1,4 +1,4 @@
-"""Adapted copies of the sibling library fmcw_radar builds on (polar_tx).
+"""Adapted copies of the sibling libraries fmcw_radar builds on (polar_tx, array_tx, mmw60_trx).
 
 This tree is a VERIFIABLE COPY, not a fork (polar_tx CONTRIBUTING 3): every
 file carries an attribution header naming its upstream repository, commit and
@@ -40,6 +40,20 @@ Pins
     is dropped, fmcw_radar builds the matrix from its own config and never
     calls ``build_coupling``),
   - ``touchstone.py`` (the .sNp reader / writer).
+
+* ``mmw60/`` -- mmw60_trx @ ``ef0f00c50c508271abdf1423fde7062ba0a0b92d``
+  (its ``main``), its sourced-number table and the reader, nothing else:
+
+  - ``spec.py`` (``value(key)`` / ``survey(key)`` with the provenance tag),
+  - ``data/spec/survey.yaml`` (the table; a YAML file carries the same
+    attribution header in its ``#`` comments and is compared byte for byte
+    like a module).
+
+  ``Frontend60`` is not vendored: it stands on wifitrx's whole chain, and its
+  surveyed baseline is a communication transceiver, which leaves blank the
+  one figure a radar needs most (the compression point ahead of the IF
+  high-pass).  ``fmcw_radar.sources`` reads the radar chip's and the
+  isolation entries by key (``upstream:`` in ``data/sources.yaml``).
 
 Local changes
 -------------

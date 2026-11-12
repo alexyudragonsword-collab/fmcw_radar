@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fmcw-radar"
-version = "0.2.7"
+version = "0.2.8"
 description = "Behavioural simulation of 60 GHz wideband FMCW radar: ADPLL chirp generation, range-correlated LO phase noise, range-Doppler processing, statistical and time-domain engines"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,7 +24,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 # the source table travels with the package (configs and examples read it by key)
-fmcw_radar = ["data/*.yaml", "data/clock_profiles/*.yaml"]
+fmcw_radar = ["data/*.yaml", "data/clock_profiles/*.yaml", "vendor/mmw60/data/spec/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

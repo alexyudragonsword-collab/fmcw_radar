@@ -8,6 +8,14 @@ table (``source: survey``, read in summaries and unverified) live in
 the tag next to every such value.  ``grep -c "source:"`` on the file counts
 exactly the entries (the header is written so it cannot match).
 
+An entry may name the sibling table its number comes from (``upstream:``):
+``mmw60_trx:<entry>#<field>`` is that field of mmw60_trx's entry in the
+vendored copy of its ``data/spec/survey.yaml`` (``#a-b`` is a difference of
+two fields, ``#field@key=value`` the element of a tabulated curve).  The
+number is written here as well, so the table reads on its own, and loading
+refuses a pair that disagrees: a re-pin that moves the sibling's figure
+fails until this file follows.
+
 d2d_link's ``spec`` module is the model (its ``survey`` / ``spec`` / ``model``
 tags become ``survey`` / ``spec`` / ``assumed`` here: a radar has no
 specification to quote yet, and what the siblings call a model estimate is
@@ -36,6 +44,7 @@ class SourcedNumber:
     note: str = ""
     quote: str = ""      # required when source == "spec"
     section: str = ""
+    upstream: str = ""   # "mmw60_trx:<entry>#<field>": the sibling's sourced entry this number is read from
 
     def __post_init__(self):
         if self.source not in SOURCES:
@@ -56,6 +65,29 @@ class SourcedNumber:
         return f"{self.value} {self.unit} (source: {self.source})".replace("  ", " ")
 
 
+def upstream_value(ref: str) -> float:
+    """The number ``ref`` names in a sibling's sourced table (the module
+    docstring has the three forms)."""
+    repo, _, rest = ref.partition(":")
+    entry, _, field = rest.partition("#")
+    if repo != "mmw60_trx" or not entry or not field:
+        raise ValueError(f"upstream {ref!r}: expected 'mmw60_trx:<entry>#<field>'")
+    from .vendor.mmw60 import spec
+
+    v = spec.value(entry)
+    if "@" in field:                                    # a tabulated curve: the element where key == value
+        name, _, cond = field.partition("@")
+        key, _, at = cond.partition("=")
+        axis = [float(x) for x in v[key]]
+        if float(at) not in axis:
+            raise ValueError(f"upstream {ref!r}: {key} has no point {at} (have {axis})")
+        return float(v[name][axis.index(float(at))])
+    if "-" in field:                                    # a difference of two fields of one entry
+        a, _, b = field.partition("-")
+        return float(v[a]) - float(v[b])
+    return float(v[field])
+
+
 def load_sources(path: Path | str = SOURCES_FILE) -> dict[str, SourcedNumber]:
     import yaml
 
@@ -66,13 +98,18 @@ def load_sources(path: Path | str = SOURCES_FILE) -> dict[str, SourcedNumber]:
     for key, e in entries.items():
         if not isinstance(e, dict):
             raise ValueError(f"entry {key!r} is not a mapping")
-        unknown = set(e) - {"value", "unit", "source", "cite", "note", "quote", "section"}
+        unknown = set(e) - {"value", "unit", "source", "cite", "note", "quote", "section", "upstream"}
         if unknown:
             raise ValueError(f"entry {key!r}: unknown fields {sorted(unknown)}")
         out[key] = SourcedNumber(key=key, value=e.get("value"), unit=str(e.get("unit", "")),
                                  source=str(e.get("source", "")), cite=str(e.get("cite", "")),
                                  note=str(e.get("note", "")), quote=str(e.get("quote", "")),
-                                 section=str(e.get("section", "")))
+                                 section=str(e.get("section", "")), upstream=str(e.get("upstream", "")))
+        if out[key].upstream:
+            up = upstream_value(out[key].upstream)
+            if abs(float(out[key].value) - up) > 1e-9:
+                raise ValueError(f"entry {key!r}: value {out[key].value} is not its upstream's "
+                                 f"({out[key].upstream} = {up}); the sibling's table moved, or this one did")
     return out
 
 
@@ -102,5 +139,5 @@ def by_source(source: str) -> dict[str, SourcedNumber]:
     return {k: v for k, v in _table().items() if v.source == source}
 
 
-__all__ = ["SourcedNumber", "SOURCES", "SOURCES_FILE", "load_sources", "number", "frontend_placeholder",
+__all__ = ["SourcedNumber", "SOURCES", "SOURCES_FILE", "load_sources", "number", "frontend_placeholder", "upstream_value",
            "all_entries", "by_source"]

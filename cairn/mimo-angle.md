@@ -5,7 +5,7 @@ summary: "里程碑 2 的知识:TDM-MIMO 虚拟阵列测角(位置之和、u 格
 tags: [mimo, tdm, dbf, coupling, array_tx, leakage, hpf, cfar, multi-target]
 contains: [decision, lesson, experience]
 created: "2026-11-07"
-updated: "2026-11-10"
+updated: "2026-11-12"
 related: [architecture-invariants, range-correlation]
 authoring_mode: ai_generated
 ---
@@ -43,7 +43,7 @@ authoring_mode: ai_generated
   (5 m 处每 chirp 的公共相位 < 0.1 mrad,且对同一 chirp 的各 RX 是共模)都不在账上。
 - **坑(contains:少量 seed 的 RMS 会骗人)**:N 个 seed 的 RMS 相对标准差是 1/√(2N):6 个 ±29 %,24 个 ±14 %,128 个 ±6 %。归因过程中 24 个 seed 读 0.0325(−16 %)、
   128 个读 0.0434(+12 %,2σ),384 个才收敛到 0.0395。里程碑 2 的"2 倍没有归因"= 1.77 倍的估计器代价 + 6 个 seed 的抽样误差(0.050 对 0.041,+22 %,不到 1σ)。
-  示例 07 现在用 32 个 seed 并把 ±% 打出来(cos 元:0.043° 对期望 0.041°,真多普勒 + 均匀权 0.025° 对 0.027°;0.2.5 的 LO 噪声分工前是 0.042°);要 5 % 以内的对照得上百个。
+  示例 07 现在用 32 个 seed 并把 ±% 打出来(cos 元:0.042° 对期望 0.041°,真多普勒 + 均匀权 0.024° 对 0.027°;0.2.8 换前端数之前 0.043° / 0.025°);要 5 % 以内的对照得上百个。
 
 ## 3. 互耦:array_tx 的矩阵三来源,校准后残差 < 0.01°
 
@@ -56,24 +56,31 @@ authoring_mode: ai_generated
 
 ## 4. TX 泄漏:大但没有相噪,靠 IF 高通
 
-- `link/leakage.py`:直接泄漏(隔离 25 dB 占位,τ 0.2 ns → 拍频 8 kHz)+ 近端反射体(2 cm,−10 dB 相对)。经同一 LO,τ ≈ 0 的 range correlation 让它几乎不带相噪
-  (`window_sidelobe_at_target_db` −122 dBc:泄漏在目标格只剩窗旁瓣),但幅度:接收端 −15 dBm,P1dB 裕量 **−5 dB**(压缩),ADC 裕量 **−21 dB**(满幅削波,
-  时域引擎 `clipped_fraction` > 0.9)。
+> 0.2.8 起本节的数是有出处的前端数(发射 12 dBm、隔离 20 dB,`cairn/frontend-sources.md`):泄漏在接收端 −8 dBm。0.2.7 及以前用占位(10 dBm、25 dB,−15 dBm),
+> 所有电平低 7 dB;当时的数在括号里注明。机制没变,**一条结论变了**:1 阶 200 kHz 高通不再够用。
+
+- `link/leakage.py`:直接泄漏(τ 0.2 ns → 拍频 8 kHz)+ 近端反射体(2 cm,−10 dB 相对)。经同一 LO,τ ≈ 0 的 range correlation 让它几乎不带相噪
+  (`window_sidelobe_at_target_db` −117 dBc:泄漏在目标格只剩窗旁瓣),但幅度:接收端 −8 dBm,ADC 裕量 **−28 dB**(满幅削波,时域引擎 `clipped_fraction` > 0.9)。
+- **压缩点是两个量(contains:decision)**:拍频低于高通截止的项在 IF 级之前就被滤掉,只压高通之前的那几级 → 对带外压缩点(−12 dBm);没有高通、或拍频高于截止(够远的反射体)
+  → 它是和回波一样的带内信号,对带内压缩点(−34 dBm @ 40 dB 增益)。`p1db_margin_db` 是最差的一项对它碰到的那个点,`p1db_kind` 说是哪个。
+  默认:无高通 **−26 dB**(带内);2 阶 200 kHz 高通 **−4 dB**(带外)——泄漏仍比带外压缩点高 4 dB;加文章里的隔离结构(40 dB)是 +16 dB。时域引擎不建模压缩,这只是预算。
 - 2 阶 200 kHz 高通(`rx.hpf_corner_hz` / `rx.hpf_order`,`processing/iffilter.py` 的因果 Butterworth,闭式衰减与滤波一致 0.2 dB 内):8 kHz 衰 56 dB,
-  ADC 裕量 +35 dB,削波 3.5 %(1 阶 2.7 %,2 阶 50 kHz 14.9 %);1.33 MHz 的目标拍频只衰 0.002 dB。
-- **坑(contains:高通后泄漏仍是图上的峰)**:高通后泄漏 −31 dBm 仍比 5 m 人体 −47 dBm 高 16 dB,距离–多普勒图的峰在 0.03 m,目标在 5 m 处被 `found_targets` 找到,
-  相对电平 −18.1 dB 对预算 −16.2 dB(32 chirp)。要目标成为峰得再 20 dB 隔离或更高阶高通 —— 这是物理,不是 bug。
-- **坑(contains:飞回瞬态过高通削波)**:状态跨 chirp 连续并在第一个 chirp 前预热后,剩下的 3.5 % 削波是每个 chirp 开头的飞回瞬态经高通的响应:
-  锯齿重启让每个泄漏音的相位跳 2π f_beat T_c,阶跃 2A|sin(Δφ/2)|(两项共 7.2 V)整个穿过高通(高通对阶跃不衰减),按最慢极点
-  (阻尼 sin(π/2k),200 kHz 2 阶 τ = 1.13 µs)衰减。预算的闭式 `blank_recommended_s` = τ·(ln(阶跃/满幅) + 1):1 / 2 / 3 阶 3.2 / 4.5 / 6.4 µs,
-  对时域量到的削波段 2.7 / 3.5 / 4.8 µs(都盖住,余量 1.2–1.3 倍)。
+  ADC 裕量 +28 dB,削波 4.1 %(2 阶 50 kHz 17.3 %);1.33 MHz 的目标拍频只衰 0.002 dB。(占位时:裕量 +35 dB,削波 3.5 % / 14.9 %。)
+- **坑(contains:1 阶 200 kHz 高通在有出处的电平下不够)**:8 kHz 处 1 阶只衰 28 dB,泄漏在 ADC 是 32 − 28 = 4 dBm,正好满幅:削波 78 %,而且是稳态削波,blanking 救不回来(blank 3.8 µs 后仍 74 %)。
+  占位时它还有 7 dB 裕量、只削 2.7 %(瞬态)。要 1 阶就得把截止提到约 450 kHz(那时裕量回到 7 dB)或加隔离。
+- **坑(contains:高通后泄漏仍是图上的峰)**:高通后泄漏 −24 dBm 仍比 5 m 人体 −45 dBm 高 21 dB,距离–多普勒图的峰在 0.03 m,目标在 5 m 处被 `found_targets` 找到,
+  相对电平 −23.0 dB 对预算 −21.2 dB。要目标成为峰得再 25 dB 隔离或更高阶高通 —— 这是物理,不是 bug。(占位时 −18.1 对 −16.2 dB。)
+- **坑(contains:飞回瞬态过高通削波)**:状态跨 chirp 连续并在第一个 chirp 前预热后,剩下的 4.1 % 削波是每个 chirp 开头的飞回瞬态经高通的响应:
+  锯齿重启让每个泄漏音的相位跳 2π f_beat T_c,阶跃 2A|sin(Δφ/2)|(两项共 16.1 V;占位时 7.2 V)整个穿过高通(高通对阶跃不衰减),按最慢极点
+  (阻尼 sin(π/2k),200 kHz 2 阶 τ = 1.13 µs)衰减。预算的闭式 `blank_recommended_s` = τ·(ln(阶跃/满幅) + 1):2 / 3 阶 5.4 / 7.7 µs,对时域量到的削波段 3.9 / 5.3 µs(都盖住,余量 1.4 倍)。
+  (占位时 1 / 2 / 3 阶 3.2 / 4.5 / 6.4 µs 对 2.7 / 3.5 / 4.8 µs;机制测试固定在这一档电平上跑,`tests/test_leakage.py::_hpf`。)
 - **坑(contains:blanking 不能只把样本清零)**:在不变的 Hann 窗下把前 80 个样本清零,窗边出一个台阶,远旁瓣抬 20 dB 以上 —— 1 阶高通的例子里
   2–4 m 的底从 −94 **升到** −72 dBc。正确做法是距离窗按剩下的 n − k 个样本重配(`range_window`),近旁瓣不变、主瓣宽 n/(n − k)、SNR 损 10 log(n/(n − k))
-  (4.5 µs / 100 µs:0.2 dB)。所有距离 FFT 与窗统计(预算 ENBW、刻度损失、相噪底表、非线性剖面、遮蔽表)都走同一个 `range_window`。
-- **坑(contains:blanking 后剩的那一个削波样本)**:时域引擎的 IF 砖墙是逐 chirp 的循环 FFT 滤波,下一个 chirp 的阶跃环回到本 chirp 的最后一个样本
-  (每 chirp 1 个,窗权 ~1e-5);`clipped_fraction_after_blanking` 因此是 0.1 % 不是 0,ROADMAP P2 #0 记了因果 IF 滤波器。
-- blanking 后的收益在有噪声的帧里看不见(2–4 m 的底本来就是热噪声),只在无噪声视图里显出来:2 阶 200 kHz 下瞬态把底相对目标抬到 −43.5 dB,
-  blanking 后 −51.0 dB,无泄漏参照 −53.3 dB;剩下的差是瞬态在窗上升沿下未削波的尾巴。
+  (5.4 µs / 100 µs:0.24 dB)。所有距离 FFT 与窗统计(预算 ENBW、刻度损失、相噪底表、非线性剖面、遮蔽表)都走同一个 `range_window`。
+- **坑(contains:blanking 后剩的削波样本)**:时域引擎的 IF 砖墙是逐 chirp 的循环 FFT 滤波,下一个 chirp 的阶跃环回到本 chirp 的末尾:现在每 chirp 3 个样本
+  (第 995、996、999 个;占位电平时 1 个),`clipped_fraction_after_blanking` 0.3 %(窗权 ~1e-5 … 1e-4)。阶跃大了 7 dB,环回的前振铃多过了两个样本的满幅。ROADMAP P2 #0 记了因果 IF 滤波器。
+- blanking 后的收益在有噪声的帧里看不见(2–4 m 的底本来就是热噪声),只在无噪声视图里显出来:2 阶 200 kHz 下瞬态把底相对目标抬到 −41.7 dB,
+  blanking 后 −53.7 dB,无泄漏参照 −54.2 dB;剩下的差是瞬态在窗上升沿下未削波的尾巴。(占位时 −43.5 / −51.0 / −53.3 dB。)
 
 ## 5. 多目标与 CFAR 曲线
 

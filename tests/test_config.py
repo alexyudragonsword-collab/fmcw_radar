@@ -69,7 +69,8 @@ def test_derived_quantities(cfg60):
 
 def test_sourced_fields_resolve_with_their_source(cfg60):
     v, src = cfg60.frontend_value("nf_db")
-    assert src == "assumed" and v == 10.0
+    assert src == "spec" and v == 12.0                                             # the radar chip's, through mmw60_trx's table
+    assert cfg60.frontend_value("rx_gain_dbi") == (10.0, "assumed")                # the antennas are still placeholders
     c2 = apply_overrides(cfg60, {"frontend.nf_db": 7.0})
     assert c2.frontend_value("nf_db") == (7.0, "config")
     assert cfg60.rcs_dbsm()[1] == "survey" and cfg60.oxygen_db_per_km()[1] == "survey"
