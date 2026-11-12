@@ -76,6 +76,10 @@ def stat_values(s) -> dict:
             out["nl." + k] = _scalar(v)
     for i, (dr, lvl) in enumerate(s.nonlinearity.get("ghosts") or []):
         out[f"nl.ghost.{i}"] = f"{dr!r},{lvl!r}"
+    for i, (dr, lvl) in enumerate(s.nonlinearity.get("ghosts_quiet") or []):
+        out[f"nl.ghost_quiet.{i}"] = f"{dr!r},{lvl!r}"
+    if "ghost_limit_dbc" in s.nonlinearity:
+        out["nl.ghost_limit_dbc"] = _scalar(s.nonlinearity["ghost_limit_dbc"])
     if "nonlinearity_profile" in s.extras:
         out["nl.profile"] = digest(s.extras["nonlinearity_profile"][1])
     for i, t in enumerate(s.targets):

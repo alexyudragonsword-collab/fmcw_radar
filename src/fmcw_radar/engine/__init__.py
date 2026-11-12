@@ -27,7 +27,10 @@ def run_radar(cfg: RadarConfig) -> RadarResult:
         n = cfg.time_chirps() if cfg.sim.engine != "statistical" else min(3, cfg.chirp.n_chirps)
         chirp = ChirpEngine(cfg).run(noise=False, n_chirps=n)
     stat = run_statistical(cfg, chirp)
-    time = run_time(cfg, chirp) if cfg.sim.engine in ("time", "both") else None
+    # the time engine takes the loop's own noise-on curve when the LO is the vendored loop (run_time's default);
+    # the deterministic curve above is the statistical engine's (settling, mismatch, the undithered pattern)
+    live = chirp is not None and chirp.engine == "event" and cfg.lo.profile is None
+    time = run_time(cfg, None if live else chirp) if cfg.sim.engine in ("time", "both") else None
     return RadarResult(cfg, chirp, stat, time)
 
 

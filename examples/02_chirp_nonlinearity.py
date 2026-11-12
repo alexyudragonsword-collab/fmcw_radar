@@ -13,11 +13,12 @@ step, not a parabola).
 """
 
 import numpy as np
-from _common import CONFIG, OUT, plt_or_none, rel
+from _common import CONFIG, OUT, SMOKE, plt_or_none, rel
 
 from fmcw_radar.chirp import ChirpEngine, quadratic_reference
 from fmcw_radar.config import load_config
-from fmcw_radar.engine.statistical import ideal_profile, nonlinearity_profile
+from fmcw_radar.engine.statistical import coherent_spurs, ideal_profile, nonlinearity_profile
+from fmcw_radar.lo import LOProfile
 
 base = load_config(CONFIG, {"chirp.n_chirps": 4})
 ideal = ideal_profile(base)
@@ -52,7 +53,7 @@ for label, ov in cases:
     print(f"  range response: -3 dB width {nl['width_3db_m'] * 100:.2f} cm, peak sidelobe {nl['peak_sidelobe_db']:.1f} dB, "
           f"ISLR {nl['islr_db']:.1f} dB, beat phase perturbation {nl['phase_rms_rad'] * 1e3:.1f} mrad RMS")
     if nl["ghosts"]:
-        print("  ghost targets (offset m, dBc): " + ", ".join(f"{dr:+.2f} / {lvl:.1f}" for dr, lvl in nl["ghosts"][:4])
+        print("  this ramp's pattern, undithered (offset m, dBc): " + ", ".join(f"{dr:+.2f} / {lvl:.1f}" for dr, lvl in nl["ghosts"][:4])
               + ("" if c.vouches_for_spurs else "  [linearised curve: not vouched for]"))
     rows.append((label, m, nl))
 
@@ -72,6 +73,18 @@ nlq = nonlinearity_profile(base, q, 2)
 print(f"\nreference group: analytic quadratic of the same RMS ({rms * base.lo_mult / 1e3:.0f} kHz at the carrier): "
       f"-3 dB width {nlq['width_3db_m'] * 100:.2f} cm, peak sidelobe {nlq['peak_sidelobe_db']:.1f} dB, ISLR "
       f"{nlq['islr_db']:.1f} dB -- the loop's step-and-decay puts its energy elsewhere than a parabola would")
+
+# the TDC's quantisation as a frame sees it: with the loop's noise on, what stays coherent over the ramps
+n_frame = 8 if SMOKE else 32
+print(f"\nthe pattern above is one noise-off ramp.  With the loop's noise on, over {n_frame} ramps, what stays coherent "
+      f"(TDC {base.lo_value('tdc_res_s')[0] * 1e12:g} ps; its own jitter dithers the quantisation and is noise in the LO profile):")
+print("  TDC jitter [ps RMS] | strongest coherent spurs (offset m / dBc)             | search limit [dBc] | LO L(1 MHz) [dBc/Hz]")
+for jit in (0.0, 0.5e-12, 1e-12, 2e-12):
+    c_j = load_config(CONFIG, {"lo.dp_cal": "none", "lo.tdc_jitter_s": jit, "chirp.n_chirps": n_frame})
+    cs = coherent_spurs(c_j, ChirpEngine(c_j).run(noise=True, seed=c_j.sim.seed, n_chirps=n_frame + 1))
+    top = ", ".join(f"{dr:+.2f} / {lvl:.1f}" for dr, lvl in cs["ghosts"][:3]) or "none above the limit"
+    mark = "  <- the placeholder" if jit == base.lo_value("tdc_jitter_s")[0] else ""
+    print(f"  {jit * 1e12:19.1f} | {top:52s} | {cs['limit_dbc']:18.1f} | {float(LOProfile.from_config(c_j).l_dbc(1e6)):20.1f}{mark}")
 
 plt = plt_or_none()
 if plt is not None:

@@ -96,12 +96,19 @@ def to_markdown(rep: dict) -> str:
                   f"(window alone {R['window_sidelobe_db']:.1f} dB), ISLR {N['islr_db']:.1f} dB, beat phase "
                   f"perturbation {N['phase_rms_rad'] * 1e3:.1f} mrad RMS."]
         ghosts = N.get("ghosts") or []
-        if ghosts:
+        quiet = N.get("ghosts_quiet") or []
+        if "ghost_chirps" in N:
+            lines += ["", f"Ghost targets: what of the chirp's error stays coherent over {N['ghost_chirps']} ramps with the loop's noise on "
+                      f"(TDC jitter {N['tdc_jitter_s'] * 1e12:g} ps RMS on a {N['tdc_res_s'] * 1e12:g} ps TDC, dithering its quantisation; "
+                      f"the cycle-accurate engine vouches for them). A spur under about {N['ghost_limit_dbc']:.0f} dBc cannot be told from "
+                      f"the LO's noise in that many ramps."
+                      + (f" Undithered (the noise-off curve) the strongest is {quiet[0][1]:.1f} dBc at {quiet[0][0]:+.2f} m." if quiet else "")
+                      + ("" if ghosts else " None found.")]
+        elif ghosts:
             lines += ["", "Ghost targets of the chirp's frequency error (local maxima of that response beyond the "
-                      "window's sidelobes; "
-                      + ("the cycle-accurate engine vouches for them" if N.get("ghosts_vouched") else
-                         "from a linearised curve: NOT vouched for, invariant #6") + "):", "",
-                      "| offset from the target [m] | level [dBc] |", "|---:|---:|"]
+                      "window's sidelobes; from a linearised curve: NOT vouched for, invariant #6):"]
+        if ghosts:
+            lines += ["", "| offset from the target [m] | level [dBc] |", "|---:|---:|"]
             lines += [f"| {dr:+.2f} | {lvl:.1f} |" for dr, lvl in ghosts]
     T2 = rep.get("targets") or []
     if len(T2) > 1:

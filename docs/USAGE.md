@@ -27,8 +27,9 @@ blanking 的时长,0.2.1:距离窗按剩下的样本重配,`cfg.n_blank` 是样�
   里程碑 2:`targets`(每目标一行:电平、格点 SNR、最强他者的裙边、`masked`)、`angle`(孔径、波束宽、CRLB、TDM 偏差、互耦偏差、斜视;0.2.2 起还有本估计器的期望散布 `sigma_expected_deg` 与四个因子 `factor_*`)、`leakage`(`LeakageBudget`)、
   `cfar`(0.2.3:训练集有效格数、与被测格的相关、每格精确 Pfa、带内格数 / 独立观测数 / 每帧期望虚警格;0.2.4:`n_looks`、`pd_target`、`snr_pd90_db`、
   `cfar_loss_db`、`ghosts`(每个鬼目标的 SNR 与 Pd)、`ghost_detections_per_frame`)。
-- `run_time(cfg, chirp=None, chirp_noise=False, noise=True, phase_noise=True, quantise=True, leakage=True, hpf=True)` → `TimeResult`(`chirp_noise=True`:
-  逐周期引擎带噪声跑,环路到 fref/2 的噪声由它带、剖面只合成 fref/2 以上;`extras["lo_noise_split"]` 写明这一帧怎么分的):`rd_db`、轴、峰值位置、`snr_cell_db`、
+- `run_time(cfg, chirp=None, chirp_noise=None, noise=True, phase_noise=True, quantise=True, leakage=True, hpf=True)` → `TimeResult`(`chirp_noise`:
+  逐周期引擎带噪声跑,环路到 fref/2 的噪声由它带、TDC 抖动把量化打散、剖面只合成 fref/2 以上;缺省在 event 引擎且没有 `lo.profile` 文件时为真。
+  `extras["lo_noise_split"]` 写明这一帧怎么分的):`rd_db`、轴、峰值位置、`snr_cell_db`、
   最后一个 chirp 的距离剖面与宽度、CFAR 检测;`extras["targets_found"]`(每目标 `(距离, 速度, 相对电平[, 角度])` 或 None)、`clipped_fraction`;
   MIMO 时 `frame` 是 (chirp, RX, 样本) 立方,`extras` 多 `angle_deg`、`angle_spectrum`、`snapshot`、`doppler_fine_hz`。开关只为一致性检查,config 里没有。
 - `VirtualArray(cfg)`:`x_v`、`filled`、`snapshot(theta, doppler)`、`estimate(snapshot, doppler)`、`beamwidth_deg`、`crlb_sigma_deg`、`angle_error_budget(snr_chirp_db, theta, doppler)`、`coupling_bias_deg`、
@@ -37,9 +38,10 @@ blanking 的时长,0.2.1:距离窗按剩下的样本重配,`cfg.n_blank` 是样�
   `threshold_factor(n, pfa, n_looks)` / `ca_cfar_2d(..., n_looks)` / `cfar_window(shape, guard, train)`、`hpf_attenuation_db` / `apply_hpf`;`range_window(name, n, n_blank)` 是 blanking 后的距离窗(所有距离 FFT 与窗统计都走它)。
 - `ChirpEngine(cfg).run(noise=False, n_chirps=None)` → `ChirpResult`:`f_err_dco_hz` 整帧曲线、`ramp(k)` / `ramp_carrier(k)`、`metrics(k)`
   (峰值、RMS、底、建立时间)、`dp_cal_passes` / `dp_cal_trace`、`ui_per_ref_cycle_p99`、`vouches_for_spurs`;`run(noise=True, seed=…)` 时 `noise`、`osc_phase_dco_rad`、
-  `lo_noise_in_curve`(all / quantisation / none / unverified)。
+  `lo_noise_in_curve`(all / quantisation / none / unverified)。`noisy_chirp(cfg, seed, n_chirps)` 是带缓存的 noise=True 运行;`coherent_spurs(cfg, chirp)`
+  (`engine.statistical`)在它上面找一帧里相干的杂散。`lo.tdc_jitter_s`(TDC 抖动,None → 占位 1 ps)。
 - `RangeCorrelation(profile, tau)`:`residual_psd(f)`、`sidelobe_dbc(offset_hz, enbw_hz)`、`synthesize_residual(n, fs, rng)`、`measured_residual_psd`。
-- `LOProfile.from_config(cfg)`:`psd(f)` / `l_dbc(f)` 在载波处;`components`(ref / dco / tdc_quant / dco_quant 分项)、`without(*names)`、`above(f)`;`lo.profile` 指向 pll_simulator 剖面文件时按 (DCO/f0)² N² 缩放。
+- `LOProfile.from_config(cfg)`:`psd(f)` / `l_dbc(f)` 在载波处;`components`(ref / dco / tdc_quant / dco_quant / tdc_jitter 分项)、`without(*names)`、`above(f)`;`lo.profile` 指向 pll_simulator 剖面文件时按 (DCO/f0)² N² 缩放。
 
 ## 工具
 

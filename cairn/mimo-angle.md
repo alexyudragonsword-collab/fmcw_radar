@@ -49,7 +49,7 @@ authoring_mode: ai_generated
 
 - `mimo.coupling.source`:`analytic`(array_tx 的解析矩阵,相邻 c1 = −16 dB 占位 `source: assumed`、180°、次邻 −6 dB 相对)、`survey`(同一占位数经 survey 路径)、
   `touchstone`(S 参数文件,端口数必须等于 n_rx)。RX 耦合作用在每个 TX 块的 RX 快拍上:`c_rx = I + S_offdiag(f0)`。
-- 未校准偏 **−0.29°**(20° 目标,相邻 −16 dB),角旁瓣从 −32 升到 −20.6 dB;`coupling.calibrated: true` 用逆矩阵,残差 +0.0002°(时域 32 个 seed:均值 +0.008°,RMS 0.043°,对期望散布 0.041°;未校准时均值 −0.284°)。
+- 未校准偏 **−0.29°**(20° 目标,相邻 −16 dB),角旁瓣从 −32 升到 −20.6 dB;`coupling.calibrated: true` 用逆矩阵,残差 +0.0002°(时域 32 个 seed:均值 +0.008°,RMS 0.044°,对期望散布 0.041°;未校准时均值 −0.284°)。
 - 扫频带宽上的斜视(array_tx 的 `squint_analytic_deg`):相移器对准 60 GHz 的 TX 波束在 ±2 GHz 边沿偏 +0.72 / −0.67°,FR2 28 GHz / 400 MHz 的 ±0.15° 的 5 倍;
   虚拟阵列边缘元的拍频只偏 0.04 格、窗锥 −0.009 dB —— 带宽对测角本身无妨,对波束赋形的 TX 有妨。
 - CRLB:var(u) = λ² / (8π² SNR Σ(x − x̄)²),N(N² − 1) 随元数、1/√SNR、1/cos θ(`crlb_sigma_deg`);20° 目标、每元 39.3 dB → 0.023°。

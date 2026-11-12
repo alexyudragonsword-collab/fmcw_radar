@@ -53,18 +53,17 @@ LTE-20 的 29 % 不行,polar_tx ROADMAP B1)。任务要求先量一次这个指�
 
 - 逐周期引擎和线性剖面(`analyze()` × N²)说的是同一个环路。**斜坡上两者一致**:noise=True 时每个 ramp 去线性趋势的载波相位谱对剖面
   0.1 / 0.3 / 1 / 3 / 10 MHz 处 −83.2 / −80.5 / −80.1 / −89.9 / −100.7 对 −83.8 / −80.8 / −80.2 / −90.2 / −100.9 dBc/Hz(0.6 dB 内;30 / 45 MHz 高 0.9 / 1.9 dB,
-  逼近 fref/2 的混叠);一个 ramp 的相位 RMS 0.194 对 0.197 rad。
+  逼近 fref/2 的混叠);一个 ramp 的相位 RMS 0.194 对 0.197 rad。(这一组是 0.2.5、TDC 抖动为 0 时量的;加了抖动项之后见下一节。)
 - **noise=False 的曲线就是剖面里的量化两项**:−84.6 / −83.4 / −85.2 / −94.0 / −106.1 对 `tdc_quant` −85.1 / −84.0 / −85.3 / −95.5 / −106.0(`dco_quant` 低 40 dB)。
   同一份能量,在斜坡上是每个 chirp 都相同的确定性图样(鬼目标),在线性模型里是白噪声。
 - **分工**(`ChirpResult.lo_noise_in_curve` → `beat_frame`):曲线已经带的,剖面就不再合成。
   noise=False 的 event 曲线带量化 → 剖面去掉 `tdc_quant` + `dco_quant`(`LOProfile.without`);noise=True 带环路在 fref/2 以内的全部 → 剖面只留 fref/2 以上
   (`LOProfile.above`,DCO 自身的 Leeson 段);ideal / 不带噪声的 response → 剖面全算。`run_time(cfg, chirp_noise=True)` 走第二种。
-- 核对(示例 04:32 chirp,Blackman,±12 格,对整份剖面的闭式,+1 / +2 / +3 / +5 m):只有剖面 +0.29 / −0.00 / +0.04 / +0.03 dB;noise=False 曲线 + 去量化的剖面
-  +0.30 / +0.17 / +0.47 / +0.80(均 +0.43;图样是成团的,鬼目标所在的偏移高;另一个 seed +0.23 / +0.41 / +1.18 / +0.70);noise=True 曲线 + fref/2 以上
-  −0.02 / −0.03 / +0.47 / +0.15(均 +0.14)。
-- **坑(contains:时域引擎把 TDC 量化算了两遍)**:0.2.4 及以前把 noise=False 的曲线叠在**整份**剖面上:1–5 m 的底比分工后高 1.11 dB(示例 04);
-  逐偏移对闭式 +1.88 / +1.56 / +2.21 / +1.68 dB(seed 3)。
-  单独量相噪旁瓣的检查(`measured_pn_sidelobes`)当时不带曲线,所以一直没看见。
+- 核对(示例 04:32 chirp,Blackman,±12 格,对整份剖面的闭式,+1 / +2 / +3 / +5 m;0.2.6 的数,TDC 抖动 1 ps):只有剖面 +0.28 / +0.00 / +0.04 / +0.03 dB;
+  noise=False 曲线 + 去量化的剖面 +0.26 / +0.09 / +0.38 / +0.72(均 +0.36;图样是成团的,鬼目标所在的偏移高);noise=True 曲线 + fref/2 以上
+  +0.12 / −0.08 / +0.29 / +0.21(均 +0.13)。
+- **坑(contains:时域引擎把 TDC 量化算了两遍)**:0.2.4 及以前把 noise=False 的曲线叠在**整份**剖面上:1–5 m 的底比分工后高 0.99 dB(示例 04;0.2.5 时 1.11);
+  逐偏移对闭式 +1.88 / +1.56 / +2.21 / +1.68 dB(0.2.5、seed 3)。
 - **坑(contains:`freq_out` 不是带噪声的瞬时频率)**:pllsim 的 `freq_out` 是调谐字决定的频率;DCO 自己的相噪只进 `phi_v`(`phase_err_out`)。
   noise=True 时把 `freq_out − 指令` 积分,得到的是环路对 DCO 噪声的**反作用**:30 kHz 处 −39 dBc/Hz(真值 −85,多 45 dB),3 MHz 以上反而少 4–10 dB。
   `phase_err_carrier_rad()` 现在加上 `osc_phase_dco_rad` = `phase_err_out`(后移一拍,减指令相位)− 调谐字积分;noise=False 时这一项 < 2e-5 rad,不加,逐位不变。
@@ -74,6 +73,24 @@ LTE-20 的 29 % 不行,polar_tx ROADMAP B1)。任务要求先量一次这个指�
   TDC 抖动 0 / 1 / 2 / 5 ps 时带内差 +15.8 / +10 / +6 / 0 dB;`analyze` 的总量不随抖动变,5 ps 时 `simulate` 在 3–10 MHz 高 4 dB)。
 - 没做的:带 `lo.profile` 文件的配置没有分项,noise=False 的曲线仍叠在整份剖面上(`lo_noise_split` 里写明);response 引擎的 noise=True 没核对过它加了什么,
   时域引擎拒绝它。
+
+## TDC 抖动:既是噪声也是 dither(P1 #1(a),0.2.6)
+
+- `lo.tdc_jitter_s`(None → 占位 1 ps RMS,`assumed`,5 ps TDC 的 0.2 LSB)进 `TDCConfig.jitter_rms_s`。之前 `build_adpll` 把它留在 0,而且这个 0 不在 `sources.yaml` 里。
+- **线性模型里的一项**:TDC 抖动是与量化误差同一节点的白时间误差,所以形状同 `tdc_quant`、功率是它的 12σ²/t_res²(1 ps / 5 ps:0.48 倍)。pllsim 的 `analyze()` 没有这一项
+  (pll_simulator#76),`LOProfile.from_config` 自己加(`components["tdc_jitter"]`)。L(1 MHz) −80.2 → −79.6 dBc/Hz,LO 自身 186.7 → 202.0 mrad。
+  斜坡上逐周期引擎(noise=True)对这个剖面,0.3 / 1 / 3 / 10 MHz:抖动 0 ps −0.1 / −0.3 / +0.3 / +0.1 dB,1 ps +0.2 / −0.2 / −0.1 / +0.1,2 ps +0.1 / −0.4 / 0.0 / 0.0,5 ps 0.0 / −0.3 / −0.3 / −0.2。
+- **鬼目标看一帧里什么是相干的**(`coherent_spurs`):各 ramp 的距离谱相干平均与非相干平均;杂散 = 相干平均里的局部极大,在窗自己的裙边之外(比无误差响应高 6 dB)、
+  高于 −70 dBc,并且显著——噪声在均值里剩 (非相干 − 相干)/(M − 1),由 M − 1 个 look 估,所以判据是 CA-CFAR 的因子 K(p^(−1/K) − 1),
+  p 取"全剖面的独立格里每一百次搜索错报一个"(8 个 ramp 15 dB,64 个 11 dB)。检出限(杂散低于它就分不清是不是 LO 噪声):8 / 16 / 32 / 64 个 ramp −47 / −52 / −56 / −60 dBc。
+- 数(5 ps TDC、5 m 目标):不抖动的图样(noise=False 单 ramp)±4.85 m **−45.3 dBc**;开噪声、抖动 0 ps:−12.18、±7.68 m 处 **−49 dBc**(两个 seed 同位置,
+  环路别的噪声只打散 4 dB,换了位置);0.5 ps −51.3;**1 ps −54.6 … −56**(±7.68、±9.18、±3.93、−11.8 m,哪几个过检出限随 seed 变);2 ps 低于 32 个 ramp 的检出限(−54.8),64 个 ramp 时 −57。
+- 时域引擎默认用这条带噪声的曲线(`run_time` 的 `chirp_noise` 缺省:event 引擎、没有 `lo.profile` 文件、相噪开关开着时为真),与统计引擎的鬼目标表读的是同一次逐周期运行
+  (`chirp.noisy_chirp`,按 LO / 斜坡 / seed / chirp 数缓存最近 4 次)。显式传进来的曲线照用;`chirp_noise=False` 是不抖动的图样。
+- **被推翻的判断(contains:lesson)**:"鬼目标是物理的、开噪声后不消失、pllsim 没有 dither"(0.1.1)。它是"TDC 抖动为零"这个没登记的占位的结果:1 ps 抖动就把 −45 压到 −55 dBc。
+  凡是进了 vendored 构造函数却没走 `sources.yaml` 的默认值,都是没标来源的占位。
+- **坑(contains:把一行噪声的极大值读成杂散)**:2026-11-11 复核时在 32 chirp 时域图的目标多普勒行上读 9.85 m ±6 cm 内的最大值,抖动 1 ps 时 −61.6 dBc,就写了"鬼目标降到 −61"。
+  那一行的中位是 −69.6 dBc,几十个格里的最大值本来就高 8 dB——读到的是噪声。真正的相干杂散换到了别的偏移,−55 dBc。要说"有 / 没有杂散"得有显著性判据,所以才有上面的搜索。
 
 ## 经验
 

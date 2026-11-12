@@ -54,13 +54,14 @@ def noisy(cfg):
 
 def test_profile_breakdown_sums_to_the_total_and_can_be_split(cfg):
     prof = LOProfile.from_config(cfg)
-    assert set(prof.components) == {"ref", "dco", "tdc_quant", "dco_quant"}
+    assert set(prof.components) == {"ref", "dco", "tdc_quant", "dco_quant", "tdc_jitter"}
     assert np.allclose(sum(prof.components.values()), prof.s_phi, rtol=1e-9)
     rest = prof.without("tdc_quant", "dco_quant")
-    assert np.allclose(rest.s_phi, prof.components["ref"] + prof.components["dco"], rtol=1e-6) and set(rest.components) == {"ref", "dco"}
+    assert np.allclose(rest.s_phi, prof.components["ref"] + prof.components["dco"] + prof.components["tdc_jitter"], rtol=1e-6)
+    assert set(rest.components) == {"ref", "dco", "tdc_jitter"}                 # the jitter is noise: it stays in the profile
     assert prof.without("nothing such") is prof
-    # in band the TDC's quantisation is a third of the LO's noise power: -85 of -80 dBc/Hz at 1 MHz
-    assert prof.l_dbc(np.array([1e6]))[0] - rest.l_dbc(np.array([1e6]))[0] == pytest.approx(1.6, abs=0.3)
+    # in band the TDC's quantisation is -85 of the -79.6 dBc/Hz at 1 MHz: 1.4 dB of it
+    assert prof.l_dbc(np.array([1e6]))[0] - rest.l_dbc(np.array([1e6]))[0] == pytest.approx(1.4, abs=0.3)
     split = 0.5 * cfg.lo.fref_hz
     hi = prof.above(split)
     assert hi.psd(np.array([1e6, 0.9 * split]))[1] < 1e-200 and hi.psd(np.array([2 * split]))[0] == pytest.approx(prof.psd(np.array([2 * split]))[0])
@@ -138,9 +139,11 @@ def test_time_engine_counts_the_lo_noise_once(cfg, quiet, noisy):
 
 def test_time_engine_says_who_carries_what(cfg, noisy):
     small = apply_overrides(cfg, {"chirp.n_chirps": 2})
-    tm = run_time(small)
-    assert tm.extras["lo_noise_split"].startswith("curve: TDC and DCO quantisation")
-    assert run_time(small, chirp_noise=True).extras["lo_noise_split"].startswith("curve: the loop to fref/2")
+    # the default when the LO is the vendored loop: its cycle-accurate noise, the TDC's jitter dithering the quantisation
+    assert run_time(small).extras["lo_noise_split"].startswith("curve: the loop to fref/2")
+    assert run_time(small, chirp_noise=False).extras["lo_noise_split"].startswith("curve: TDC and DCO quantisation")
+    filed = apply_overrides(small, {"lo.profile": "data/clock_profiles/adpll_15g_fingerprint.yaml"})
+    assert "a file with no breakdown" in run_time(filed).extras["lo_noise_split"]     # another LO's file: the curve stays deterministic
     assert run_time(apply_overrides(small, {"lo.engine": "ideal"})).extras["lo_noise_split"] == "profile: everything"
     assert run_time(small, phase_noise=False).extras["lo_noise_split"] == "no phase noise"
     lin = ChirpEngine(apply_overrides(small, {"lo.engine": "response"})).run(noise=True, seed=1)

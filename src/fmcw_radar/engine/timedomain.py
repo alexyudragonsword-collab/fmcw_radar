@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from ..chirp import ChirpEngine, ChirpResult
+from ..chirp import ChirpEngine, ChirpResult, noisy_chirp
 from ..config.schema import RadarConfig
 from ..link.budget import adc_amplitudes, link_budget
 from ..link.leakage import leakage_tones
@@ -380,16 +380,22 @@ def _process_cube(cfg: RadarConfig, cube: np.ndarray, info: dict | None) -> Time
     return res
 
 
-def run_time(cfg: RadarConfig, chirp: ChirpResult | None = None, chirp_noise: bool = False, **kw) -> TimeResult:
+def run_time(cfg: RadarConfig, chirp: ChirpResult | None = None, chirp_noise: bool | None = None, **kw) -> TimeResult:
     """``chirp_noise``: run the chirp engine with the loop's noise sources
     on (seeded like the frame), so the cycle-accurate engine carries the
-    LO's noise up to fref / 2 and the profile only what is above it; off
-    (the default) the curve is the deterministic one and the profile
-    carries the noise, less the quantisation the curve already is."""
+    LO's noise up to fref / 2 -- its TDC's jitter dithering the
+    quantisation -- and the profile only what is above it.  That is the
+    default when the LO is the vendored loop itself (event engine, no
+    profile file).  Off, the curve is the deterministic one and the profile
+    carries the noise, less the quantisation the curve already is: the
+    undithered pattern, and the only choice when ``lo.profile`` is another
+    LO's file or the engine is the linearised one."""
     if chirp is None and cfg.lo.engine != "ideal":
-        seed = kw.get("seed")
-        chirp = (ChirpEngine(cfg).run(noise=True, seed=cfg.sim.seed if seed is None else seed, n_chirps=cfg.time_chirps())
-                 if chirp_noise else ChirpEngine(cfg).run(noise=False, n_chirps=cfg.time_chirps()))
+        if chirp_noise is None:
+            # with the frame's phase noise switched off the curve is the deterministic one too
+            chirp_noise = cfg.lo.engine == "event" and cfg.lo.profile is None and kw.get("phase_noise", True)
+        chirp = (noisy_chirp(cfg, kw.get("seed"), cfg.time_chirps()) if chirp_noise
+                 else ChirpEngine(cfg).run(noise=False, n_chirps=cfg.time_chirps()))
     frame, info = beat_frame(cfg, chirp, **kw)
     return process_frame(cfg, frame, info)
 

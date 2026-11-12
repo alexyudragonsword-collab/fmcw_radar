@@ -72,6 +72,12 @@ entries:
     source: assumed
     cite: "placeholder: TDC resolution of a mmWave ADPLL (a 15 GHz DCO period is 66.7 ps, so ~13 codes per period)"
     note: "占位:TDC 量化经环路是匹配两点增益时 chirp 频率误差的主项(cairn/chirp-engine.md)。"
+  60g_sensing.tdc_jitter_s:
+    value: 1.0e-12
+    unit: s
+    source: assumed
+    cite: "placeholder: input-referred RMS jitter of the TDC (0.2 LSB of the 5 ps placeholder)"
+    note: "占位:TDC 自身的抖动既是噪声(线性模型里与量化同一节点的白时间误差,功率比 12 sigma^2 / t_res^2),也是量化的 dither;取 0 时量化不被打散,chirp 上出确定性鬼目标(cairn/chirp-engine.md)。"
 
   60g_sensing.tx_rx_isolation_db:
     value: 25.0
@@ -147,6 +153,12 @@ entries:
     source: assumed
     cite: "placeholder"
     note: "占位。"
+  77g_automotive.tdc_jitter_s:
+    value: 1.0e-12
+    unit: s
+    source: assumed
+    cite: "placeholder: input-referred RMS jitter of the TDC (0.2 LSB of the 5 ps placeholder)"
+    note: "占位:TDC 自身的抖动既是噪声(线性模型里与量化同一节点的白时间误差,功率比 12 sigma^2 / t_res^2),也是量化的 dither;取 0 时量化不被打散,chirp 上出确定性鬼目标(cairn/chirp-engine.md)。"
 
   77g_automotive.tx_rx_isolation_db:
     value: 30.0

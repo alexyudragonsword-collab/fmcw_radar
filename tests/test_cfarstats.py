@@ -180,22 +180,22 @@ def test_cfar_pd_closed_form():
 
 
 def test_ghost_targets_enter_the_false_alarm_account():
-    """A TDC ghost 45 dB under the target is a steady target at SNR - 45 dB:
-    under the default human it is at +2 dB and all but never detected (the
-    detections away from the target in example 00 are noise false alarms);
-    under a car, 20 dB up, every ghost in view is detected, on the time
-    engine's map too."""
-    base = apply_overrides(RadarConfig(), {"chirp.n_chirps": 16})
+    """A coherent spur of the chirp is a steady target at SNR + level.  With
+    the placeholder's 1 ps of TDC jitter the spurs sit 55 dB under the
+    target and add nothing under the default human.  With the jitter set to
+    zero they sit at -49 dBc: under a corner reflector every one in view is
+    detected, on the time engine's map too."""
+    base = apply_overrides(RadarConfig(), {"chirp.n_chirps": 32})
     human = run_statistical(base).cfar
-    assert human["ghosts_vouched"] and len(human["ghosts"]) >= 4
-    assert human["ghost_detections_per_frame"] < 0.1 and human["pd_target"] > 0.999
+    assert human["ghosts_vouched"] and human["ghost_detections_per_frame"] < 0.1 and human["pd_target"] > 0.999
+    assert all(g["level_dbc"] < -52.0 for g in human["ghosts"])
     assert human["cfar_loss_db"] == pytest.approx(human["snr_pd90_db"] - snr_for_pd(0.9, 1e-4)) and 0.2 < human["cfar_loss_db"] < 1.0
-    cfg = apply_overrides(base, {"target.kind": "car"})
-    car = run_statistical(cfg).cfar
-    view = [g for g in car["ghosts"] if g["in_view"]]
-    assert len(view) >= 3 and all(g["pd"] > 0.95 for g in view) and car["ghost_detections_per_frame"] == pytest.approx(len(view), abs=0.2)
-    assert all(g["snr_db"] == pytest.approx(car["snr_look_db"] + g["level_dbc"]) for g in view)
-    tm = run_time(cfg, seed=2)
+    cfg = apply_overrides(base, {"target.kind": "corner_reflector", "lo.tdc_jitter_s": 0.0})
+    strong = run_statistical(cfg).cfar
+    view = [g for g in strong["ghosts"] if g["in_view"]]
+    assert len(view) >= 2 and all(g["pd"] > 0.95 for g in view) and strong["ghost_detections_per_frame"] == pytest.approx(len(view), abs=0.2)
+    assert all(g["snr_db"] == pytest.approx(strong["snr_look_db"] + g["level_dbc"]) for g in view)
+    tm = run_time(cfg)                                                    # the same noise-on curve the search read
     d = np.array(tm.cfar_detections)
     strongest = max(view, key=lambda g: g["level_dbc"])
     assert np.any(np.abs(d[:, 1] - strongest["range_m"]) < 1.5 * cfg.range_resolution_m)

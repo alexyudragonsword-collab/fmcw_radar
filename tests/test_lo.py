@@ -19,11 +19,21 @@ def test_adpll_is_built_from_the_config_alone(cfg60):
 
 
 def test_profile_is_the_analysis_times_n_squared(cfg60):
-    prof = LOProfile.from_config(cfg60)
-    ana = build_adpll(cfg60).analyze()
+    """...plus the one term pllsim's analyze() does not have: the TDC's
+    jitter, a white timing error at the node the quantisation error enters,
+    so that term's shape and 12 sigma^2 / t_res^2 of its power."""
+    quiet_tdc = apply_overrides(cfg60, {"lo.tdc_jitter_s": 0.0})
+    prof = LOProfile.from_config(quiet_tdc)
+    ana = build_adpll(quiet_tdc).analyze()
     f = 1e6
     s_dco = np.interp(np.log10(f), np.log10(ana.f), np.log10(ana.pn_breakdown["total"]))
     assert float(prof.l_dbc(f)) == pytest.approx(10 * s_dco + 20 * np.log10(4) - 10 * np.log10(2), abs=0.05)
+    assert "tdc_jitter" not in prof.components
+    live = LOProfile.from_config(cfg60)                                  # the 1 ps placeholder on a 5 ps TDC
+    assert cfg60.lo_value("tdc_jitter_s") == (1e-12, "assumed") and build_adpll(cfg60).cfg.tdc.jitter_rms_s == 1e-12
+    assert np.allclose(live.components["tdc_jitter"], live.components["tdc_quant"] * 12.0 * (1.0 / 5.0) ** 2, rtol=1e-9)
+    assert np.allclose(live.s_phi, prof.s_phi + live.components["tdc_jitter"], rtol=1e-9)
+    assert float(live.l_dbc(f)) - float(prof.l_dbc(f)) == pytest.approx(0.6, abs=0.15)      # a third of the in-band noise, half as much again
     # the sampled loop's images are cut: beyond fref/2 the DCO alone (Leeson 1/f^2 down to its floor)
     osc = build_adpll(cfg60).cfg.osc
     for f in (1e8, 1e9):

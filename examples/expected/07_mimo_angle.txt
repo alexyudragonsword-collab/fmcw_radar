@@ -14,9 +14,9 @@ time engine, 32 noise seeds x 8 chirps, the estimate at the target's cell (an RM
   case                               | mean error [deg] | RMS error [deg] | expected [deg] | bound [deg]
   no coupling, compensated           |           +0.009 |           0.043 |          0.041 |       0.023
   survey coupling, uncalibrated      |           -0.284 |           0.287 |          0.041 |       0.023
-  survey coupling, calibrated        |           +0.008 |           0.043 |          0.041 |       0.023
-  no coupling, NOT compensated       |           +2.720 |           2.720 |          0.041 |       0.023
-  the first case's snapshots re-read: with the true Doppler 0.041 deg (expected 0.041); with the true Doppler and uniform weights 0.025 deg (expected 0.027, the bound at the processed SNR); the Doppler estimate itself is off by 1.4 Hz RMS
+  survey coupling, calibrated        |           +0.008 |           0.044 |          0.041 |       0.023
+  no coupling, NOT compensated       |           +2.722 |           2.722 |          0.041 |       0.023
+  the first case's snapshots re-read: with the true Doppler 0.042 deg (expected 0.041); with the true Doppler and uniform weights 0.025 deg (expected 0.027, the bound at the processed SNR); the Doppler estimate itself is off by 1.4 Hz RMS
 
 two targets (the bundled config's human at 20 deg and car at -10 deg, 30 cm apart), angle at each one's cell:
   human  at 5 m, +20 deg: found 5.003 m, estimate +19.99 deg
