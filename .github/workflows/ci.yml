@@ -176,7 +176,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: alexyudragonsword-collab/polar_tx
-          ref: 70577381f678da34da20fcd083c5052afae1c437
+          ref: b007e60477bac68806138db733cbafd0c0761282
           path: _siblings/polar_tx
       - name: Checkout array_tx (pinned)
         uses: actions/checkout@v4

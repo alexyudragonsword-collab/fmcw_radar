@@ -10,5 +10,5 @@ time engine (32 chirps): each target's peak within +-3 range bins / +-2 Doppler 
   1 car   : found at 5.303 m, +2.34 m/s, +0.0 dB rel. the strongest (statistical +0.0 dB; difference +0.0 dB)
   2 human : found at 9.893 m, -0.78 m/s, -30.1 dB rel. the strongest (statistical -31.0 dB; difference +0.9 dB)
   3 custom: found at 5.434 m, +2.34 m/s, -28.3 dB rel. the strongest (statistical -30.4 dB; difference +2.1 dB)
-  CA-CFAR cells over threshold: 63
+  CA-CFAR cells over threshold: 66
   wrote examples/output/05_multi_target_masking.png

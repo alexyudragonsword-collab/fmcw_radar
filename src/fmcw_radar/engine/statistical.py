@@ -449,7 +449,8 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
     if chirp is not None and chirp.engine != "ideal":
         k = chirp.n_chirps - 1
         res.chirp = {**chirp.metrics(k), "engine": chirp.engine, "dp_gain_used": chirp.dp_gain_used,
-                     "ui_per_ref_cycle_p99": chirp.ui_per_ref_cycle_p99, "vouches_for_spurs": chirp.vouches_for_spurs,
+                     "ui_per_ref_cycle_p99": chirp.ui_per_ref_cycle_p99, "dco_dev_frac_p99": chirp.dco_dev_frac_p99,
+                     "vouches_for_spurs": chirp.vouches_for_spurs,
                      "dp_cal_passes": [p["eps_hat"] for p in chirp.dp_cal_passes]}
         nl = nonlinearity_profile(cfg, chirp, k)
         res.nonlinearity = {key: nl[key] for key in ("width_3db_m", "width_rayleigh_m", "peak_sidelobe_db", "islr_db",

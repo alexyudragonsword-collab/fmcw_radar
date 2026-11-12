@@ -1,4 +1,4 @@
-# Vendored from polar_tx@70577381f678da34da20fcd083c5052afae1c437: src/polartx/cal/twopoint.py
+# Vendored from polar_tx@b007e60477bac68806138db733cbafd0c0761282: src/polartx/cal/twopoint.py
 # Adapted-copy policy: see src/fmcw_radar/vendor/__init__.py
 """Two-point (direct-path) gain calibration — offline estimator.
 

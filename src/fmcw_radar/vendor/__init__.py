@@ -8,17 +8,19 @@ every CI run.  Code outside this tree imports only through
 
 Pins
 ----
-* ``polartx/`` -- polar_tx @ ``70577381f678da34da20fcd083c5052afae1c437``
+* ``polartx/`` -- polar_tx @ ``b007e60477bac68806138db733cbafd0c0761282``
   (its ``main``), the chirp generator's parts only:
 
   - ``phasemod/base.py``, ``phasemod/adpll_tp.py`` -- the two-point ADPLL
     phase modulator (``ADPLLTwoPoint``: linearised ``response`` engine and the
-    cycle-accurate ``event`` engine with the online ``dp_cal`` hook);
+    cycle-accurate ``event`` engine with the online ``dp_cal`` hook, a step
+    kernel inside the ADPLL's per-cycle loop since this pin);
   - ``cal/twopoint.py`` -- the offline least-squares direct-path gain
     estimator;
   - ``vendor/pllsim/`` -- polar_tx's own vendored subset of pll_simulator
-    (pll_simulator @ 931cfaf, ``arch/adpll.py`` and ``arch/frac.py`` held at
-    d7be4712 for polar_tx's two-point extension).  The nested files keep
+    (all of it at pll_simulator @ 5564c64 since polar_tx b007e60; ``arch/adpll.py``
+    carries polar_tx's two-point extension, the direct point and the dp_cal
+    hook).  The nested files keep
     polar_tx's ``# Vendored from pll_simulator@...`` headers UNDER ours, so the
     provenance chain reads top-down; the drift check strips only the outer
     header and compares the rest with polar_tx's file, byte for byte.

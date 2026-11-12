@@ -17,7 +17,7 @@ vc = importlib.util.module_from_spec(_spec)
 sys.modules["vendor_check"] = vc
 _spec.loader.exec_module(vc)
 
-PINS = {"polar_tx": "70577381f678da34da20fcd083c5052afae1c437", "array_tx": "e897c159e5fc5b2e26af6336cf9f6164461ff7f5"}
+PINS = {"polar_tx": "b007e60477bac68806138db733cbafd0c0761282", "array_tx": "e897c159e5fc5b2e26af6336cf9f6164461ff7f5"}
 PIN = PINS["polar_tx"]
 
 

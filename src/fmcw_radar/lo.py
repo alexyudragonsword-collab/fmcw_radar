@@ -29,6 +29,7 @@ from .config.schema import RadarConfig
 from .vendor.polartx.vendor.pllsim.arch.adpll import ADPLL, ADPLLConfig, DLFConfig
 from .vendor.polartx.vendor.pllsim.blocks.oscillator import OscConfig
 from .vendor.polartx.vendor.pllsim.blocks.tdc import TDCConfig
+from .vendor.polartx.vendor.pllsim.core.tdcspurs import code_span
 from .vendor.polartx.vendor.pllsim.synth import design_adpll_dlf
 
 TWOPI = 2.0 * np.pi
@@ -63,25 +64,17 @@ def build_adpll(cfg: RadarConfig) -> ADPLL:
     tjit, _ = cfg.lo_value("tdc_jitter_s")
     osc = OscConfig(f0=fout, gain=lo.kdco_hz, pn_dbchz=pn, pn_foffset=lo.dco_pn_offset_hz,
                     pn_f1f3=lo.dco_pn_f1f3_hz, pn_floor_dbchz=floor)
+    tdc = TDCConfig(t_res=tres, jitter_rms_s=tjit)
+    span = code_span(tdc, fout)                  # one DCO period over the TDC's range
+    if span > 1.0:
+        # polar_tx's finding behind its B1 (polar_tx#19): the counter reads whole DCO cycles and the TDC the
+        # fraction, so a TDC shorter than a period saturates every cycle.  A broken loop, not a noisy one, and
+        # the linear analysis would describe a TDC that works: refused for every engine.
+        raise ValueError(f"lo.tdc_res_s = {tres * 1e12:g} ps: the {tdc.n_bits}-bit TDC covers {1.0 / span:.2f} of the "
+                         f"{1e12 / fout:.1f} ps DCO period and would saturate every cycle; it must span one period")
     return ADPLL(ADPLLConfig(fref=lo.fref_hz, fout=fout, osc=osc, dlf=DLFConfig(alpha=alpha, rho=rho),
-                             mode="tdc", tdc=TDCConfig(t_res=tres, jitter_rms_s=tjit), ref_pn_dbchz=lo.ref_pn_dbchz,
+                             mode="tdc", tdc=tdc, ref_pn_dbchz=lo.ref_pn_dbchz,
                              int_band=(1e3, lo.fref_hz / 2.0)))
-
-
-def _with_tdc_jitter(comp: dict, total: np.ndarray, t_res: float, t_jit: float) -> tuple[dict, np.ndarray]:
-    """The breakdown and its total with the TDC's jitter in them.  The
-    jitter is a white timing error at the node the quantisation error
-    enters, so it has ``tdc_quant``'s shape and ``sigma^2 / (t_res^2 / 12)``
-    of its power.  The vendored pllsim's ``analyze()`` (pll_simulator
-    @d7be4712 through polar_tx) has no term for it, so it is added here;
-    pll_simulator has the identical term from 5564c64 on (#76 / #77), and a
-    breakdown that already carries ``tdc_jitter`` is left alone -- counted
-    once whichever copy is vendored."""
-    if t_jit <= 0.0 or "tdc_quant" not in comp or "tdc_jitter" in comp:
-        return comp, total
-    comp = dict(comp)
-    comp["tdc_jitter"] = comp["tdc_quant"] * (12.0 * t_jit * t_jit / (t_res * t_res))
-    return comp, total + comp["tdc_jitter"]
 
 
 @dataclass
@@ -155,7 +148,6 @@ class LOProfile:
             s = np.concatenate([np.asarray(ana.pn_breakdown["total"], dtype=float)[keep], s_far]) * n * n
             comp = {k: np.concatenate([np.asarray(v, dtype=float)[keep], s_far if k == "dco" else np.zeros(far.size)]) * n * n
                     for k, v in ana.pn_breakdown.items() if k != "total"}
-            comp, s = _with_tdc_jitter(comp, s, float(pll.cfg.tdc.t_res), float(pll.cfg.tdc.jitter_rms_s))
             return cls(np.concatenate([f[keep], far]), s, cfg.band.center_hz, n,
                        f"vendored ADPLL analyze() at {cfg.dco_center_hz / 1e9:.4g} GHz x{n}, the DCO alone above "
                        f"fref/2 (source: assumed)", components=comp)

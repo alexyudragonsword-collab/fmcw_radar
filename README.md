@@ -43,21 +43,21 @@ IF / ADC、窗与 CFAR、仿真。77 GHz 车载一档结构相同只换数(`conf
 | `engine/statistical.py` | 格点 SNR、分辨率、相噪旁瓣表、非线性旁瓣(误差曲线喂一次 FFT)、Pd;每目标一行与遮蔽、测角指标、泄漏 | 3 |
 | `engine/timedomain.py` | 5 GS/s 包络真混频 → 泄漏音 → 砖墙 IF → 高通 → ADC 量化(削波)→ 距离–多普勒图 / MIMO 立方与 DBF | 3 |
 | `report.py`, `tools/` | 预算一页、指纹、vendor 漂移、示例冒烟 / 漂移 | 7 |
-| `vendor/polartx/` | polar_tx@7057738 的两点调制器、两点校准、嵌套的 pllsim 子树(逐字节校验) | — |
+| `vendor/polartx/` | polar_tx@b007e60 的两点调制器、两点校准、嵌套的 pllsim 子树(pll_simulator@5564c64,逐字节校验) | — |
 | `vendor/arraytx/` | array_tx@e897c15 的阵列几何、波束宽 / 斜视、互耦矩阵三来源、Touchstone 读写(coupling 为改编副本) | — |
 
 ## 默认配置的数(示例 00–04,`examples/expected/` 存全量输出)
 
 - 60 GHz、B = 4 GHz、100 µs × 64、10 MS/s、Hann:c/2B 3.75 cm,Hann 下 5.34 cm;最大距离 15 m(IF 4 MHz);速度分辨率 0.39 m/s,±12.5 m/s。
 - 人体(−10 dBsm,survey)5 m:P_r −87.1 dBm,C/N0 76.8 dBHz,格点 SNR 51.3 dB(矩形窗 54.8,窗损失 3.5 dB),Pd = 1 @ Pfa 1e-4;
-  时域引擎在同一格读 51.05 dB,与统计引擎扣掉格点失配、带内相噪与拍频音相干损失后的期望 51.04 dB 差 +0.01 dB(三个距离 −0.07 / −0.04 / −0.07 dB;0.2.5 量的 12 个 seed 平均 ±0.06 dB 内)。
+  时域引擎在同一格读 51.05 dB,与统计引擎扣掉格点失配、带内相噪与拍频音相干损失后的期望 51.04 dB 差 +0.00 dB(三个距离 −0.10 / −0.03 / −0.04 dB;0.2.5 量的 12 个 seed 平均 ±0.06 dB 内)。
 - LO(占位 15 GHz ADPLL ×4,TDC 5 ps、抖动 1 ps)L(1 MHz) −79.6 dBc/Hz;5 m 处残余 55.3 mrad(LO 自身 202.0);距离维旁瓣 +1 m −63.3、+5 m −51.4 dBc/格(单 chirp,
   高斯相位的精确谱;一阶 S_res/2 在近目标处低估:100 m 目标 +0.25 m 处差 8 dB),距离–多普勒格再低 16.3 dB。τ = 0 残余逐位为零;
   1 / 10 / 100 m 残余 PSD 闭式 vs 合成 0.11 dB;FFT 上量到的旁瓣 +1 / +2 / +5 m 差 +0.10 / −0.02 / −0.44 dB。
 - chirp:匹配增益时误差底 0.54 MHz RMS(5 ps TDC 经环路);5 % 两点失配 → 飞回 200 MHz 阶跃、1.47 µs 建立、距离响应 ISLR −29 dB(IF 砖墙之后);
   离线校准两次把失配压到 1e-4,在线校准(飞回后 20 周期的 LMS)四个 chirp 内到 ±0.05 %。event 与 response 在瞬态上逐周期一致(比值 1.005 ± 0.046);
   误差曲线喂统计引擎与时域引擎的剖面逐点相同;TDC 量化在斜坡上的图样:不抖动(noise=False 的曲线)±4.85 m 处 −45.3 dBc;
-  开环路噪声后一帧里相干留下的,TDC 抖动 0 / 0.5 / 1 / 2 ps 时 −49.1 / −51.3 / −54.6 dBc / 低于检出限(32 个 ramp,示例 02)。
+  开环路噪声后一帧里相干留下的,TDC 抖动 0 / 0.5 / 1 / 2 ps 时 −49.1 / −50.7 / −54.8 dBc / 低于检出限(32 个 ramp,示例 02)。
 
 ## 里程碑 2 的数(示例 05–08,`configs/radar_60g_mimo.yaml`)
 
@@ -85,8 +85,9 @@ IF / ADC、窗与 CFAR、仿真。77 GHz 车载一档结构相同只换数(`conf
 - LO 的噪声在时域引擎里只算一遍(0.2.5):逐周期 chirp 曲线已经带的不再从剖面合成。0.2.6 起默认用带噪声的曲线(环路到 fref/2 的全部,TDC 抖动把量化打散),
   剖面只合成 fref/2 以上;`run_time(chirp_noise=False)` 是不抖动的确定性曲线 + 去掉量化项的剖面。TDC 抖动(占位 1 ps)在线性剖面里是与量化同形的一项。
   0.2.4 及以前把曲线叠在整份剖面上,1–5 m 的 LO 底比分工后高 1.1 dB(比闭式高 1.5–2.2 dB)。斜坡上逐周期引擎与线性剖面 0.6 dB 内一致;CW 下线性模型低估带内相噪 15 dB(TDC 死区)。
-- polar_tx 的 event 有效域指标(每参考周期相位推进)在 chirp 上读 495 %;本库的判断是该指标针对亚周期相位轨迹、不适用于频率斜坡,
-  证据与保留意见在 `cairn/chirp-engine.md`。`lo.engine: response` 是线性化引擎,不能背书杂散。
+- chirp 每参考周期相位推进 495 % UI,曾超出 polar_tx 给 event 引擎声明的有效域(< 10 %);polar_tx#19 之后这个域取消了(真正的条件是 TDC 量程盖住一个 DCO 周期,
+  本库 9.5 个;盖不住的配置 `build_adpll` 直接拒绝)。斜坡真正的代价是 DCO 偏离标称周期 ±3.3 %、TDC 按标称周期归一化:不抖动的鬼目标因此高约 2.4 dB,
+  数与复现在 `cairn/chirp-engine.md`、ROADMAP P1 #2。`lo.engine: response` 是线性化引擎,不能背书杂散。
 - CA-CFAR 是最简版(2-D 方窗,guard / train 按填充格数);`pd` 仍是已知噪底的闭式,CFAR 损失由示例 06 的蒙卡曲线给。0.2.4 起 MIMO 的非相干和图用 K-look 阈值因子(K = 8:4.6 dB 而不是 9.7 dB),训练窗按图的轴长裁剪,`StatResult.cfar` 给含目标自漏的 Pd(默认图上 Pd 0.9 要 12.24 dB,CFAR 损失 0.49 dB)。示例 00 的 64 chirp 帧里 CFAR 在目标主瓣外还报 9 个格(成团):期望 10.5 个噪声虚警格,鬼目标 0.00 个(0.2.4 更正:此前标成量化杂散)。
 - 测角只有 DBF(加窗 DFT + 抛物线插峰),没有 MUSIC / ESPRIT;TDM 的多普勒补偿在目标格上估单音频率,多目标同格时取其合成。
 - blanking 只盖 chirp 开头;时域引擎的 IF 砖墙是逐 chirp 的循环 FFT 滤波,会把下一个 chirp 的阶跃环回到本 chirp 的最后一个样本(每 chirp 1 个样本仍削波,窗权 ~1e-5)。

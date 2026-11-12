@@ -13,24 +13,26 @@
 2. **×N 之后的 LO 剖面已经能读,还没用**:pll_simulator#71 / #72 做了倍频器剖面(N²·L_in + 底噪),mmw60_trx 带了
    `pllsim_wu19_x10_60p48g_floor{130..160}.yaml`。本库 `lo.profile` 原样读得进(floor140:60 GHz 处 L(1 MHz) −98.6 dBc/Hz,6 条杂散;占位 ADPLL −79.6)。
    要做:把它作为一个 bundled 配置的 LO(注意文件没有分项,见 P1 #1(b)),重跑示例 01 / 04 看相噪旁瓣(numbers-move)。chirp 仍由两点 ADPLL 逐周期生成,换的只是噪声。
-3. **polar_tx#19**(B1 的有效域指标 + `SignSignLMS` 在锯齿上):只是观察,本库不依赖它的结论;B1 有定论前 `ui_per_ref_cycle_p99` 的 495 % 照打。
-4. **pll_simulator 的 TDC 抖动改动要经 polar_tx 才到本库**(pll_simulator#76 已关:#77 给 `analyze()` 加了 `tdc_jitter` 项与整数 N 死区提示,#78 把 `simulate()` 里被截掉的
-   TDC 抖动改成回绕;main@`5564c64`)。本库跑的是 polar_tx vendored 的 `adpll.py`@d7be4712,要等 polar_tx 更新这份副本(它的 ROADMAP C5,结构性的:上游把逐周期循环搬进了编译内核;
-   已在 polar_tx#19 下留言)再重新 pin。到时:本库 `lo.py::_with_tdc_jitter` 见到已有 `tdc_jitter` 就不再加(同一个式子,相对差 2e-16,有测试守着,
-   `tests/test_lo.py` 末尾那条断言会在 re-pin 后失败,提醒删掉本条);带噪声的 chirp 曲线与鬼目标的数会小动(numbers-move)。
 
 ## P1 — 结论的可信度
 
 1. **TDC 量化在斜坡上的相干杂散(鬼目标)**。0.2.6:TDC 抖动接成占位(1 ps,`assumed`),鬼目标取一帧里开噪声后仍相干的部分,进虚警账(`cairn/chirp-engine.md`、
    `cairn/cfar-statistics.md`)。不抖动 −45.3 dBc;抖动 0 / 1 / 2 ps 时 −49 / −55 dBc / 低于检出限。还没做的:
-   (a) 1 ps 这个占位决定了结论(−55 dBc、每帧 0.00 个);它是 `assumed`,等 polar_tx / pll_simulator 的 TDC 实测或文献数。1 ps 时哪几个杂散过检出限随 seed 变
-       (seed 1:±9.18、−12.18 m;seed 2:±3.93 m),电平都在 −54 … −56 dBc,离 32 / 64 个 ramp 的检出限(−56 / −59 dBc)只有 1–3 dB。
+   (a) 1 ps 这个占位决定了结论(−55 dBc、每帧 0.00 个);它是 `assumed`,等 polar_tx / pll_simulator 的 TDC 实测或文献数。1 ps 时哪几个杂散过检出限随 seed 变,
+       也随抖动的实现变(0.2.7 重新 pin 后示例 02 的 32 个 ramp:−11.81、−9.20、+9.19 m,−54.8 … −56.4 dBc;pin 之前是另外三个位置),
+       离 32 / 64 个 ramp 的检出限(−56 / −59 dBc)只有 1–3 dB。
    (b) 带 `lo.profile` 文件的配置没有分项,曲线保持确定性(noise=False)并叠在整份剖面上:量化算两遍(LO 底高 1 dB),鬼目标是不抖动的 −45 dBc。
-   (c) CW / `chirp.idle_s` 空闲段:TDC 抖动 1 ps 时带内相噪仍比线性剖面高(死区):本库 vendored 的副本 +9 … +15 dB,pll_simulator@5564c64(抖动回绕之后)+5.5 … +10.9 dB;
-       要到约半个量化格(2.5 ps)才对得上(2 ps:+0.1 … +1.6 dB)。现在空闲段的 LO 误差没有进帧,用了再说。
+   (c) CW / `chirp.idle_s` 空闲段:TDC 抖动 1 ps 时带内相噪仍比线性剖面高(死区):`simulate − analyze` 在 30 / 100 / 300 kHz 是 +5.5 / +5.9 / +10.9 dB
+       (0.2.7 重新 pin 之后经本库 vendored 的副本量的,与在 pll_simulator@5564c64 上量的一致;pin 之前 +9 … +15);要到约半个量化格(2.5 ps)才对得上(2 ps:+0.1 … +1.6 dB)。
+       现在空闲段的 LO 误差没有进帧,用了再说。
    复现:`run_statistical(cfg).nonlinearity["ghosts"]` / `["ghosts_quiet"]` / `["ghost_limit_dbc"]`;`python examples/02_chirp_nonlinearity.py` 末尾的表。
-2. **polar_tx 的 event 有效域指标在 chirp 上读 495 %**,本库的判断是指标不适用(见 `cairn/chirp-engine.md`)。这是本库的读法,
-   已提 polar_tx#19。B1 有定论之前,`ChirpResult.ui_per_ref_cycle_p99` 和报表都把数打出来。
+2. **TDC 按标称周期归一化,斜坡把 DCO 带离标称 ±3.3 %**(`ChirpResult.dco_dev_frac_p99`;polar_tx#19 的答复里点出的效应,它推断"在锯齿上被环路吃掉",
+   在本库的配置上量了,不成立)。vendored 的 `_sim_tdc` 用 `code / cpp_nom` 把 TDC 码换成小数周期,读数差 `小数 × Δf/f`。默认 config、匹配增益、noise=False:
+   斜坡频率误差 513.8 kHz RMS(载波处);把那一行临时改成按实际周期归一化(不入库的改动)是 498.4 kHz,飞回后初始误差 400 → 200 kHz,
+   最强静态鬼目标 −45.7 → −48.1 dBc。不改 vendored 代码也能复现:给 `ADPLL.simulate` 传 vendored 的 `TdcPeriodCal`(EMA 1e-3 / 1e-2 / 1e-1 → 507.1 / 500.7 / 499.6 kHz)。
+   开噪声(TDC 抖动 1 ps、32 个 ramp)时看不出差别:鬼目标本来就贴着检出限(−55.4 dBc 对检出限 −55.9;开 `TdcPeriodCal` −54.9 … 无)。
+   所以它只影响"不抖动的图样"那一列和 P1 #1(b) 的文件剖面配置。真实 ADPLL 按固定周期归一化也有这一项,所以保持建模;
+   要做(如果做):`lo.tdc_period_cal`(None / EMA 系数)接 vendored 的校准器,并说明带噪声时它自己的测量噪声(0.5 码 RMS)。
 
 3. **CFAR 的 Pd 闭式在很短的帧上只准到 ±0.07**(`cfar_pd`:阈值按 Gamma(N_eff)、目标自漏与被测格相关取一阶)。N_eff ≥ 24 时对注入单音的蒙卡 ±0.03;
    8 chirp(N_eff 11.8)13 dB 处 0.86 对 0.93,2 × 4 MIMO 每 TX 4 chirp(N_eff 5.2)5 dB 处 0.77 对 0.83。Pfa 用的是精确式,不受影响。
@@ -60,6 +62,9 @@
    要消费它得先把接收机从"复包络直接砖墙"改成 I / Q 两路。
 5. 测角估计器不在 CRLB 上是它自己的选择(`angle_error_budget`):Hann 角窗 ×1.52、多普勒格刻度损失 ×1.09。单目标可以用均匀权(到界 × 刻度损失),
    多普勒维插值取快拍可以去掉刻度损失;多目标同格要 Hann 的旁瓣。现在只有 `mimo.angle_window` 一个开关,没有按目标数自适应,也没有 MUSIC / ESPRIT。
+
+6. numba 可选加速:polar_tx b007e60 起 vendored 的逐周期循环是 `@kernel`,装了 numba 就编译。本库的 `flyback_dp_step` 也是;手工核过编译与解释逐位一致
+   (在线 / 离线 / 带噪声三条 chirp 的 `f_err` 与校准轨迹哈希相同),带噪声的 3 chirp 0.82 → 0.08 s。还没有 `[fast]` extra,也没有 polar_tx `test-jit` 那样的 CI 作业守着。
 
 ## 边界(有意不做)
 

@@ -1,4 +1,4 @@
-# Vendored from polar_tx@70577381f678da34da20fcd083c5052afae1c437: src/polartx/phasemod/adpll_tp.py
+# Vendored from polar_tx@b007e60477bac68806138db733cbafd0c0761282: src/polartx/phasemod/adpll_tp.py
 # Adapted-copy policy: see src/fmcw_radar/vendor/__init__.py
 """Narrowband phase modulator: ADPLL with two-point injection.
 
@@ -17,7 +17,9 @@ Two engines, cross-checked by tests:
   modulation coupling.
 - mode="event" (validation/noise truth): resamples the frequency
   trajectory onto the fref grid and runs the vendored cycle-accurate
-  ADPLL.simulate(mod_freq=...) engine.  Python-loop cost ~1-2 Mcycles/s;
+  ADPLL.simulate(mod_freq=...) engine: ~0.3 Mcycles/s interpreted, ~1.5
+  with numba installed (the vendored kernel compiles, bit-identical --
+  tests/test_kernels_jit.py; measured 2026-11-12 incl. post-processing);
   the comparison floor scales as 1/(fref/BW) samples — use >= 8 samples
   per symbol and validate on short segments (pllsim ex17 convention).
 """
@@ -30,9 +32,37 @@ from scipy.signal import resample_poly
 
 from ..vendor.pllsim.arch.adpll import ADPLL
 from ..vendor.pllsim.core.colored import synth_from_psd
+from ..vendor.pllsim.core.tdcspurs import code_span
 from .base import PhaseModResult, PhaseModulator
 
 TWOPI = 2.0 * np.pi
+
+
+def _check_tdc_span(pll: ADPLL) -> None:
+    """Refuse a TDC that cannot span one DCO period.
+
+    The counter-assisted loop reads the fraction of a DCO cycle with the
+    TDC; past its range the code saturates and the phase detector is
+    blind for the rest of the cycle.  That is a broken PLL, not a noisy
+    one: the LTE-20 preset shipped with 127 ps against 513 ps, read
+    0.11 rad rms parked in CW (0.0013 rad once covered) and -15 dB EVM on
+    the event engine, which was taken for an engine limit (ROADMAP B1).
+    Checked for both engines, because the response engine's noise budget
+    describes a TDC that works.  Upstream's ``analyze()`` notes the same
+    condition (``code_span``) for a fractional FCW; this refuses it for
+    any FCW, since an integer-N loop parks on one fraction that may lie
+    past the range just as well."""
+    c = pll.cfg
+    if c.mode != "tdc":
+        return
+    span = code_span(c.tdc, c.fout)          # one period / TDC range
+    if span > 1.0:
+        tdco = 1.0 / c.fout
+        need = int(np.ceil(np.log2(tdco / c.tdc.t_res + 1.0)))
+        raise ValueError(
+            f"TDC range covers {1.0 / span:.2f} of the {tdco * 1e12:.0f} ps "
+            f"DCO period: it saturates every cycle. With "
+            f"t_res={c.tdc.t_res * 1e12:g} ps use n_bits >= {need}.")
 
 
 class ADPLLTwoPoint(PhaseModulator):
@@ -53,11 +83,27 @@ class ADPLLTwoPoint(PhaseModulator):
         dither-times-modulation coupling, so never source a spur claim
         from it.
     ``mode="event"``
-        Cycle-accurate, and the noise truth.  **Valid only while the
-        phase advance per reference cycle is far below one UI** — 0.8%
-        for BLE and 4.2% for EDR are fine, LTE-20's 29% is not.  Past
-        ~10% it warns and reports ``ui_per_ref_cycle_p99`` in the
-        diagnostics rather than returning a quietly wrong answer.
+        Cycle-accurate, and the noise truth.  It needs a TDC that spans
+        one DCO period, which the constructor enforces; it does NOT need
+        the phase to advance by much less than one UI per reference
+        cycle.  The counter takes whole DCO cycles and the FCW path
+        carries the modulation, so the TDC only ever sees the residual:
+        LTE-20 at 30% of a UI per cycle and a 1 GHz FMCW ramp at 495%
+        both track.  (This class used to warn past 10%; the LTE-20 failure
+        that rule was drawn from was a 7-bit TDC covering a quarter of the
+        period.  ``ui_per_ref_cycle_p99`` stays in the diagnostics as a
+        description of the modulation, not a validity test.)
+
+        What remains between the engines is the vendored TDC's
+        normalization by the NOMINAL DCO period: a modulated DCO runs
+        ``df/f`` off it, so the fractional phase reads ``frac * df/f``
+        wrong.  A real ADPLL normalizing by its average period does the
+        same, and the linear model omits it.  LTE-20, noise on, phase
+        error: event -44 dB, response -53 dB; normalizing by the
+        instantaneous period instead brings event to -52.6 dB.  BLE and
+        EDR (``df/f`` ~1e-4) agree to 0.1 dB.  ``dco_dev_frac_p99`` in
+        the diagnostics is the ``df/f`` that sets it.
+
         It is also where ``dp_range_hz`` clipping and the online
         ``dp_cal`` calibrator live, both being per-cycle effects.
     """
@@ -74,6 +120,7 @@ class ADPLLTwoPoint(PhaseModulator):
         diagnostics ['dp_required_range_hz']."""
         if mode not in ("response", "event"):
             raise ValueError("mode must be 'response' or 'event'")
+        _check_tdc_span(pll)
         self.pll = pll
         self.dp_gain = dp_gain
         self.mode = mode
@@ -81,7 +128,14 @@ class ADPLLTwoPoint(PhaseModulator):
         self.dp_range_hz = dp_range_hz
         # background two-point gain calibrator, event mode only: anything
         # with .step(err, reg) and a writable .value -- SignSignLMS or the
-        # bit-true cal.dp_cal_fixed.FixedSignSignLMS
+        # bit-true cal.dp_cal_fixed.FixedSignSignLMS.  Its regressor is the
+        # commanded frequency, mean-removed by an EMA, so it needs a
+        # zero-mean modulation.  A frequency ramp (an FMCW chirp) is not
+        # one: the centred regressor is nearly constant, the mismatch only
+        # shows for ~25 cycles after each slope change, and fmcw_radar
+        # measured it walking away, 1.05 -> 1.066 over 20 chirps
+        # (polar_tx#19).  Estimate a ramp offline with
+        # cal.twopoint.estimate_dp_gain_error instead.
         self.dp_cal: Any = None
         self._ana = None
 
@@ -168,27 +222,16 @@ class ADPLLTwoPoint(PhaseModulator):
         f_dev = np.diff(phase_cmd, prepend=phase_cmd[:1]) * fs_bb / TWOPI
         mod_ref = f_dev if up == 1 else resample_poly(f_dev, up, 1)
 
-        # Validity guard.  The cycle-accurate loop closes once per reference
-        # edge, so it can only track a trajectory whose phase advances by
-        # much less than one UI per reference cycle — the TDC measures into
-        # a window of about one DCO period.  Push past that and the loop
-        # simply cannot follow: measured agreement with the linearized
-        # response engine is <1 dB for BLE (0.8-1.6% UI) and ~5 dB for EDR
-        # (4.2% UI), but collapses to ~22 dB for LTE-20 OFDM (29% UI), whose
-        # phase slews to +/-2x its channel bandwidth.  Warn rather than
-        # return a confidently wrong number.
+        # Describes the modulation; not a validity test (class docstring):
+        # the counter takes whole cycles and the TDC sees only the
+        # residual, so the advance per cycle may exceed one UI.
         ui = np.abs(mod_ref) / c.fref
         ui99 = float(np.percentile(ui, 99)) if ui.size else 0.0
-        if ui99 > 0.10:
-            import warnings
-            warnings.warn(
-                f"event mode outside its validity domain: the phase advances "
-                f"{100 * ui99:.0f}% of a UI per reference cycle (P99) — the "
-                f"cycle-accurate loop cannot track that, and the result will "
-                f"be far pessimistic (LTE-20 reads -15 dB against the "
-                f"response engine's -37 dB). Use mode='response' for "
-                f"modulation this wide, or raise fref.",
-                RuntimeWarning, stacklevel=3)
+        # the DCO's fractional frequency excursion, which sets the TDC's
+        # nominal-period normalization error -- the one term the response
+        # engine does not have
+        dev99 = (float(np.percentile(np.abs(mod_ref), 99)) / c.fout
+                 if mod_ref.size else 0.0)
         n_mod = mod_ref.size
         settle = self.settle_cycles
         mod = np.zeros(settle + n_mod + 4)
@@ -231,8 +274,9 @@ class ADPLLTwoPoint(PhaseModulator):
             diagnostics={"mode": "event", "lag": lag, "sim": sim,
                          "residual_rms_rad": best[0],
                          "samples_per_ref_cycle": up,
-                         # phase advance per reference cycle: the event
-                         # engine's validity metric (see the guard above)
+                         # phase advance per reference cycle: a
+                         # description of the modulation, not a limit
                          "ui_per_ref_cycle_p99": ui99,
+                         "dco_dev_frac_p99": dev99,
                          "dp_required_range_hz": float(np.abs(mod).max()),
                          "dp_clip_frac": clip_frac})

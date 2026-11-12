@@ -1,6 +1,6 @@
-# Vendored from polar_tx@70577381f678da34da20fcd083c5052afae1c437: src/polartx/vendor/pllsim/core/dtcspurs.py
+# Vendored from polar_tx@b007e60477bac68806138db733cbafd0c0761282: src/polartx/vendor/pllsim/core/dtcspurs.py
 # Adapted-copy policy: see src/fmcw_radar/vendor/__init__.py
-# Vendored from pll_simulator@931cfaf: src/pllsim/core/dtcspurs.py
+# Vendored from pll_simulator@5564c64: src/pllsim/core/dtcspurs.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Deterministic fractional-spur prediction from the DTC code path.
 
