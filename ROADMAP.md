@@ -6,13 +6,13 @@
 
 ## 等上游
 
-1. **mmw60_trx 的前端面**(消费清单已提:mmw60_trx#14,对照它的 main@`4df03852bcfce28054a2d313eeb32ba16bbf0fa9`,它的 ROADMAP D4 在收)。本库 24 条 `source: assumed`
-   (12 项 × 两个频段)里:PA(`psat_dbm` / `ScaledRappPA`)与 LO 剖面现在就能用;天线增益有字段无来源;RX 增益 / NF / 压缩点只有 vendored wifitrx 的 sub-7 GHz AGC 梯子;
-   TX→RX 隔离没有。等它补上 TX→RX 隔离、60 GHz 的 NF 与压缩点、带来源的天线增益,再按 main 的完整 SHA pin、换占位
-   (`cfg.frontend_value(name)` / `leakage_value` 各一处)。
-2. **×N 之后的 LO 剖面已经能读,还没用**:pll_simulator#71 / #72 做了倍频器剖面(N²·L_in + 底噪),mmw60_trx 带了
-   `pllsim_wu19_x10_60p48g_floor{130..160}.yaml`。本库 `lo.profile` 原样读得进(floor140:60 GHz 处 L(1 MHz) −98.6 dBc/Hz,6 条杂散;占位 ADPLL −79.6)。
-   要做:把它作为一个 bundled 配置的 LO(注意文件没有分项,见 P1 #1(b)),重跑示例 01 / 04 看相噪旁瓣(numbers-move)。chirp 仍由两点 ADPLL 逐周期生成,换的只是噪声。
+1. **mmw60_trx 的前端面**(mmw60_trx#14,对照它的 main@`4df03852bcfce28054a2d313eeb32ba16bbf0fa9`)。它 2026-11-12 答复:清单属实,D4 轮到了但**还没开始、没排期**;
+   要补三样——TX→RX 隔离、60 GHz 接收前端显式的增益 / NF / 输入压缩点、发 / 收天线增益(**两个字段**,本库现在就是分开读的)——都放在同一个 `Frontend60` 上。
+   倍频器底噪它从 D4 划掉(经剖面文件已有)。**它手里也没有这三样带出处的数**,会去查手册 / 文献(查到标 `survey`)。本库 26 条 `assumed` 里归它的
+   (每频段:发射功率、发 / 收天线增益、RX 增益 / NF / P1dB、TX→RX 隔离)在它落地前不动,到时按 main 的完整 SHA pin、一次换掉
+   (`cfg.frontend_value(name)` / `leakage_value` 各一处)。现在就能读的:PA(`psat_dbm` 15 dBm、增益 20 dB、`ScaledRappPA.p1db_out_dbm` 属性,它报 5.5 dBm)与 LO 剖面。
+   本库当天查的一轮公开数字(全部未核实,只读到搜索摘要)在 `cairn/Reference/2026-11-12-frontend-survey.md`,已贴给它:占位里天线增益各 10 dBi 偏高
+   (查到封装内 3.5、板上阵约 7 dBi),隔离 25 dB 落在查到的 20–25 dB(无 EBG)里,NF 10 对 12 dB、P1dB −20 对 −12 dBm(带外)。
 
 ## P1 — 结论的可信度
 
@@ -54,6 +54,11 @@
 3. **时域引擎按 chirp 独立合成相噪**(块 500k 点,最低 10 kHz),chirp 间 LO 低频相关没有表示;对多普勒维噪底无影响的论证见 `cairn/range-correlation.md`,
    但慢目标 / 长帧(PRF 10 kHz 以下的相噪)没有验证。
 4. **性能**:时域引擎 64 chirp × 500k 包络样本约 7 s(4 核);fingerprint 9 s;全套测试约 3 分钟,`test_engines.py` 占一半。
+
+5. **×N 之后的 LO 剖面已经能读,还没用**(原"等上游"#2;上游已交付:pll_simulator#71 / #72 的倍频器剖面,mmw60_trx 带了
+   `pllsim_wu19_x10_60p48g_floor{130..160}.yaml`,它的基准档是 floor150)。本库 `lo.profile` 原样读得进:60 GHz 处 L(100 kHz / 1 MHz) −92.1 / −98.6 dBc/Hz,6 条杂散;
+   占位 ADPLL 是 −82.5 / −79.6。四档在 1 MHz 以内相同,到 100 MHz 才差开(−128.5 … −133.6),IF 带宽 4 MHz,所以选哪一档对雷达没有影响。
+   要做:把它作为一个 bundled 配置的 LO(注意文件没有分项,见 P1 #1(b)),重跑示例 01 / 04 看相噪旁瓣(numbers-move)。chirp 仍由两点 ADPLL 逐周期生成,换的只是噪声。
 
 ## P3 — 能力扩展
 
