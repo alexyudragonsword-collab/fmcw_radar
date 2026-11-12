@@ -25,7 +25,7 @@ from ..chirp import ChirpEngine, ChirpResult, noisy_chirp
 from ..config.schema import C0, RadarConfig
 from ..link.budget import LinkBudget, link_budget
 from ..link.leakage import LeakageBudget, leakage_budget
-from ..lo import LOProfile
+from ..lo import LOProfile, parked_lo
 from ..mimo import VirtualArray
 from ..phase_noise import RangeCorrelation
 from ..processing.cfar import threshold_factor
@@ -442,6 +442,8 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
     res.extras["max_velocity_mps"] = cfg.max_velocity_mps
     res.extras["in_if_band"] = bool(beat <= cfg.rx.if_bw_hz)
     res.extras["lo_source"] = prof.source
+    res.extras["lo_notes"] = list(prof.notes)
+    res.extras["lo_parked"] = parked_lo(cfg)
     res.extras["range_axis_m"] = range_axis_m(cfg, n)[: n // 2]
     res.extras["velocity_axis_mps"] = velocity_axis_mps(cfg, cfg.chirp.n_chirps)
     if chirp is None and cfg.lo.engine != "ideal":

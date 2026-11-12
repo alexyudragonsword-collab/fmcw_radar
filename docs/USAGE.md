@@ -41,6 +41,7 @@ blanking 的时长,0.2.1:距离窗按剩下的样本重配,`cfg.n_blank` 是样�
   `lo_noise_in_curve`(all / quantisation / none / unverified)。`noisy_chirp(cfg, seed, n_chirps)` 是带缓存的 noise=True 运行;`coherent_spurs(cfg, chirp)`
   (`engine.statistical`)在它上面找一帧里相干的杂散。`lo.tdc_jitter_s`(TDC 抖动,None → 占位 1 ps)。
 - `RangeCorrelation(profile, tau)`:`residual_psd(f)`、`sidelobe_dbc(offset_hz, enbw_hz)`、`synthesize_residual(n, fs, rng)`、`measured_residual_psd`。
+- `parked_lo(cfg)`(`fmcw_radar.lo`):LO 停着不扫时线性剖面是否还成立(TDC 死区;载波处与斜坡起点分开判),报表相噪一节下的那段话的来源。
 - `LOProfile.from_config(cfg)`:`psd(f)` / `l_dbc(f)` 在载波处;`components`(ref / dco / tdc_quant / dco_quant / tdc_jitter 分项)、`without(*names)`、`above(f)`;`lo.profile` 指向 pll_simulator 剖面文件时按 (DCO/f0)² N² 缩放。
 
 ## 工具
