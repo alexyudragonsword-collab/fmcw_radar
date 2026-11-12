@@ -1,8 +1,9 @@
 """TX-to-RX leakage: the self-interference budget (milestone 2).
 
 The transmitter's own signal reaches the receiver through the antenna /
-package isolation (``isolation_db`` below the TX power, source: assumed
-until mmw60_trx's package exists) after ``path_delay_s``, and through a
+package isolation (``isolation_db`` below the TX power; the 60 GHz band's
+figure is a board array's without an isolation structure, read through
+mmw60_trx's sourced table) after ``path_delay_s``, and through a
 near reflector (radome, bumper) at ``reflector_range_m``.  Both mix with
 the same LO, so each is a beat tone at ``S tau`` -- a few kHz, inside the
 first range bins -- carrying the LO's phase noise after range correlation
@@ -14,6 +15,14 @@ the ADC.  This module is the closed form of that: levels at every stage,
 the high-pass's attenuation at the leakage beats, the headroom left, and
 the attenuation still needed; the time engine (``engine.timedomain``) puts
 the tones into the waveform and clips.
+
+Compression is two points, not one.  A term whose beat lies below the
+high-pass corner is removed before the IF stages and loads only what is
+ahead of the filter: the out-of-band point (``p1db_oob_dbm``; the radar
+chip's datasheet measures it with a tone below the lowest corner).  With no
+filter, or a beat above the corner, the term is an in-band signal like the
+echo and meets the in-band point, which is lower and falls with the gain.
+``p1db_margin_db`` is the worst term against the point it meets.
 
 The high-pass has a transient of its own: the sawtooth restarts the
 leakage beat's phase at every chirp (a jump of ``2 pi f_beat T_c``), and
@@ -56,7 +65,8 @@ class LeakageBudget:
     terms: tuple[LeakageTerm, ...]
     isolation_db: float
     isolation_source: str
-    p1db_margin_db: float        # input P1dB minus the strongest term at the receiver input (negative: compression)
+    p1db_margin_db: float        # the worst term's margin to the compression point it meets (negative: compression)
+    p1db_kind: str               # which point that is: "out of band" (beat below the high-pass corner) or "in band"
     adc_headroom_db: float       # full scale minus the strongest term after the high-pass (negative: clipping)
     adc_headroom_no_hpf_db: float
     required_hpf_atten_db: float   # to keep the strongest term 6 dB below full scale
@@ -76,7 +86,7 @@ class LeakageBudget:
                      (f"{t.name}: level at the ADC", t.level_adc_dbm, "dBm"),
                      (f"{t.name}: high-pass attenuation", t.hpf_atten_db, "dB"),
                      (f"{t.name}: at the ADC after the high-pass", t.level_adc_hpf_dbm, "dBm")]
-        rows += [("P1dB margin (input, strongest term)", self.p1db_margin_db, "dB"),
+        rows += [(f"P1dB margin (input, worst term, {self.p1db_kind} point)", self.p1db_margin_db, "dB"),
                  ("ADC headroom without the high-pass", self.adc_headroom_no_hpf_db, "dB"),
                  ("ADC headroom after the high-pass", self.adc_headroom_db, "dB"),
                  ("high-pass attenuation still needed (6 dB below full scale)", self.required_hpf_atten_db, "dB"),
@@ -98,7 +108,8 @@ def leakage_budget(cfg: RadarConfig, budget: LinkBudget | None = None) -> Leakag
     iso, iso_src = cfg.leakage_value("isolation_db")
     pt, _ = cfg.frontend_value("tx_power_dbm")
     g_rx, _ = cfg.frontend_value("rx_gain_db")
-    p1, _ = cfg.frontend_value("p1db_dbm")
+    p1_oob, _ = cfg.frontend_value("p1db_oob_dbm")
+    p1_in, _ = cfg.p1db_inband()
     fs = cfg.rx.adc_fs_hz
     n = cfg.n_samples
     df = fs / n
@@ -115,6 +126,14 @@ def leakage_budget(cfg: RadarConfig, budget: LinkBudget | None = None) -> Leakag
         side = float(np.interp(abs(d_bins), bins, wspec, right=-300.0)) if abs(d_bins) <= bins[-1] else -300.0
         terms.append(LeakageTerm(name, tau, f_beat, lvl_rx, lvl_rx + g_rx, att, lvl_rx + g_rx - att, side))
     strongest = max(terms, key=lambda t: t.level_rx_dbm)
+    # which compression point a term meets: one beating below the high-pass corner is taken out before the
+    # IF stages and only loads the stages ahead of the filter (the out-of-band point, how the radar chip's
+    # datasheet measures it); without a filter, or above its corner, it is an in-band signal like the echo
+    def p1db_margin(t: LeakageTerm) -> tuple[float, str]:
+        oob = cfg.rx.hpf_corner_hz > 0.0 and t.beat_hz < cfg.rx.hpf_corner_hz
+        return (p1_oob if oob else p1_in) - t.level_rx_dbm, "out of band" if oob else "in band"
+
+    p1_margin, p1_kind = min((p1db_margin(t) for t in terms), key=lambda mk: mk[0])
     strongest_hpf = max(terms, key=lambda t: t.level_adc_hpf_dbm)
     fs_dbm = cfg.rx.adc_fullscale_dbm
     headroom = fs_dbm - strongest_hpf.level_adc_hpf_dbm
@@ -140,7 +159,7 @@ def leakage_budget(cfg: RadarConfig, budget: LinkBudget | None = None) -> Leakag
     w_full = range_window(cfg.processing.window_range, n)
     w_blank = range_window(cfg.processing.window_range, n, cfg.n_blank)
     blank_loss = 10.0 * math.log10(enbw_bins(w_blank) / enbw_bins(w_full))
-    return LeakageBudget(tuple(terms), iso, iso_src, p1 - strongest.level_rx_dbm, headroom, headroom0,
+    return LeakageBudget(tuple(terms), iso, iso_src, p1_margin, p1_kind, headroom, headroom0,
                          max(0.0, 6.0 - headroom), b.ps_adc_dbm - att_target, at_cell, att_target,
                          step_v, tau_hpf, blank_rec, cfg.rx.blank_s, blank_loss)
 

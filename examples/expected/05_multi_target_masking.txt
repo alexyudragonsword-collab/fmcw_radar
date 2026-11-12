@@ -1,14 +1,14 @@
 4 targets, 32 chirps, hann windows, range bin 3.75 cm, Doppler bin 0.781 m/s
   # | kind   | range [m] | v [m/s] | RCS [dBsm] | level at ADC [dBm] | cell SNR [dB] | strongest other's skirt here [dBc] | by | masked
-  0 | human  |      5.00 |   +2.00 |        -10 |             -47.11 |         48.29 |   -43.7 | window (#1) | no
-  1 | car    |      5.30 |   +2.00 |         10 |             -28.13 |         67.26 |   -68.5 | window (#3) | no
-  2 | human  |      9.90 |   -1.00 |        -10 |             -59.13 |         36.27 |   -33.1 | phase noise (#1) | no
-  3 | custom |      5.42 |   +2.00 |        -20 |             -58.53 |         36.87 |    -7.7 | window (#1) | no
+  0 | human  |      5.00 |   +2.00 |        -10 |             -45.11 |         48.33 |   -43.7 | window (#1) | no
+  1 | car    |      5.30 |   +2.00 |         10 |             -26.13 |         67.30 |   -68.5 | window (#3) | no
+  2 | human  |      9.90 |   -1.00 |        -10 |             -57.13 |         36.31 |   -33.1 | phase noise (#1) | no
+  3 | custom |      5.42 |   +2.00 |        -20 |             -56.53 |         36.91 |    -7.7 | window (#1) | no
 
 time engine (32 chirps): each target's peak within +-3 range bins / +-2 Doppler bins of its place, level relative to the map's peak (None: no local maximum above the median floor + 6 dB there; a neighbour closer than the window keeps the bins nearer itself)
   0 human : found at 5.003 m, +2.34 m/s, -19.0 dB rel. the strongest (statistical -19.0 dB; difference +0.0 dB)
   1 car   : found at 5.303 m, +2.34 m/s, +0.0 dB rel. the strongest (statistical +0.0 dB; difference +0.0 dB)
   2 human : found at 9.893 m, -0.78 m/s, -30.1 dB rel. the strongest (statistical -31.0 dB; difference +0.9 dB)
   3 custom: found at 5.434 m, +2.34 m/s, -28.3 dB rel. the strongest (statistical -30.4 dB; difference +2.1 dB)
-  CA-CFAR cells over threshold: 66
+  CA-CFAR cells over threshold: 67
   wrote examples/output/05_multi_target_masking.png

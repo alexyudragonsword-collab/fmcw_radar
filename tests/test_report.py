@@ -17,7 +17,7 @@ def test_report_carries_every_section_and_source(cfg60):
     for word in ("## Link budget", "## Inputs and their sources", "## LO phase noise after range correlation",
                  "## Chirp linearity", "source: survey", "assumed", "cycle-accurate"):
         assert word in md, word
-    assert {v["source"] for v in rep["inputs"].values()} == {"assumed", "survey", "config"}
+    assert {v["source"] for v in rep["inputs"].values()} == {"assumed", "survey", "config", "spec"}
     assert len(rep["phase_noise"]["floor"]) == 6
     assert "| 60g_sensing.nf_db |" in sources_markdown()
 

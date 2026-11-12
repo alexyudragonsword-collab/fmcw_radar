@@ -17,10 +17,12 @@ def test_r_to_the_fourth():
 
 def test_eirp_rcs_and_losses_are_linear_in_db():
     base = link_budget(RadarConfig())
-    up = link_budget(apply_overrides(RadarConfig(), {"frontend.tx_power_dbm": 13.0, "target.rcs_dbsm": -7.0,
+    pt = base.inputs["tx_power_dbm"][0]
+    up = link_budget(apply_overrides(RadarConfig(), {"frontend.tx_power_dbm": pt + 3.0, "target.rcs_dbsm": -7.0,
                                                      "channel.extra_loss_db": 2.0}))
     assert up.pr_dbm - base.pr_dbm == pytest.approx(3.0 + 3.0 - 2.0, abs=1e-9)
-    assert up.inputs["tx_power_dbm"] == (13.0, "config") and base.inputs["tx_power_dbm"][1] == "assumed"
+    assert up.inputs["tx_power_dbm"] == (pt + 3.0, "config") and base.inputs["tx_power_dbm"] == (12.0, "spec")
+    assert base.inputs["tx_gain_dbi"][1] == "assumed"                              # the antennas are still placeholders
 
 
 def test_free_space_term_is_the_textbook_one():
@@ -31,9 +33,13 @@ def test_free_space_term_is_the_textbook_one():
 
 def test_noise_figure_moves_the_floor_one_for_one():
     a = link_budget(RadarConfig())
-    b = link_budget(apply_overrides(RadarConfig(), {"frontend.nf_db": 13.0}))
+    nf = a.inputs["nf_db"][0]
+    b = link_budget(apply_overrides(RadarConfig(), {"frontend.nf_db": nf + 3.0}))
     assert b.n0_thermal_dbm_hz - a.n0_thermal_dbm_hz == pytest.approx(3.0, abs=1e-9)
-    assert a.n0_thermal_dbm_hz == pytest.approx(10 * math.log10(1.380649e-23 * 290) + 30 + 10, abs=1e-9)
+    assert a.n0_thermal_dbm_hz == pytest.approx(10 * math.log10(1.380649e-23 * 290) + 30 + nf, abs=1e-9)
+    # the echo is in band: its margin is to the in-band compression point at this gain
+    assert a.p1db_margin_db == pytest.approx(a.inputs["p1db_inband_dbm"][0] - a.pr_dbm, abs=1e-9)
+    assert a.inputs["p1db_inband_dbm"] == (-34.0, "spec")
 
 
 def test_matched_filter_snr_and_window_loss():

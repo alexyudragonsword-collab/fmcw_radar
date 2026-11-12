@@ -18,9 +18,9 @@ realised Pfa, 1-D MC, N=16: 9.62e-05 for 0.0001 asked
   a noise-only frame: 51200 cells in the IF band = 3385 independent looks; 5.2 false-alarm cells expected
   realised per-cell Pfa: white noise through the same windows and padding (120 maps, 1.54e+07 cells) and the time engine's noise-only frames (6 frames, 6.11e+05 in-band cells); clusters are 8-connected groups of detections
   design Pfa | exact      | noise maps (cells / clusters)       | time engine (cells / clusters)
-        0.01 | 1.039e-02  | 1.044e-02 (160372 / 35262)        | 1.022e-02 ( 6240 / 1420)
-       0.001 | 1.036e-03  | 1.033e-03 ( 15865 /  5093)        | 9.565e-04 (  584 /  186)
-      0.0001 | 1.021e-04  | 1.062e-04 (  1632 /   641)        | 9.172e-05 (   56 /   25)
+        0.01 | 1.039e-02  | 1.044e-02 (160372 / 35262)        | 1.028e-02 ( 6278 / 1422)
+       0.001 | 1.036e-03  | 1.033e-03 ( 15865 /  5093)        | 1.019e-03 (  622 /  189)
+      0.0001 | 1.021e-04  | 1.062e-04 (  1632 /   641)        | 8.025e-05 (   49 /   25)
   detection on this map: a Pd of 0.9 takes 12.24 dB (known noise level 11.75: CFAR loss 0.49 dB, of which the target's own leak into its training cells, 0.0062 of its power, is part)
   the same frame as a 2 x 4 TDM-MIMO cube: 8 looks summed per cell, 16 chirps per TX; threshold factor 2.88 (4.6 dB over the mean) where the single-look factor for its 290 training cells is 9.36 (9.7 dB) -- used on the sum it would give Pfa 2.3e-23 and cost 5.1 dB; exact per-cell Pfa 9.63e-05, Pd 0.9 at 5.01 dB per look
   what the guard does (exact per-cell Pfa at the design 1e-4, same windows and padding):

@@ -4,6 +4,20 @@
 
 ---
 
+## [0.2.8] — 2026-11-12 — 前端的数有了出处:读 mmw60_trx 的来源表;接收压缩点拆成两个
+
+- **vendor mmw60_trx 的来源表**(`vendor/mmw60/`:`spec.py` + `data/spec/survey.yaml`,pin `ef0f00c`;不 vendor `Frontend60`)。漂移检查现在也逐字节比 vendored 的 YAML;CI 多检出一个姊妹库。
+- **60 GHz 档五个数从占位换成读过原文的**(`source: spec`,带引文;`upstream:` 指向上游条目,加载时核对相等):发射 10 → 12 dBm、NF 10 → 12 dB、收发隔离 25 → 20 dB、
+  接收压缩点 −20 dBm → 带外 −12 dBm 与带内 −34 dBm(40 dB 增益)。前三条与两个压缩点来自一颗 60 GHz 雷达芯片的手册(TI SWRS219F 7.9 节),隔离来自 Adela 等 2018。
+  天线增益与 RX 增益档仍是占位(设计选择,没有对口的出处)。来源表 26 → 23 条 `assumed`,0 → 5 条 `spec`。
+- **接收压缩点是两个量**:`frontend.p1db_dbm` 拆成 `p1db_oob_dbm`(高通之前;泄漏碰到的)与 `p1db_inband_dbm`(回波碰到的;留空时随增益每 dB 降 1 dB,`RadarConfig.p1db_inband()`)。
+  泄漏预算按每一项的拍频在高通截止的哪一侧选点(`LeakageBudget.p1db_kind`)。**配置里写了 `frontend.p1db_dbm` 的要改成这两个字段。**
+- 结论的变化:SNR 几乎不动(+0.04 dB:发射与 NF 各 +2 dB 抵消);泄漏强 7 dB(接收端 −15 → −8 dBm)——对带外压缩点 −4 dB;2 阶 200 kHz 高通的 ADC 裕量 +35 → +28 dB、推荐 blanking 4.5 → 5.4 µs;
+  **1 阶 200 kHz 高通不再够**(高通后泄漏在 ADC 满幅,稳态削波 78 %)。
+- 指纹(numbers-move):60 GHz 的预算、所有带热噪声 / 泄漏的时域帧、两个改名的预算行;chirp 曲线、相噪、77 GHz 的数逐位不变。示例期望输出重新接受。
+
+---
+
 ## [0.2.7] — 2026-11-12 — 重新 pin polar_tx(b007e60):上游的 TDC 抖动项、内核里的 dp_cal、有效域的定论
 
 - **vendor 重新 pin**:polar_tx `7057738` → `b007e60`(嵌套的 pllsim 整体到 pll_simulator@5564c64;多一个 `core/tdcspurs.py`)。polar_tx#19 的答复(B1 的真因、C5)都在里面。

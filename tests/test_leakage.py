@@ -19,16 +19,28 @@ def _leak(**ov):
 def test_leakage_budget_levels_and_flags():
     cfg = _leak()
     lb = leakage_budget(cfg)
-    assert lb.isolation_source == "assumed" and lb.isolation_db == 25.0
+    assert lb.isolation_source == "spec" and lb.isolation_db == 20.0             # a board array without an isolation structure
     direct, refl = lb.terms
-    assert direct.level_rx_dbm == pytest.approx(10.0 - 25.0) and refl.level_rx_dbm == pytest.approx(direct.level_rx_dbm - 10.0)
+    assert direct.level_rx_dbm == pytest.approx(12.0 - 20.0) and refl.level_rx_dbm == pytest.approx(direct.level_rx_dbm - 10.0)
     assert direct.beat_hz == pytest.approx(cfg.slope_hz_per_s * 0.2e-9)
-    assert lb.p1db_margin_db < 0.0 and lb.adc_headroom_no_hpf_db < 0.0           # compressed and clipping without a filter
+    # no high-pass: the leakage is an in-band signal and meets the in-band point (-34 dBm at 40 dB of gain)
+    assert lb.p1db_kind == "in band" and lb.p1db_margin_db == pytest.approx(-34.0 - (-8.0))
+    assert lb.adc_headroom_no_hpf_db < 0.0                                         # and clips
     assert lb.adc_headroom_db == lb.adc_headroom_no_hpf_db                         # no high-pass configured
     assert lb.required_hpf_atten_db > 20.0
     with_hpf = leakage_budget(_leak(**{"rx.hpf_corner_hz": 200e3, "rx.hpf_order": 2}))
     assert with_hpf.adc_headroom_db > 20.0 and with_hpf.required_hpf_atten_db == 0.0
     assert with_hpf.hpf_atten_at_target_db < 0.01                                 # the 1.33 MHz beat is untouched
+    # behind a high-pass the 8 kHz beat only loads the stages ahead of it: the out-of-band point, -12 dBm.
+    # With the sourced figures (12 dBm out, 20 dB of isolation) the leakage is still 4 dB above it.
+    assert with_hpf.p1db_kind == "out of band" and with_hpf.p1db_margin_db == pytest.approx(-12.0 - (-8.0))
+    ebg = leakage_budget(_leak(**{"rx.hpf_corner_hz": 200e3, "rx.hpf_order": 2, "leakage.isolation_db": 40.0}))
+    assert ebg.p1db_margin_db == pytest.approx(16.0)                               # with the paper's isolation structure
+    # a reflector far enough to beat above the corner is an in-band signal again
+    far = leakage_budget(_leak(**{"rx.hpf_corner_hz": 200e3, "rx.hpf_order": 2, "leakage.reflector_range_m": 1.0,
+                                  "leakage.isolation_db": 60.0}))
+    assert far.terms[1].beat_hz > 200e3 and far.p1db_kind == "in band"
+    assert far.p1db_margin_db == pytest.approx(-34.0 - far.terms[1].level_rx_dbm)
     assert leakage_budget(RadarConfig()) is None
 
 
@@ -61,7 +73,7 @@ def test_time_engine_clips_without_the_high_pass_and_recovers_with_it():
     assert found is not None and found[0] == pytest.approx(5.0, abs=0.04)
     assert found[2] == pytest.approx(lb.target_level_adc_dbm - lb.terms[0].level_adc_hpf_dbm, abs=3.0)
     # the leakage shares the LO: with the leakage but no target power the map's peak is the leakage at ~0 m
-    lk_only = run_time(_leak(**{"frontend.tx_power_dbm": -190.0, "frontend.p1db_dbm": -200.0, "leakage.isolation_db": 25.0}),
+    lk_only = run_time(_leak(**{"frontend.tx_power_dbm": -190.0, "leakage.isolation_db": 25.0}),
                        phase_noise=False, noise=False, quantise=False)
     assert lk_only.peak_range_m < 0.1
 
@@ -115,7 +127,39 @@ def test_report_and_fingerprint_carry_milestone_two(tmp_path):
 
 
 def _hpf(order: int, corner_hz: float = 200e3, **ov):
-    return _leak(**{"rx.hpf_corner_hz": corner_hz, "rx.hpf_order": order, **ov})
+    """The high-pass and blanking mechanism tests run on the pair they were
+    built on -- a 10 dBm transmitter and 25 dB of isolation, -15 dBm of direct
+    leakage at the receiver -- so their thresholds keep their meaning.  What
+    the band's sourced figures give (12 dBm, 20 dB: -8 dBm) is
+    test_sourced_leakage_level_and_what_the_high_pass_must_do's subject."""
+    return _leak(**{"rx.hpf_corner_hz": corner_hz, "rx.hpf_order": order, "frontend.tx_power_dbm": 10.0,
+                    "leakage.isolation_db": 25.0, **ov})
+
+
+def test_sourced_leakage_level_and_what_the_high_pass_must_do():
+    """With the radar chip's 12 dBm and a board array's 20 dB of isolation the
+    direct leakage is -8 dBm at the receiver, 7 dB over the old placeholder
+    pair (10 dBm, 25 dB).  A first-order 200 kHz high-pass then leaves it at
+    the ADC's full scale -- it clips for good, blanked or not; a second-order
+    one has 28 dB in hand and only the chirp-start transient clips, which the
+    recommended blank covers."""
+    sourced = lambda order: _leak(**{"rx.hpf_corner_hz": 200e3, "rx.hpf_order": order})      # noqa: E731
+    one, two = leakage_budget(sourced(1)), leakage_budget(sourced(2))
+    assert one.terms[0].level_rx_dbm == pytest.approx(-8.0)
+    assert one.adc_headroom_db == pytest.approx(0.0, abs=0.1) and two.adc_headroom_db == pytest.approx(27.9, abs=0.1)
+    assert one.transient_step_v == pytest.approx(7.2 * 10.0 ** (7.0 / 20.0), rel=0.01)      # the step grows with the level
+    tm1 = run_time(apply_overrides(sourced(1), {"rx.blank_s": one.blank_recommended_s}), phase_noise=False, noise=False)
+    assert tm1.extras["clipped_fraction_after_blanking"] > 0.5
+    cb = apply_overrides(sourced(2), {"rx.blank_s": two.blank_recommended_s})
+    tm2 = run_time(cb, phase_noise=False, noise=False)
+    a_fs, step = tm2.extras["fullscale_v"], tm2.extras["adc_step_v"]
+    sat = (np.abs(tm2.frame.real) >= a_fs - step / 2) | (np.abs(tm2.frame.imag) >= a_fs - step / 2)
+    assert not np.any(sat[:, cb.n_blank:-5])                 # the start transient is covered ...
+    # ... and what is left is the engine's circular brick-wall ringing the next chirp's (now larger) step back
+    # into the chirp's last samples: 3 of 1000 here, 1 at the old level (ROADMAP P2 #0: a causal IF filter)
+    assert 0 < tm2.extras["clipped_fraction_after_blanking"] <= 5.0 / cb.n_samples
+    f = tm2.extras["targets_found"][0]
+    assert f is not None and f[0] == pytest.approx(5.0, abs=0.04)
 
 
 def _far_floor_db(tm) -> float:

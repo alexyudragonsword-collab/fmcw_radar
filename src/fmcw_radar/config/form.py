@@ -63,13 +63,14 @@ SECTIONS: list[tuple[str, str, list[dict]]] = [
         _f("lo.profile", "Clock profile file (empty = the ADPLL's own analysis)", "opt_str"),
         _f("lo.profile_shift_db", "Profile shift [dB]", "float"),
     ]),
-    ("frontend", "Front end (placeholders until mmw60_trx)", [
+    ("frontend", "Front end (empty = the band's sourced figure or placeholder)", [
         _f("frontend.tx_power_dbm", "TX power [dBm] (empty = placeholder)", "opt_float"),
         _f("frontend.tx_gain_dbi", "TX antenna gain [dBi]", "opt_float"),
         _f("frontend.rx_gain_dbi", "RX antenna gain [dBi]", "opt_float"),
         _f("frontend.rx_gain_db", "RX chain gain to the ADC [dB]", "opt_float"),
         _f("frontend.nf_db", "Noise figure [dB]", "opt_float"),
-        _f("frontend.p1db_dbm", "Input P1dB [dBm]", "opt_float"),
+        _f("frontend.p1db_oob_dbm", "Input P1dB ahead of the IF high-pass [dBm]", "opt_float"),
+        _f("frontend.p1db_inband_dbm", "Input P1dB in band, at this gain [dBm]", "opt_float"),
     ]),
     ("channel", "Channel", [
         _f("channel.oxygen_db_per_km", "Oxygen attenuation [dB/km] (empty = survey)", "opt_float"),

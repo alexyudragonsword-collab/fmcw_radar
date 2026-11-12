@@ -65,7 +65,7 @@ class LinkBudget:
     snr_cell_rect_db: float             # the same with rectangular windows (matched filter)
     window_loss_db: float               # rect - windowed
     enbw_range_hz: float                # the range FFT's noise bandwidth per bin
-    p1db_margin_db: float               # P1dB (input) - P_r
+    p1db_margin_db: float               # in-band input P1dB at this gain - P_r (the echo is in band)
     quant_share_db: float               # how much the ADC adds to the thermal floor
 
     def as_rows(self) -> list[tuple[str, float, str]]:
@@ -83,7 +83,7 @@ class LinkBudget:
                 ("SNR, one range-Doppler cell", self.snr_cell_db, "dB"),
                 ("SNR, rectangular windows (matched filter)", self.snr_cell_rect_db, "dB"),
                 ("window loss", self.window_loss_db, "dB"),
-                ("P1dB margin (input, target only)", self.p1db_margin_db, "dB")]
+                ("in-band P1dB margin (input, target only)", self.p1db_margin_db, "dB")]
 
 
 def link_budget(cfg: RadarConfig, range_m: float | None = None) -> LinkBudget:
@@ -93,7 +93,7 @@ def link_budget(cfg: RadarConfig, range_m: float | None = None) -> LinkBudget:
     gr, s_gr = cfg.frontend_value("rx_gain_dbi")
     g_rx, s_grx = cfg.frontend_value("rx_gain_db")
     nf, s_nf = cfg.frontend_value("nf_db")
-    p1, s_p1 = cfg.frontend_value("p1db_dbm")
+    p1, s_p1 = cfg.p1db_inband()
     alpha, s_alpha = cfg.oxygen_db_per_km()
     rcs, s_rcs = cfg.rcs_dbsm()
     lam = cfg.band.wavelength_m
@@ -118,7 +118,7 @@ def link_budget(cfg: RadarConfig, range_m: float | None = None) -> LinkBudget:
     snr_rect = cn0 + db(cfg.chirp.duration_s) + db(cfg.chirp.n_chirps)
     return LinkBudget(
         inputs={"tx_power_dbm": (pt, s_pt), "tx_gain_dbi": (gt, s_gt), "rx_gain_dbi": (gr, s_gr),
-                "rx_gain_db": (g_rx, s_grx), "nf_db": (nf, s_nf), "p1db_dbm": (p1, s_p1),
+                "rx_gain_db": (g_rx, s_grx), "nf_db": (nf, s_nf), "p1db_inband_dbm": (p1, s_p1),
                 "oxygen_db_per_km": (alpha, s_alpha), "rcs_dbsm": (rcs, s_rcs), "range_m": (r, "config"),
                 "wavelength_m": (lam, "config")},
         eirp_dbm=eirp, path_loss_db=path, atmos_loss_db=atmos, extra_loss_db=extra, rcs_dbsm=rcs, pr_dbm=pr,

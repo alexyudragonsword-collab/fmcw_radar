@@ -4,7 +4,7 @@
 # array_tx's: ``_strip_header`` drops only the outer attribution header (the ``Vendored/Extracted from`` line and the
 # ``Adapted-copy policy`` line), not every leading ``# `` line, so polar_tx's own nested ``# Vendored from
 # pll_simulator@...`` headers stay in the compared body and the nested tree is pinned to polar_tx, not re-derived
-# against polar_tx's upstreams.
+# against polar_tx's upstreams.  fmcw_radar's own: vendored YAML data tables are checked like the modules.
 """Vendor drift check for ``src/fmcw_radar/vendor``.
 
 Every vendored file carries an attribution header of the form::
@@ -181,14 +181,21 @@ def _classify(body: str, upstream: str) -> tuple[str, str]:
     return "local", f"{len(nonimport)} non-import diff line(s)"
 
 
+def vendored_files() -> list[Path]:
+    """Every vendored file: the Python modules (the package ``__init__`` files
+    are fmcw_radar's own) and the data tables vendored beside them (YAML,
+    whose ``#`` comments carry the same attribution header)."""
+    files = [f for f in VENDOR.rglob("*.py") if f.name != "__init__.py"]
+    files += list(VENDOR.rglob("*.yaml"))
+    return sorted(files)
+
+
 def check(siblings: Siblings, manifest: dict) -> list[FileResult]:
     results: list[FileResult] = []
     declared = manifest.get("files", {})
     seen: set[str] = set()
 
-    for f in sorted(VENDOR.rglob("*.py")):
-        if f.name == "__init__.py":
-            continue
+    for f in vendored_files():
         rel = str(f.relative_to(VENDOR))
         seen.add(rel)
         lines = f.read_text().splitlines()
@@ -264,9 +271,7 @@ def _extracted_or_extended(rel, body, entry, mode) -> tuple[str, str]:
 def build_manifest(siblings: Siblings) -> dict:
     """(Re)build the manifest from the current tree. Hash-pins local files."""
     files: dict = {}
-    for f in sorted(VENDOR.rglob("*.py")):
-        if f.name == "__init__.py":
-            continue
+    for f in vendored_files():
         rel = str(f.relative_to(VENDOR))
         lines = f.read_text().splitlines()
         m = HEADER.match(lines[0]) if lines else None

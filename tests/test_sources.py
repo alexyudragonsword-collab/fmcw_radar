@@ -30,10 +30,62 @@ def test_grep_lists_every_sourced_number():
 
 def test_every_front_end_placeholder_exists_for_every_band():
     for band in ("60g_sensing", "77g_automotive"):
-        for name in ("tx_power_dbm", "tx_gain_dbi", "rx_gain_dbi", "rx_gain_db", "nf_db", "p1db_dbm", "lo_mult",
-                     "dco_pn_dbchz", "dco_pn_floor_dbchz", "tdc_res_s", "tdc_jitter_s", "tx_rx_isolation_db", "rx_coupling_c1_db"):
+        for name in ("tx_power_dbm", "tx_gain_dbi", "rx_gain_dbi", "rx_gain_db", "nf_db", "p1db_oob_dbm", "p1db_inband_dbm",
+                     "lo_mult", "dco_pn_dbchz", "dco_pn_floor_dbchz", "tdc_res_s", "tdc_jitter_s", "tx_rx_isolation_db",
+                     "rx_coupling_c1_db"):
             e = sources.frontend_placeholder(band, name)
-            assert e.placeholder, (band, name)
+            sourced = band == "60g_sensing" and name in SOURCED_60G
+            assert e.placeholder != sourced and (e.source == "spec") == sourced, (band, name)
+
+
+#: the 60 GHz figures read from originals through mmw60_trx's sourced table (0.2.8); the 77 GHz band has none
+SOURCED_60G = ("tx_power_dbm", "nf_db", "p1db_oob_dbm", "p1db_inband_dbm", "tx_rx_isolation_db")
+
+
+def test_sourced_front_end_figures_are_the_sibling_tables():
+    """The five 60 GHz figures name their entry in mmw60_trx's table (the
+    vendored copy) and equal it; loading refuses a table that disagrees, so a
+    re-pin that moves the sibling's number cannot pass unnoticed."""
+    import yaml
+
+    from fmcw_radar.vendor.mmw60 import spec
+
+    radar = spec.value("rx60.radar_iwr6843")
+    assert spec.survey("rx60.radar_iwr6843").source == "spec"
+    got = {n: sources.frontend_placeholder("60g_sensing", n) for n in SOURCED_60G}
+    assert all(e.upstream.startswith("mmw60_trx:") and e.quote and e.section for e in got.values())
+    assert got["tx_power_dbm"].value == radar["tx_power_dbm"] == 12.0 and got["nf_db"].value == radar["nf_db"] == 12.0
+    assert got["p1db_oob_dbm"].value == radar["p1db_in_oob_dbm"] == -12.0
+    fig = spec.value("rx60.radar_iwr6843_fig7_2")
+    assert got["p1db_inband_dbm"].value == dict(zip(fig["gain_db"], fig["p1db_inband_dbm"]))[40.0] == -34.0
+    iso = spec.value("isolation.tx_rx_tue2018")
+    assert got["tx_rx_isolation_db"].value == iso["with_ebg_db"] - iso["improvement_max_db"] == 20.0
+    assert sources.upstream_value("mmw60_trx:rx60.radar_iwr6843_fig7_2#p1db_inband_dbm@gain_db=48") == -42.0
+    for bad in ("polar_tx:x#y", "mmw60_trx:rx60.radar_iwr6843", "mmw60_trx:rx60.radar_iwr6843_fig7_2#p1db_inband_dbm@gain_db=41"):
+        with pytest.raises(ValueError):
+            sources.upstream_value(bad)
+    # a table whose number has drifted from its upstream does not load
+    doc = yaml.safe_load(sources.SOURCES_FILE.read_text(encoding="utf-8"))
+    doc["entries"]["60g_sensing.nf_db"]["value"] = 10.0
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as fh:
+        yaml.safe_dump(doc, fh, allow_unicode=True)
+    with pytest.raises(ValueError, match="is not its upstream's"):
+        sources.load_sources(fh.name)
+
+
+def test_in_band_compression_follows_the_gain():
+    """The radar chip's in-band input P1dB is a straight line against the
+    receive gain, 1 dB down per dB (its Figure 7-2): the placeholder is the
+    point at the band's gain and a config with another gain reads the line."""
+    from fmcw_radar.config import apply_overrides
+    from fmcw_radar.vendor.mmw60 import spec
+
+    fig = spec.value("rx60.radar_iwr6843_fig7_2")
+    for g, p in zip(fig["gain_db"], fig["p1db_inband_dbm"]):
+        assert apply_overrides(RadarConfig(), {"frontend.rx_gain_db": g}).p1db_inband() == (p, "spec")
+    assert apply_overrides(RadarConfig(), {"frontend.p1db_inband_dbm": -30.0, "frontend.rx_gain_db": 46.0}).p1db_inband() == (-30.0, "config")
+    assert RadarConfig().frontend_value("p1db_oob_dbm") == (-12.0, "spec")                 # the other point does not move with the gain
 
 
 def test_spec_source_needs_a_quote_and_survey_needs_unverified():
@@ -50,7 +102,8 @@ def test_spec_source_needs_a_quote_and_survey_needs_unverified():
 def test_budget_inputs_carry_their_sources():
     b = link_budget(RadarConfig())
     srcs = {k: s for k, (_, s) in b.inputs.items()}
-    assert srcs["tx_power_dbm"] == "assumed" and srcs["rcs_dbsm"] == "survey" and srcs["range_m"] == "config"
+    assert srcs["tx_power_dbm"] == "spec" and srcs["tx_gain_dbi"] == "assumed" and srcs["rcs_dbsm"] == "survey"
+    assert srcs["range_m"] == "config" and srcs["p1db_inband_dbm"] == "spec"
 
 
 def test_code_does_not_hardcode_the_table():

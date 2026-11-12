@@ -6,19 +6,12 @@
 
 ## 等上游
 
-1. **mmw60_trx 的前端面**(mmw60_trx#14,对照它的 main@`4df03852bcfce28054a2d313eeb32ba16bbf0fa9`)。它 2026-11-12 答复:清单属实,D4 轮到了但**还没开始、没排期**;
-   要补三样——TX→RX 隔离、60 GHz 接收前端显式的增益 / NF / 输入压缩点、发 / 收天线增益(**两个字段**,本库现在就是分开读的)——都放在同一个 `Frontend60` 上。
-   倍频器底噪它从 D4 划掉(经剖面文件已有)。**它手里也没有这三样带出处的数**,会去查手册 / 文献(查到标 `survey`)。本库 26 条 `assumed` 里归它的
-   (每频段:发射功率、发 / 收天线增益、RX 增益 / NF / P1dB、TX→RX 隔离)在它落地前不动,到时按 main 的完整 SHA pin、一次换掉
-   (`cfg.frontend_value(name)` / `leakage_value` 各一处)。现在就能读的:PA(`psat_dbm` 15 dBm、增益 20 dB、`ScaledRappPA.p1db_out_dbm` 属性,它报 5.5 dBm)与 LO 剖面。
-   本库当天查了一轮公开数字并对照了三份原文(`cairn/Reference/2026-11-12-frontend-survey.md`,已贴给它;其余几份仍未核实)。对照占位:
-   - **接收压缩点是两个量,本库只有一个 `p1db_dbm`(−20 dBm)**:TI IWR6843 手册(SWRS219F 7.9 节)带外 P1dB −12 dBm(高通之前;泄漏的拍频在高通截止以下,管泄漏的是它),
-     带内 P1dB 随增益从 −24(30 dB)到 −42 dBm(48 dB),40 dB 时 −34(管目标回波 / IF 饱和的是它)。泄漏预算与 ADC 裕量现在共用一个数;
-     `Frontend60` 落地时请它给两个,本库 `link/leakage.py` 的 P1dB 裕量读带外的那个(按 TI 的数,−15 dBm 的泄漏裕量从 −5 变 +3 dB)。
-   - NF 10 dB 对 TI 的 12 dB(典型)/ 11 dB(40 dB 增益,图 7-2);TX 10 对 12 dBm;RX 增益 40 对 30–48 dB。
-   - TX→RX 隔离 25 dB:落在不加隔离结构的板上阵的范围里(Adela 等 2018:天线级实测 21–28 dB,整机仿真 21–27 dB;加 EBG 实测 40–50 dB)。没有任何数据手册给这个数。
-   - 天线增益各 10 dBi:板上 8 元阵实测约 12 dBi(同一篇,12° 扇形波束);封装内天线的数没有出处(上一轮引的 3.5 dBi 不在所引的文档里,作废)。
-   - LO 占位 L(100 kHz / 1 MHz) −82.5 / −79.6 dBc/Hz 对 BGT60TR13C 实测约 −82 / −85(AN600 图 16)、TI −93(1 MHz)。
+1. **天线增益与 77 GHz 一档还没有出处**(mmw60_trx#14 的三个面 0.2.8 已消化,见 `cairn/frontend-sources.md`;剩下的不在它那里等,而是没有对口的出处)。
+   - 天线增益各 10 dBi 仍是 `assumed`:读到的是封装内 2 dBi(mmw60_trx `rx60.comm_asada2011`)与板上 8 元阵实测约 12 dBi(Adela 2018),MIMO 的单个阵元两者都不是。
+     对 SNR 是 1 dB 对 1 dB(两副共 2 dB 对 1 dB):换成 2 dBi,5 m 人体的 51.3 dB 约变 35 dB(按雷达方程算的,没跑)。要一份给"单个贴片 / 封装内阵元在阵里的增益"的出处,或者等 array_tx 给阵元方向图的绝对增益。
+   - 77 GHz 一档 14 条全是 `assumed`,两个压缩点都沿用拆分前的 −20 dBm;读过的雷达芯片是 60–64 GHz 的。
+   - mmw60_trx 的通信前端没有带外压缩点(它的 ROADMAP C9):如果以后雷达要读"同一个 `Frontend60`",得先有这个数。它问过我们有没有通信接收机的出处,没有。
+   - 上游表里还有三份没读原文的雷达文档(AOP 手册 SWRS237B、勘误 SWRZ092B、E2E 论坛帖),本库没有用它们的数。
 
 ## P1 — 结论的可信度
 
@@ -46,10 +39,19 @@
    8 chirp(N_eff 11.8)13 dB 处 0.86 对 0.93,2 × 4 MIMO 每 TX 4 chirp(N_eff 5.2)5 dB 处 0.77 对 0.83。Pfa 用的是精确式,不受影响。
    要做:Pd 也走 Hermitian 型(非中心)的精确式,或在报表里对 N_eff < 20 标"近似"。另:RX 互耦让各通道噪声相关(−16 dB),K 个 look 当独立算,没量过。
 
+4. **按有出处的数,泄漏比接收前级的压缩点高 4 dB,而时域引擎不建模压缩**(0.2.8 发现)。发射 12 dBm、隔离 20 dB → 接收端 −8 dBm;高通之前的压缩点 −12 dBm。
+   `leakage_budget(cfg).p1db_margin_db` = −4.0(`p1db_kind` "out of band",2 阶 200 kHz 高通);无高通时对带内点 −26 dB。预算报了,但时域引擎的接收机是线性的:
+   泄漏压缩前级时目标回波的增益压缩、互调,帧里都没有。所以默认配置下时域引擎的 SNR / 检测结论隐含"隔离够"(≥ 24 dB 才到 0 dB 裕量;文章里的 EBG 是 40 dB)。
+   要做:要么给接收机一个压缩模型(Rapp / 三阶,读两个压缩点),要么在报表里把负裕量标成"时域结论不成立"。另:NF 取表值 12 dB 不随增益变,图 7-2 上 40 dB 增益是 11.0 dB(差 1 dB,没接)。
+   复现:`python examples/08_tx_leakage.py` 的预算表;`tests/test_leakage.py::test_leakage_budget_levels_and_flags`。
+5. **1 阶 200 kHz 高通在有出处的泄漏电平下不够**(0.2.8 发现):8 kHz 处只衰 28 dB,泄漏在 ADC 正好满幅,稳态削波 78 %,blanking 无效;占位电平时还有 7 dB。
+   这是结论不是 bug,但 `blank_recommended_s` 在这种情形仍给一个数(3.8 µs),没有说"削波是稳态的,blank 没用"。要做:预算在高通后裕量 < 6 dB 时不给推荐 blanking,改报还缺多少衰减。
+   复现:示例 08 的"1st order 200 kHz"两行;`tests/test_leakage.py::test_sourced_leakage_level_and_what_the_high_pass_must_do`。
+
 ## P2 — 一致性与能力
 
 0. **里程碑 2 留下的**(复现:示例 05–08,`cairn/mimo-angle.md`):
-   - blanking 之后每 chirp 最后一个样本仍削波(0.1 %):时域引擎的 IF 砖墙是逐 chirp 的循环 FFT 滤波,下一个 chirp 的阶跃环回到本 chirp 末尾;
+   - blanking 之后每 chirp 末尾仍有样本削波(有出处的泄漏电平下 3 个、0.3 %;占位电平时 1 个、0.1 %):时域引擎的 IF 砖墙是逐 chirp 的循环 FFT 滤波,下一个 chirp 的阶跃环回到本 chirp 末尾;
      真实的线性相位抽取滤波器也有前振铃,但长度是它的抽头数不是一整个 chirp。要做因果 / 有限长的 IF 滤波器(所有时域指纹都会动)。
    - TDM 的多普勒补偿在目标格上估单音频率(`doppler_fine_hz`),两目标同距离格同多普勒格时取其合成,各自的角都偏;要做多普勒维的分辨或 BPM-MIMO。
    - `found_targets` 的分格规则只分到格:两目标近于一个距离格(3.75 cm)时仍找同一个峰;那是分辨率,不是 bug,但报表没有标。
