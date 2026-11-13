@@ -8,13 +8,14 @@ table (``source: survey``, read in summaries and unverified) live in
 the tag next to every such value.  ``grep -c "source:"`` on the file counts
 exactly the entries (the header is written so it cannot match).
 
-An entry may name the sibling table its number comes from (``upstream:``):
-``mmw60_trx:<entry>#<field>`` is that field of mmw60_trx's entry in the
-vendored copy of its ``data/spec/survey.yaml`` (``#a-b`` is a difference of
-two fields, ``#field@key=value`` the element of a tabulated curve).  The
-number is written here as well, so the table reads on its own, and loading
-refuses a pair that disagrees: a re-pin that moves the sibling's figure
-fails until this file follows.
+An entry may name the shared table its number comes from (``upstream:``):
+``spec_sources:<reference>`` is looked up in the vendored copy of
+spec_sources (``vendor/spec_sources/``) with its reader's ``ref()`` --
+``<key>``, ``<key>#<field>`` or ``<key>#<field>@<axis>=<value>``, a lookup
+and nothing else: a difference or any other formula is a ``derived`` entry
+there, with the formula in its note.  The number is written here as well, so
+the table reads on its own, and loading refuses a pair that disagrees: a
+re-pin that moves the shared figure fails until this file follows.
 
 d2d_link's ``spec`` module is the model (its ``survey`` / ``spec`` / ``model``
 tags become ``survey`` / ``spec`` / ``assumed`` here: a radar has no
@@ -44,7 +45,7 @@ class SourcedNumber:
     note: str = ""
     quote: str = ""      # required when source == "spec"
     section: str = ""
-    upstream: str = ""   # "mmw60_trx:<entry>#<field>": the sibling's sourced entry this number is read from
+    upstream: str = ""   # "spec_sources:<reference>": the shared table's entry this number is read from
 
     def __post_init__(self):
         if self.source not in SOURCES:
@@ -66,26 +67,17 @@ class SourcedNumber:
 
 
 def upstream_value(ref: str) -> float:
-    """The number ``ref`` names in a sibling's sourced table (the module
-    docstring has the three forms)."""
+    """The number ``ref`` names in spec_sources (``spec_sources:<reference>``; the
+    reader's ref(): ``<key>[#<field>[@<axis>=<value>]]``, lookup only)."""
     repo, _, rest = ref.partition(":")
-    entry, _, field = rest.partition("#")
-    if repo != "mmw60_trx" or not entry or not field:
-        raise ValueError(f"upstream {ref!r}: expected 'mmw60_trx:<entry>#<field>'")
-    from .vendor.mmw60 import spec
+    if repo != "spec_sources" or not rest:
+        raise ValueError(f"upstream {ref!r}: expected 'spec_sources:<reference>'")
+    from .vendor.spec_sources import ref as lookup
 
-    v = spec.value(entry)
-    if "@" in field:                                    # a tabulated curve: the element where key == value
-        name, _, cond = field.partition("@")
-        key, _, at = cond.partition("=")
-        axis = [float(x) for x in v[key]]
-        if float(at) not in axis:
-            raise ValueError(f"upstream {ref!r}: {key} has no point {at} (have {axis})")
-        return float(v[name][axis.index(float(at))])
-    if "-" in field:                                    # a difference of two fields of one entry
-        a, _, b = field.partition("-")
-        return float(v[a]) - float(v[b])
-    return float(v[field])
+    try:
+        return float(lookup(rest))
+    except KeyError as e:                       # keep this module's contract: a bad reference is a ValueError
+        raise ValueError(f"upstream {ref!r}: {e}") from e
 
 
 def load_sources(path: Path | str = SOURCES_FILE) -> dict[str, SourcedNumber]:

@@ -3,6 +3,16 @@
 本文件按倒序记录实质性进展 —— 最新条目在本行正下方。每条保持简短(数字原值、被推翻的判断、下一步),
 结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-11-13 · 0.2.10:前端五个数改读共享库 spec_sources(fmcw_radar#13,feat/spec-sources)
+
+- spec_sources(兄弟库的共享来源表)发起 #13:把本库从 mmw60_trx vendor 的表换成它的。照它的迁移说明(@bef20fb 的 `cairn/migration-fmcw_radar.md`)做;PIN `d7b4d1e`,
+  它的 main 到 `38aa083` 之间 `src/` 没动。迁之前核过:五个数在两张表里相同(雷达芯片两条、隔离一条的值逐字段相等,标签都是 spec),derived 条目 20.0。
+- vendor:spec_sources 的 `reader.py`、`data/frontend60.yaml`(只拷这一张表,读取器读它找到的 `data/*.yaml`);mmw60 只剩 ×10 剖面。`vendor_check --strict`:33 个文件,32 verbatim、1 adapted。
+- `upstream_value` 只剩查找;隔离度引用从 `#with_ebg_db-improvement_max_db` 换成 derived `isolation.tx_rx_tue2018_no_ebg_min_db`,减法引用现在被拒(测试里有)。
+- 指纹 1979 / 1979 逐位相同。测试按说明改;另加 vendored 表的 `audit_tags` 检查。
+- **更正(frontend-sources.md 里补了)**:0.2.8 写的"`#a-b` 两字段之差"是本库解析器的能力,共享库的读取器有意不做:式子归 derived 条目。
+- 以后:新加 `upstream:` 要在 spec_sources 登记(`consumers.yaml`);本库 9 条 survey 等它的里程碑 2(ROADMAP"等上游"#2)。#13 由 spec_sources 验收后关。
+
 ## 2026-11-12 · 0.2.9(二):接收机两级压缩——泄漏的代价从 ADC 搬到回波上(feat/leakage-and-x10-lo)
 
 - 用户选的三项之一(原 P1 #4)。`link/compression.py`:每个压缩点一级 Rapp(p 占位 2),高通前用带外 P1dB、高通后用带内 P1dB,都折到 ADC 标度。

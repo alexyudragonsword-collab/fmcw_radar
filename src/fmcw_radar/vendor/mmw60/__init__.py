@@ -1,13 +1,11 @@
-"""mmw60_trx's sourced-number table and its reader, and nothing else of it.
+"""One file of mmw60_trx: its x10 LO phase-noise profile, nothing else.
 
-fmcw_radar reads the 60 GHz front-end figures mmw60_trx has collected with
-their provenance (its ``data/spec/survey.yaml`` through its ``spec``
-module): the radar chip's receiver and transmitter figures and the TX-RX
-isolation.  ``Frontend60`` itself is not vendored -- it stands on wifitrx's
-whole transmit / receive chain, which a radar that reads a handful of
-numbers has no use for.  ``fmcw_radar.sources`` ties its own entries to
-this table (``upstream:``) and refuses to load if the two disagree.
-
-This ``__init__`` is fmcw_radar's own; ``spec.py`` and
-``data/spec/survey.yaml`` are verbatim under their attribution headers.
+``data/clock_profiles/pllsim_wu19_x10_60p48g_floor150.yaml`` (a 6.048 GHz
+fractional-N PLL behind a x10 multiplier, floor -150 dBc/Hz: mmw60_trx's
+baseline file), read by ``configs/radar_60g_x10lo.yaml`` through
+``lo.profile``.  It is a model output, not a sourced figure, so it stays
+here pinned at mmw60_trx's commit; the sourced front-end figures this
+library once read from mmw60_trx's table now come from spec_sources
+(``vendor/spec_sources/``).  This ``__init__`` is fmcw_radar's own; the
+profile file is verbatim under its attribution header.
 """

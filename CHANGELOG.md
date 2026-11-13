@@ -4,6 +4,18 @@
 
 ---
 
+## [0.2.10] — 2026-11-13 — 前端的五个数改读共享库 spec_sources(只搬家,数不动)
+
+- fmcw_radar#13(spec_sources 发起):vendor spec_sources@`d7b4d1e` 的 `reader.py` 与 `data/frontend60.yaml`(`vendor/spec_sources/`);
+  删掉 `vendor/mmw60/` 的 `spec.py` 与 `data/spec/survey.yaml`,那里只剩 ×10 LO 剖面(仍 pin 在 mmw60_trx@`ef0f00c`)。
+- `data/sources.yaml` 的 5 条 `upstream:` 改成 `spec_sources:<引用>`;`value` / `cite` / `quote` / `section` / `note` 不动。隔离度的减法换成 spec_sources 的
+  derived 条目 `isolation.tx_rx_tue2018_no_ebg_min_db`(40 − 20 = 20 dB)。`sources.upstream_value` 只剩查找(读取器的 `ref()`,`KeyError` 转 `ValueError`),
+  不再自己解析 `@` 和 `-`;引用里的减法现在被拒。
+- 测试:来源守卫换读 spec_sources、坏引用多一条"减法";vendored 表的四个标签数得准(`audit_tags`);vendor 检查的 pin 表加 spec_sources。CI 的 vendor-drift 多检出 spec_sources。
+- 指纹:逐位不变(1979 个值)。
+
+---
+
 ## [0.2.9] — 2026-11-12 — 接收机的两级压缩;×10 LO 的配置;推荐 blanking 不再给无效值
 
 - **接收机压缩模型**(ROADMAP 原 P1 #4,`link/compression.py`):高通之前一级(带外 P1dB)、之后一级(带内 P1dB),各是一个 Rapp 限幅(膝部 `frontend.rx_rapp_p`,占位 2)。

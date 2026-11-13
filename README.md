@@ -33,7 +33,7 @@ IF / ADC、窗与 CFAR、仿真。77 GHz 车载一档结构相同只换数(`conf
 | 模块 | 做什么 | 铁律 |
 |---|---|---|
 | `config/` | frozen `RadarConfig`、YAML 加载、表单字段声明(GUI 以后做) | 1 |
-| `sources.py` + `data/sources.yaml` | 每个不是设计决定的数:占位 `assumed`、文献 `survey`、原文 `spec`;`upstream:` 指向 mmw60_trx 来源表的条目,加载时核对两边相等 | 5 |
+| `sources.py` + `data/sources.yaml` | 每个不是设计决定的数:占位 `assumed`、文献 `survey`、原文 `spec`;`upstream:` 指向共享库 spec_sources 的条目(只查找),加载时核对两边相等 | 5 |
 | `lo.py` | vendored ADPLL 的构造;LO 相噪剖面 = analyze() ×N²(fref/2 以上取 DCO 自身)或剖面文件 | 2 |
 | `phase_noise/` | range correlation:残余 PSD = 2(1 − cos 2πfτ)·S_φ,合成与闭式 | 2 |
 | `chirp/` | 斜坡经 event / response / ideal 引擎 → 瞬时频率误差曲线;离线 LS / 在线 sign-sign 两点校准 | 4, 6 |
@@ -44,14 +44,15 @@ IF / ADC、窗与 CFAR、仿真。77 GHz 车载一档结构相同只换数(`conf
 | `engine/timedomain.py` | 5 GS/s 包络真混频 → 泄漏音 → 砖墙 IF → 高通 → ADC 量化(削波)→ 距离–多普勒图 / MIMO 立方与 DBF | 3 |
 | `report.py`, `tools/` | 预算一页、指纹、vendor 漂移、示例冒烟 / 漂移 | 7 |
 | `vendor/polartx/` | polar_tx@b007e60 的两点调制器、两点校准、嵌套的 pllsim 子树(pll_simulator@5564c64,逐字节校验) | — |
-| `vendor/mmw60/` | mmw60_trx@ef0f00c 的来源表与读取器(`spec.py` + `data/spec/survey.yaml`,只此两个文件):60 GHz 雷达前端的数从这里读 | 5 |
+| `vendor/spec_sources/` | spec_sources@d7b4d1e 的读取器与一张表(`reader.py` + `data/frontend60.yaml`):60 GHz 雷达前端的数从这里读 | 5 |
+| `vendor/mmw60/` | mmw60_trx@ef0f00c 的一个文件:×10 LO 相噪剖面(`configs/radar_60g_x10lo.yaml` 读它) | — |
 | `vendor/arraytx/` | array_tx@e897c15 的阵列几何、波束宽 / 斜视、互耦矩阵三来源、Touchstone 读写(coupling 为改编副本) | — |
 
 ## 默认配置的数(示例 00–04,`examples/expected/` 存全量输出)
 
 - 60 GHz、B = 4 GHz、100 µs × 64、10 MS/s、Hann:c/2B 3.75 cm,Hann 下 5.34 cm;最大距离 15 m(IF 4 MHz);速度分辨率 0.39 m/s,±12.5 m/s。
 - 前端(0.2.8):发射 12 dBm、NF 12 dB、两个接收压缩点(带外 −12 dBm、带内 −34 dBm @ 40 dB 增益)、收发隔离 20 dB 是读过原文的数(一颗 60 GHz 雷达芯片的手册、一篇板上阵的文章,
-  经 mmw60_trx 的来源表);天线增益各 10 dBi、RX 增益 40 dB 仍是占位。
+  经共享库 spec_sources,最初经 mmw60_trx 的来源表);天线增益各 10 dBi、RX 增益 40 dB 仍是占位。
 - 人体(−10 dBsm,survey)5 m:P_r −85.1 dBm,C/N0 76.8 dBHz,格点 SNR 51.3 dB(矩形窗 54.9,窗损失 3.5 dB),Pd = 1 @ Pfa 1e-4;
   时域引擎在同一格读 51.09 dB,与统计引擎扣掉格点失配、带内相噪与拍频音相干损失后的期望 51.08 dB 差 +0.00 dB(三个距离 −0.05 / −0.07 / −0.05 dB;0.2.5 量的 12 个 seed 平均 ±0.06 dB 内)。
 - LO(占位 15 GHz ADPLL ×4,TDC 5 ps、抖动 1 ps)L(1 MHz) −79.6 dBc/Hz;5 m 处残余 55.3 mrad(LO 自身 202.0);距离维旁瓣 +1 m −63.3、+5 m −51.4 dBc/格(单 chirp,

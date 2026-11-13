@@ -20,21 +20,22 @@ authoring_mode: ai_generated
 
 - **读什么**(60 GHz 档;`data/sources.yaml` 里带 `upstream:` 的五条,`source: spec`,各带引文与章节):
 
-  | 量 | 值 | mmw60_trx 的条目 | 原文 |
+  | 量 | 值 | spec_sources 的引用(0.2.10 起;0.2.8–0.2.9 是 mmw60_trx 表里同名的条目) | 原文 |
   |---|---|---|---|
   | `tx_power_dbm` | 12 dBm | `rx60.radar_iwr6843#tx_power_dbm` | TI IWR6843 手册 SWRS219F 7.9 节 |
   | `nf_db` | 12 dB | `rx60.radar_iwr6843#nf_db` | 同上(表里的典型值) |
   | `p1db_oob_dbm` | −12 dBm | `rx60.radar_iwr6843#p1db_in_oob_dbm` | 同上,脚注 (1) |
   | `p1db_inband_dbm` | −34 dBm(40 dB 增益) | `rx60.radar_iwr6843_fig7_2#p1db_inband_dbm@gain_db=40` | 同上,图 7-2(目读 ±1 dB) |
-  | `tx_rx_isolation_db` | 20 dB | `isolation.tx_rx_tue2018#with_ebg_db-improvement_max_db` | Adela 等,IEEE TAP 66(10) 2018 |
+  | `tx_rx_isolation_db` | 20 dB | `isolation.tx_rx_tue2018_no_ebg_min_db`(derived:40 − 20;0.2.9 及以前本库自己解析 `#with_ebg_db-improvement_max_db`) | Adela 等,IEEE TAP 66(10) 2018 |
 
 - **不读什么**:天线增益(各 10 dBi)与 RX 增益档(40 dB)仍是 `assumed`。天线增益是设计选择:读到的是封装内 2 dBi(mmw60_trx 的通信收发机条目)与板上 8 元阵实测约 12 dBi(Adela 2018),
   差 10 dB,而 MIMO 阵元两者都不是;对 SNR 是 1 dB 对 1 dB,所以不拿一个不对口的数冒充出处。LO、TDC、互耦、77 GHz 一档的全部也仍是占位(23 条 `assumed`,5 条 `spec`,9 条 `survey`)。
-- **决定(contains:decision):只 vendor 来源表,不 vendor `Frontend60`。** `vendor/mmw60/` 只有 `spec.py` 与 `data/spec/survey.yaml`。理由:(1) `Frontend60` 站在 wifitrx 整条收发链上;
+- **决定(contains:decision):只 vendor 来源表,不 vendor `Frontend60`。** 0.2.8–0.2.9 是 mmw60_trx 的 `spec.py` 与 `data/spec/survey.yaml`;**0.2.10 起这些条目迁进了共享库 spec_sources**(fmcw_radar#13),vendor 的是它的 `reader.py` 与 `data/frontend60.yaml`,`vendor/mmw60/` 只剩 ×10 LO 剖面。理由:(1) `Frontend60` 站在 wifitrx 整条收发链上;
   (2) 它的基准前端 `surveyed_frontend` 取的是通信收发机(Asada 2011:增益 27 dB、NF 6.1 dB、天线 2 dBi、带外压缩点 None),雷达最要紧的带外压缩点在那一档是空的,只有它表里的雷达芯片条目有。
   代价是没有"同一个 `Frontend60` 实例",只有同一份数和出处;已在 #14 说明。
 - **决定:数写两遍、加载时核对。** `sources.yaml` 的条目自己带 `value`(这张表要能单独读、`grep source:` 要数得对),`upstream:` 指向 vendored 表的条目与字段
-  (`#字段`、`#a-b` 两字段之差、`#字段@键=值` 曲线上的一点);`load_sources` 发现两边不等就拒绝加载。重新 pin 之后上游的数动了,测试之前加载就先失败。
+  (`#字段`、`#字段@轴=值` 曲线上的一点,用 spec_sources 读取器的 `ref()`,**只查找**);`load_sources` 发现两边不等就拒绝加载。重新 pin 之后上游的数动了,测试之前加载就先失败。
+  更正(0.2.10):0.2.8 时本库的解析器还认 `#a-b` 两字段之差,隔离度就是这么取的;共享库把式子挪成一条 derived 条目(note 里写公式),引用里出现减法现在被拒。
 - **压缩点是两个量(contains:lesson)。** 雷达芯片的手册把接收压缩点分成带外(用远低于最低高通截止的 10 kHz 连续波测:高通之前的那几级)和带内(随增益每 dB 降 1 dB:输出端的固定电平)。
   0.2.7 及以前只有一个 `p1db_dbm`(−20 dBm),泄漏预算和回波裕量共用。现在:回波对带内点(`cfg.p1db_inband()`,config 改增益时沿图 7-2 的直线折算);
   泄漏的每一项按拍频在高通截止的哪一侧选点(`link/leakage.py`,`p1db_kind`)。77 GHz 一档两个点都沿用原来的 −20 dBm(没有出处)。

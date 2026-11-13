@@ -1,0 +1,86 @@
+# Vendored from spec_sources@d7b4d1eb510617d69784622c593c8ed31ab32b8b: src/spec_sources/data/frontend60.yaml
+# Adapted-copy policy: see src/fmcw_radar/vendor/__init__.py
+# frontend60 —— 60 GHz 收发前端的测量值：接收机（通信 / 雷达）、收发隔离、封装内天线。
+#
+# 标签：spec（对过原文，带 quote 与 section）/ survey（未核实，note 写明）/ derived（只由本库的 spec、
+# survey 条目推出，note 或 cite 是公式）。本表不收 assumed：哪个库自己的取舍留在那个库的本地表。
+# 只有条目自己的标签行写成"标签词 + 冒号"，说明文字里不写，所以对四个标签各跑一次 grep -c
+# 都恰好等于该标签的条目数（tests/test_iron_rules.py 跑真的 grep）。
+#
+# 出处：条目从 mmw60_trx@13024e0b012923071d827cc557b0da5eb9a9b2aa src/mmw60/data/spec/survey.yaml
+# 逐字迁入，每个字段与源表相等（tests/test_extraction.py 对 tests/fixtures/ 里的副本逐条比）。
+# 所以 cite / note 里的"本库"指 mmw60_trx，cairn/…、examples/…、tests/…、config.…、frontend.… 是它仓库里的路径，
+# assumed.* 是它本地表里的条目；这些写法在条目下一次因核实而改动时改成明确的库名（ROADMAP）。
+#
+# 前缀：rx60.*、isolation.*；survey.* 是 mmw60_trx 的旧键名（改名见 ROADMAP）。
+# isolation.tx_rx_tue2018_no_ebg_min_db 是本库新加的 derived（接住 fmcw_radar 引用里的减法，铁律 6）。
+#
+# 迁入前的节注释（mmw60_trx ROADMAP D4：前端的三个面——接收前端、收发隔离、发 / 收天线增益）：
+#   2026-11-12 第二轮：放行站点后对着原文核过四条（标签由 survey 改成 spec，补了 quote 与 section）；
+#   其余仍只读到搜索摘要（IEEE Xplore 与 Mouser 对脚本访问有校验，没有去绕）。
+#   2026-11-12 第三轮：删掉 survey.antenna60_bgt60_an600_dbi。提供这组数的 fmcw_radar 读了 AN600 原文后撤回：
+#   那份应用笔记里没有天线增益（只有归一化方向图），2 / 3.5 / 5 dBi 是搜索摘要张冠李戴。
+#   同一节的 dmg.rx_max_input_dbm 与 survey.dmg_sensitivity_assumptions 是标准条文，放在 ieee80211.yaml。
+
+entries:
+
+  # ------------------------------------------------------------ 接收前端：通信收发机
+  rx60.comm_asada2011:
+    value: {nf_db: 6.1, iip3_dbm: -20.0, gain_high_db: 27.0, gain_low_db: 17.0, antenna_gain_dbi: 2.0, tx_gain_db: 16.0, tx_p1db_dbm: 5.4, tx_psat_dbm: 6.5}
+    unit: "dB, dBm, dB, dB, dBi, dB, dBm, dBm"
+    source: spec
+    cite: "Asada et al., 'A 60 GHz 16 Gb/s 16QAM Low-Power Direct-Conversion Transceiver Using Capacitive Cross-Coupling Neutralization in 65 nm CMOS', IEEE A-SSCC 2011, pp. 373–376（Tokyo Institute of Technology）；作者实验室站点上的论文 PDF（asdh_ASSCC2011_paper_v2.pdf），2026-11-12 读原文"
+    section: "V. Experimental Results；Table III Performance Summary"
+    quote: "Fig. 10 shows the conversion gain of RX. The LNA realizes a gain control, and the conversion gain is 27 dB in high-gain mode and 17 dB in low-gain mode. [...] Fig. 11 shows the noise figure. The entire noise figure is less than 6.1 dB, and the measured IIP3 is −20 dBm. [...] The antenna in the BGA package has a 2dBi gain. [...] Fig. 8 shows the conversion gain of TX, which is 16 dB. [...] Fig. 9 shows the measured output power, which is 5.4 dBm at 1-dB compression. [Table III: Tx CG 16 dB, P1dB 5.4 dBm, Psat 6.5 dBm]"
+    note: "通信收发机的数，'anchored' 接收前端的基准档取它（NF、IIP3、高增益档增益、封装内天线）。6.1 dB 是原文给的上界（'less than'，Fig. 11 全频段）。原文没说 IIP3 是在哪一档增益下量的。接收机 = 4 级 LNA + I/Q 无源混频 + 基带 LNA，27 / 17 dB 是整条链的变频增益。同一张表的发射侧：变频增益 16 dB、P1dB 5.4 dBm、Psat 6.5 dBm（本库假设的 Psat 是 15 dBm，见 ROADMAP C9）；相噪 −94.2 dBc/Hz @ 1 MHz（60.48 GHz）。"
+
+  survey.rx60_comm_iscas2015:
+    value: {nf_db: 7.1, gain_max_db: 64.0, gain_range_db: 28.0, p1db_out_dbm: -5.5}
+    unit: "dB, dB, dB, dBm"
+    source: survey
+    cite: "'A 64 dB Gain 60 GHz Receiver with 7.1 dB Noise Figure for 802.11ad Applications in 90 nm CMOS'，IEEE ISCAS 2015（作者未读到）"
+    note: "未核实（只读到搜索摘要：双边带 NF 7.1 dB、最大变频增益 64 dB、调节范围 28 dB、输出 P1dB −5.5 dBm、177 mW）。64 dB 是含基带增益的整机增益，输出 P1dB 是输出端受限，折不到本库 LNA 档位表的字段上，所以只用它的 NF 作灵敏度档。"
+
+  # ------------------------------------------------------------ 接收前端：雷达芯片（TI IWR6843）
+  rx60.radar_iwr6843:
+    value: {nf_db: 12.0, p1db_in_oob_dbm: -12.0, gain_max_db: 48.0, gain_range_db: 18.0, tx_power_dbm: 12.0}
+    unit: "dB, dBm, dB, dB, dBm"
+    source: spec
+    cite: "TI IWR6843 / IWR6443 数据手册 SWRS219F（OCTOBER 2018 – REVISED APRIL 2025），2026-11-12 读原文"
+    section: "7.9 RF Specification"
+    quote: "Receiver: Noise figure, 60 to 64 GHz, TYP 12 dB; 1-dB compression point (Out Of Band)(1), TYP –12 dBm; Maximum gain 48 dB; Gain range 18 dB; Gain step size 2 dB. Transmitter: Output power 12 dBm; Power backoff range 26 dB. (1) 1-dB Compression Point (Out Of Band) is measured by feed a Continuous wave Tone (10 kHz) well below the lowest HPF cut-off frequency."
+    note: "雷达芯片的数，全部是典型值。P1dB 是带外的（脚注 1）；带内 P1dB 随增益变，在手册 Figure 7-2 里，是图不是表，没有读数。只作对照档，通信前端的基准不取它。同一张表：1 MHz 处相噪 −93 dBc/Hz。fmcw_radar 在 mmw60_trx#14 上先查到。"
+
+  rx60.radar_iwr6843_fig7_2:
+    value: {gain_db: [30.0, 36.0, 40.0, 44.0, 48.0], nf_db: [15.6, 12.2, 11.0, 10.5, 10.3], p1db_inband_dbm: [-24.0, -30.0, -34.0, -38.0, -42.0]}
+    unit: "dB, dB, dBm"
+    source: spec
+    cite: "TI IWR6843 / IWR6443 数据手册 SWRS219F（OCTOBER 2018 – REVISED APRIL 2025），第 32 页的图；2026-11-12 把这一页渲染出来读图"
+    section: "7.9 RF Specification, Figure 7-2. Noise Figure, In-band P1dB vs Receiver Gain"
+    quote: "Figure 7-2 shows variations of noise figure and in-band P1dB parameters with respect to receiver gain programmed."
+    note: "读图值，不是表：NF ±0.3 dB；带内 P1dB 是一条直线，两端落在网格线上（30 dB 增益 −24 dBm，48 dB 增益 −42 dBm，每 dB 增益降 1 dB）。fmcw_radar 在 mmw60_trx#14 上先读出这组数，本库对着图核过，一致。和同一节表里的带外 P1dB（−12 dBm）是两个量：带外的是基带高通之前那几级，雷达的发射泄漏碰到的是它；带内的是目标回波与基带 / ADC 碰到的。同一颗芯片上两者差 12–30 dB。图上最高增益处 NF 10.3 dB，表里的典型值写 12 dB，原文没有解释这个差。"
+
+  # ------------------------------------------------------------ 收发隔离
+  isolation.tx_rx_tue2018:
+    value: {with_ebg_db: 40.0, improvement_min_db: 15.0, improvement_max_db: 20.0}
+    unit: dB
+    source: spec
+    cite: "B. B. Adela, M. C. van Beurden, P. T. van Zeijl, A. B. Smolders, 'High-isolation array antenna integration for single-chip millimeter-wave FMCW radar', IEEE Trans. Antennas Propag., vol. 66, pp. 5214–5223, Oct. 2018, doi 10.1109/TAP.2018.2854286；TU/e 研究门户上的摘要，2026-11-12 读原文"
+    section: "Abstract（只读了摘要，正文没有读）"
+    quote: "Measurement results in the 57-64 GHz band show the TX-RX isolation of 40 dB, which is 15-20 dB better than the isolation between TX and RX arrays without EBG structures."
+    note: "57–64 GHz 单芯片 FMCW 雷达的收发微带阵，键合线互连。不加 EBG 的 20–25 dB 是用摘要里的两个数减出来的，不是原文给的数；正文里有没有直接给，没有读到。没有查到任何数据手册直接给收发隔离度。fmcw_radar 读了正文（mmw60_trx#14，2026-11-12；本库没有读到，以下是转述，图上的数对方目读 ±2 dB）：整机（收发各一个 8 元板上阵、间距 15 mm）加 EBG 实测 40–50 dB，不加 EBG 的整机没有样机，21–27 dB 是仿真；天线级不加 EBG 实测 21–28 dB、加 EBG 30–48 dB；8 元板上阵增益约 12 dBi。"
+
+  isolation.tx_rx_tue2018_no_ebg_min_db:
+    value: 20.0
+    unit: dB
+    source: derived
+    cite: "isolation.tx_rx_tue2018 的 with_ebg_db − improvement_max_db（Adela et al., IEEE TAP 2018 摘要里的两个数）"
+    note: "公式：不加 EBG 的收发隔离（下端）= 加 EBG 的 40 dB − 改善量上端 20 dB = 20 dB；用改善量下端 15 dB 得上端 25 dB。原文没有直接给这个数，是摘要里两个数相减（见 isolation.tx_rx_tue2018 的 note；正文里不加 EBG 的整机只有仿真 21–27 dB、天线级实测 21–28 dB，都是 fmcw_radar 的转述）。fmcw_radar 0.2.8 起在引用里做这次减法（mmw60_trx:isolation.tx_rx_tue2018#with_ebg_db-improvement_max_db）；spec_sources 的引用只做查找，减法落在这一条（0.1.0）。mmw60_trx 的 assumed.frontend_faces_pick 取的也是这个数。"
+
+  # ------------------------------------------------------------ 封装内天线
+  survey.antenna60_okada2013_dbi:
+    value: 6.0
+    unit: dBi
+    source: survey
+    cite: "Okada et al., 'Full Four-Channel 6.3-Gb/s 60-GHz CMOS Transceiver With Low-Power Analog and Digital Baseband Circuitry', IEEE JSSC vol. 48 no. 1, pp. 46–65, 2013，摘要（'a 6-dBi antenna built in an organic package'）"
+    note: "未核实（只读到搜索摘要；IEEE Xplore 对脚本访问有校验，原文没有读到）。通信收发机用的封装内天线，作灵敏度档；基准档取的是读过原文的 rx60.comm_asada2011 的 2 dBi。阵列增益是里程碑 2 的事，不在这里。"
