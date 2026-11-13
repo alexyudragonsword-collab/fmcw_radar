@@ -2,7 +2,9 @@
 #
 #   assumed  占位值:没有任何实测或文献依据,只是量级合理(天线增益、RX 增益档、LO 相噪、TDC、77 GHz 一档的全部)。
 #   survey   外部文献 / 标准的数,只读到二手转述或摘要,未核对原文(note 里写"未核实")。
-#   spec     已对照原文的数(需要 quote 与 section)。0.2.8 起有五条:60 GHz 雷达前端的发射功率、NF、两个接收压缩点、收发隔离。
+#   spec     已对照原文的数(需要 quote 与 section)。0.2.8 起 60 GHz 雷达前端的五条;0.2.11 起加人体 RCS。
+#   derived  只由读过原文的条目与公式算出的数,原文里没有直接印出来(0.2.11 起:两条氧气衰减,ITU-R P.676 逐线法)。
+#            必须带 upstream(从 spec_sources 读)和 note(写公式)。
 #
 # upstream 一栏(可选)= 这个数在共享库 spec_sources 里的引用:"spec_sources:<条目>[#<字段>[@<轴>=<值>]]",用 vendored 的
 # src/fmcw_radar/vendor/spec_sources/ 读取器的 ref() 查,只查找;减法之类的式子在 spec_sources 是一条 derived 条目。
@@ -217,25 +219,30 @@ entries:
 
   # ---------------------------------------------------------------- 大气(survey)
   oxygen.60g_db_per_km:
-    value: 15.0
+    value: 14.651
     unit: dB/km
-    source: survey
-    cite: "ITU-R P.676: specific attenuation by atmospheric oxygen peaks at ~15 dB/km around 60 GHz at sea level (summaries of the recommendation's Figure 1; original text not read)"
-    note: "未核实:只读到转述;本库按往返距离 2R 计,10 m 处 0.3 dB。"
+    source: derived
+    upstream: "spec_sources:itu_p676.gamma_o_dry_sea_level#db_per_km@f_ghz=60"
+    cite: "Recommendation ITU-R P.676-13 (08/2022), 'Attenuation by atmospheric gases and related effects', Annex 1 (line-by-line method); read in the original by spec_sources (2026-11-13)"
+    note: "公式:γo = 0.1820·f·(Σ Si·Fi + N″D),原文 Annex 1 §1 式 (1)–(9),Table 1 的 44 条氧气谱线,图 1 的海平面干大气(1013.25 hPa、15 °C、水汽 0)逐线求和;由 spec_sources 算(itu_p676.gamma_o_dry_sea_level),本库用 Python 包 itur 0.4.0 独立复算一致。只算氧气(干空气),不含水汽:本库的 channel.oxygen_db_per_km 就是氧气。 60.0 GHz 处的值。**更正(0.2.11)**:0.2.10 及以前记 15.0(survey,转述),那是 60.81 GHz 处的峰值 15.06,不是频段中心;本库 58–62 GHz 的扫频内在 12.4 到 15.06 之间。往返 2R,10 m 处 0.147 dB。"
   oxygen.77g_db_per_km:
-    value: 0.4
+    value: 0.091
     unit: dB/km
-    source: survey
-    cite: "ITU-R P.676: oxygen attenuation falls to a few tenths of a dB/km by 77 GHz (summaries; original text not read)"
-    note: "未核实。"
+    source: derived
+    upstream: "spec_sources:itu_p676.gamma_o_dry_sea_level#db_per_km@f_ghz=77.5"
+    cite: "Recommendation ITU-R P.676-13 (08/2022), 'Attenuation by atmospheric gases and related effects', Annex 1 (line-by-line method); read in the original by spec_sources (2026-11-13)"
+    note: "公式:γo = 0.1820·f·(Σ Si·Fi + N″D),原文 Annex 1 §1 式 (1)–(9),Table 1 的 44 条氧气谱线,图 1 的海平面干大气(1013.25 hPa、15 °C、水汽 0)逐线求和;由 spec_sources 算(itu_p676.gamma_o_dry_sea_level),本库用 Python 包 itur 0.4.0 独立复算一致。只算氧气(干空气),不含水汽:本库的 channel.oxygen_db_per_km 就是氧气。 77.5 GHz(77 GHz 档的中心)处的值。**更正(0.2.11)**:0.2.10 及以前记 0.4(survey,转述),那接近氧气加水汽的总气体衰减(标准大气,水汽 7.5 g/m³:约 0.34 dB/km,水汽 0.25 占大头),不是氧气。水汽不在本库的信道里;25 m 目标往返多出约 0.01 dB。"
 
   # ---------------------------------------------------------------- 目标 RCS 典型值(survey)
   rcs.human_dbsm:
     value: -10.0
     unit: dBsm
-    source: survey
-    cite: "human body RCS at mmWave quoted as 0.1-1 m^2 depending on aspect (radar handbooks and 60 / 77 GHz sensing papers; no single original read)"
-    note: "未核实:取区间低端 0.1 m^2;对 SNR 是线性的 1 dB 对 1 dB。"
+    source: spec
+    upstream: "spec_sources:target_rcs.deep2019_pedestrian_77g#co_pol_min_dbsm"
+    cite: "Y. Deep, P. Held, S. S. Ram, D. Steinhauser, A. Gupta, F. Gruson, A. Koch, A. Roy, 'Polarimetric Radar Cross-Sections of Pedestrians at Automotive Radar Frequencies', arXiv:1910.13706v1, 2019; read in the original by spec_sources (2026-11-13)"
+    section: "III.B Results from electromagnetic ray tracing; Fig. 4"
+    quote: "The figure shows that the co-polarization (σvv and σhh) components range from -10 dBsm to +5 dBsm. The cross-polarization components are generally weaker by approximately 10 dB."
+    note: "取同极化范围的下端。**是射线追踪仿真,不是实测**:一名受试者行走一个步态的 69 帧,77 GHz,入射方位角 0° / 45° / 90°;本库 60 GHz 档也用它。0.2.10 及以前是同一个数,标 survey(转述,没读原文)。对 SNR 是 1 dB 对 1 dB:取上端 +5 dBsm 会多 15 dB。"
   rcs.car_dbsm:
     value: 10.0
     unit: dBsm

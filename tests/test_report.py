@@ -15,9 +15,9 @@ def test_report_carries_every_section_and_source(cfg60):
     rep = report(cfg, run_statistical(cfg))
     md = to_markdown(rep)
     for word in ("## Link budget", "## Inputs and their sources", "## LO phase noise after range correlation",
-                 "## Chirp linearity", "source: survey", "assumed", "cycle-accurate"):
+                 "## Chirp linearity", "source: spec", "| oxygen_db_per_km | 14.65 | derived |", "assumed", "cycle-accurate"):
         assert word in md, word
-    assert {v["source"] for v in rep["inputs"].values()} == {"assumed", "survey", "config", "spec"}
+    assert {v["source"] for v in rep["inputs"].values()} == {"assumed", "config", "spec", "derived"}
     assert len(rep["phase_noise"]["floor"]) == 6
     assert "| 60g_sensing.nf_db |" in sources_markdown()
 

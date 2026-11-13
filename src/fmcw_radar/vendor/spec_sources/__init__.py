@@ -3,11 +3,14 @@
 spec_sources is the siblings' shared table of numbers about the outside
 world (specification clauses, datasheet and paper figures, and what is
 derived from them alone), each with its provenance.  Vendored here at
-``d7b4d1eb510617d69784622c593c8ed31ab32b8b`` (its main, milestone 1):
-``reader.py`` and ``data/frontend60.yaml`` (the 60 GHz radar chip's
-receiver and transmitter figures, its Figure 7-2 curve, the TX-RX isolation
-and the derived no-EBG figure).  The reader loads whatever ``data/*.yaml``
-sits next to it, so the other domain tables are simply not copied.
+``dfaa36b67a144eb53acf692727efd431c4ac34e4`` (its main, milestone 2 batch 4):
+``reader.py`` and the three domain tables fmcw_radar reads --
+``data/frontend60.yaml`` (the 60 GHz radar chip's figures, its Figure 7-2,
+the TX-RX isolation and its derived no-EBG figure), ``data/atmosphere.yaml``
+(ITU-R P.676-13's oxygen lines and method, and the derived sea-level
+attenuation) and ``data/radar_targets.yaml`` (the pedestrian RCS).  The
+reader loads whatever ``data/*.yaml`` sits next to it, so the other domain
+tables are simply not copied.
 
 ``fmcw_radar.sources`` reads these by reference (``upstream:`` in
 ``data/sources.yaml``, ``spec_sources:<reference>``) and refuses to load if a

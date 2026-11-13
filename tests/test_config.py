@@ -73,7 +73,7 @@ def test_sourced_fields_resolve_with_their_source(cfg60):
     assert cfg60.frontend_value("rx_gain_dbi") == (10.0, "assumed")                # the antennas are still placeholders
     c2 = apply_overrides(cfg60, {"frontend.nf_db": 7.0})
     assert c2.frontend_value("nf_db") == (7.0, "config")
-    assert cfg60.rcs_dbsm()[1] == "survey" and cfg60.oxygen_db_per_km()[1] == "survey"
+    assert cfg60.rcs_dbsm()[1] == "spec" and cfg60.oxygen_db_per_km()[1] == "derived"
     assert apply_overrides(cfg60, {"target.rcs_dbsm": 0.0}).rcs_dbsm() == (0.0, "config")
 
 

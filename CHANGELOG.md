@@ -4,6 +4,17 @@
 
 ---
 
+## [0.2.11] — 2026-11-13 — 氧气衰减与人体 RCS 对上原文;新增 `derived` 标签
+
+- fmcw_radar#15(spec_sources 发起):spec_sources 重新 pin 到 `dfaa36b`,多 vendor 两张表(`data/atmosphere.yaml`、`data/radar_targets.yaml`)。
+- **氧气衰减改成 ITU-R P.676-13 逐线法**(干空气、海平面,频段中心):60 GHz 15.0 → **14.651** dB/km,77.5 GHz 0.4 → **0.091** dB/km。
+  旧的 15.0 是 60.81 GHz 处的峰值(15.06),0.4 接近 77 GHz 的总气体衰减(氧气 + 水汽);用 itur 0.4.0 独立复算一致。只算氧气,不含水汽(选项 (a))。
+- **人体 RCS** 仍是 −10 dBsm,出处从转述换成读过原文的 arXiv:1910.13706(77 GHz 行人射线追踪仿真,同极化 −10 … +5 dBsm 的下端),标 `spec`。
+- **新标签 `derived`**:原文印的是谱线表和公式、没有直接印这个数,所以氧气两条标 `derived`;derived 条目必须带 `upstream` 和写公式的 note。来源表 25 assumed / 6 spec / 6 survey / 2 derived。
+- 指纹(numbers-move):只有经接收功率传下来的值动(氧气损耗 → P_r → SNR、目标电平、时域帧);噪声、相噪、chirp、CFAR 统计逐位不变。5 m 人体格点 SNR +0.004 dB。
+
+---
+
 ## [0.2.10] — 2026-11-13 — 前端的五个数改读共享库 spec_sources(只搬家,数不动)
 
 - fmcw_radar#13(spec_sources 发起):vendor spec_sources@`d7b4d1e` 的 `reader.py` 与 `data/frontend60.yaml`(`vendor/spec_sources/`);

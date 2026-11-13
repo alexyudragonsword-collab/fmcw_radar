@@ -1,4 +1,4 @@
-# Vendored from spec_sources@d7b4d1eb510617d69784622c593c8ed31ab32b8b: src/spec_sources/reader.py
+# Vendored from spec_sources@dfaa36b67a144eb53acf692727efd431c4ac34e4: src/spec_sources/reader.py
 # Adapted-copy policy: see src/fmcw_radar/vendor/__init__.py
 """Numbers about the outside world, with their provenance: the reader.
 
@@ -40,8 +40,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
-
-__version__ = "0.1.0"
 
 SOURCES = ("spec", "survey", "assumed", "derived")
 #: the fields an entry may carry (mmw60_trx's SpecNumber fields)
@@ -353,4 +351,4 @@ def audit_tags(path: Path | str) -> list[str]:
 
 __all__ = ["SpecNumber", "SOURCES", "load_table", "all_entries", "survey", "value", "unverified", "by_source",
            "ref", "aliases", "Alias", "DeprecatedKeyWarning", "legacy_keys", "merge_tables", "audit_tags",
-           "data_files", "FIELDS", "KEY_PATTERN", "DATA_DIR", "LEGACY_DIR", "__version__"]
+           "data_files", "FIELDS", "KEY_PATTERN", "DATA_DIR", "LEGACY_DIR"]

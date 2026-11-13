@@ -13,10 +13,12 @@
    - mmw60_trx 的通信前端没有带外压缩点(它的 ROADMAP C9):如果以后雷达要读"同一个 `Frontend60`",得先有这个数。它问过我们有没有通信接收机的出处,没有。
    - 上游表里还有三份没读原文的雷达文档(AOP 手册 SWRS237B、勘误 SWRZ092B、E2E 论坛帖),本库没有用它们的数。
 
-2. **本库自己的 9 条 survey 等 spec_sources 的里程碑 2**(fmcw_radar#13 的"以后"一节):`oxygen.60g_db_per_km` / `oxygen.77g_db_per_km`(ITU-R P.676)、
-   `rcs.human_dbsm` / `rcs.car_dbsm` / `rcs.corner_reflector_dbsm`、`window.{rect,hann,hamming,blackman}_3db_bins`(Harris 1978 Table I)现在都是"只读到转述"。
-   spec_sources 会把它们迁进去并核对原文,到时另开 issue;本库再把这 9 条改成 `upstream:` 引用(数若因核对而动,是 numbers-move)。
+2. **本库还剩 6 条 survey 等 spec_sources**(fmcw_radar#15:原 9 条里氧气两条、人体 RCS 一条 0.2.11 已改成引用)。`rcs.car_dbsm`、`rcs.corner_reflector_dbsm`、
+   `window.{rect,hann,hamming,blackman}_3db_bins`(Harris 1978 Table I)仍是"只读到转述";原文要用户下载,spec_sources 核对后另开 issue,本库再改成 `upstream:` 引用。
    另:本库新加任何 `upstream:` 引用,要在 spec_sources 开 issue 登记进它的 `consumers.yaml`(它看不到本库的表)。
+3. **信道不含水汽**(0.2.11 起氧气按 P.676 干空气算)。77 GHz 处水汽(标准大气 7.5 g/m³)约 0.25 dB/km,是氧气(0.091)的近 3 倍,但 25 m 目标往返只多约 0.01 dB;
+   60 GHz 处水汽 0.15 dB/km,约为氧气的 1 %。要做(若有长距离 77 GHz 场景):spec_sources 补 P.676 Table 2 与水汽那一支(它提过:原文图 1 的 1013.25 hPa 是总压还是干空气压没说,
+   湿空气下 60 GHz 两种读法差 0.12 dB/km),本库加 `channel.water_vapour_g_m3`。
 
 ## P1 — 结论的可信度
 

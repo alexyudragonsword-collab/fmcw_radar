@@ -3,6 +3,16 @@
 本文件按倒序记录实质性进展 —— 最新条目在本行正下方。每条保持简短(数字原值、被推翻的判断、下一步),
 结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-11-13 · 0.2.11:氧气衰减与人体 RCS 对上原文,加 derived 标签(fmcw_radar#15,feat/spec-sources-oxygen-rcs)
+
+- spec_sources 里程碑 2 第 4 批:P.676-13 的 44 条氧气谱线与式 (1)–(9)(spec)、海平面干大气逐线求和(derived);arXiv:1910.13706 的行人 RCS(spec,射线追踪仿真)。新 PIN `dfaa36b`。
+- 核对:读取器相对 `d7b4d1e` 只删了版本号一行;frontend60.yaml 只改了两个本库不读的键名。itur 0.4.0 独立复算(干空气 1013.25 hPa、15 °C):57 / 60 / 62 / 64 GHz 10.079 / 14.651 / 14.028 / 6.836,
+  77 / 77.5 / 81 GHz 0.096 / 0.091 / 0.066 dB/km,峰值 15.060 @ 60.81 GHz;标准大气 77.5 GHz 氧气 0.0905 + 水汽 0.2517 = 0.342。
+- **被推翻的判断(本库最早的转述)**:"60 GHz 约 15 dB/km"是峰值不是频段中心;"77 GHz 零点几 dB/km 的氧气"其实是氧气 + 水汽,氧气本身 0.09。
+- 用户定的:(a) 只算氧气;加 `derived` 标签(必须带 upstream 与公式 note),不把算出来的数标成 spec。
+- 指纹 319 / 1979 动,全是经 P_r 传下来的(SNR、目标电平、帧、角度的 SNR 项);噪声密度、相噪、chirp、CFAR 的 Pfa / 有效格数逐位不变。示例 00 格点 SNR 51.08 → 51.09。
+- ROADMAP"等上游"#2 剩 6 条(车、角反射器 RCS,4 条窗表);新加 #3:信道不含水汽。
+
 ## 2026-11-13 · 0.2.10:前端五个数改读共享库 spec_sources(fmcw_radar#13,feat/spec-sources)
 
 - spec_sources(兄弟库的共享来源表)发起 #13:把本库从 mmw60_trx vendor 的表换成它的。照它的迁移说明(@bef20fb 的 `cairn/migration-fmcw_radar.md`)做;PIN `d7b4d1e`,

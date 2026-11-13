@@ -1,4 +1,4 @@
-# Vendored from spec_sources@d7b4d1eb510617d69784622c593c8ed31ab32b8b: src/spec_sources/data/frontend60.yaml
+# Vendored from spec_sources@dfaa36b67a144eb53acf692727efd431c4ac34e4: src/spec_sources/data/frontend60.yaml
 # Adapted-copy policy: see src/fmcw_radar/vendor/__init__.py
 # frontend60 —— 60 GHz 收发前端的测量值：接收机（通信 / 雷达）、收发隔离、封装内天线。
 #
@@ -12,7 +12,7 @@
 # 所以 cite / note 里的"本库"指 mmw60_trx，cairn/…、examples/…、tests/…、config.…、frontend.… 是它仓库里的路径，
 # assumed.* 是它本地表里的条目；这些写法在条目下一次因核实而改动时改成明确的库名（ROADMAP）。
 #
-# 前缀：rx60.*、isolation.*；survey.* 是 mmw60_trx 的旧键名（改名见 ROADMAP）。
+# 前缀：rx60.*、isolation.*、antenna60.*。
 # isolation.tx_rx_tue2018_no_ebg_min_db 是本库新加的 derived（接住 fmcw_radar 引用里的减法，铁律 6）。
 #
 # 迁入前的节注释（mmw60_trx ROADMAP D4：前端的三个面——接收前端、收发隔离、发 / 收天线增益）：
@@ -20,7 +20,7 @@
 #   其余仍只读到搜索摘要（IEEE Xplore 与 Mouser 对脚本访问有校验，没有去绕）。
 #   2026-11-12 第三轮：删掉 survey.antenna60_bgt60_an600_dbi。提供这组数的 fmcw_radar 读了 AN600 原文后撤回：
 #   那份应用笔记里没有天线增益（只有归一化方向图），2 / 3.5 / 5 dBi 是搜索摘要张冠李戴。
-#   同一节的 dmg.rx_max_input_dbm 与 survey.dmg_sensitivity_assumptions 是标准条文，放在 ieee80211.yaml。
+#   同一节的 dmg.rx_max_input_dbm 与 dmg.sensitivity_assumptions（原 survey.dmg_sensitivity_assumptions）是标准条文，放在 ieee80211.yaml。
 
 entries:
 
@@ -34,7 +34,7 @@ entries:
     quote: "Fig. 10 shows the conversion gain of RX. The LNA realizes a gain control, and the conversion gain is 27 dB in high-gain mode and 17 dB in low-gain mode. [...] Fig. 11 shows the noise figure. The entire noise figure is less than 6.1 dB, and the measured IIP3 is −20 dBm. [...] The antenna in the BGA package has a 2dBi gain. [...] Fig. 8 shows the conversion gain of TX, which is 16 dB. [...] Fig. 9 shows the measured output power, which is 5.4 dBm at 1-dB compression. [Table III: Tx CG 16 dB, P1dB 5.4 dBm, Psat 6.5 dBm]"
     note: "通信收发机的数，'anchored' 接收前端的基准档取它（NF、IIP3、高增益档增益、封装内天线）。6.1 dB 是原文给的上界（'less than'，Fig. 11 全频段）。原文没说 IIP3 是在哪一档增益下量的。接收机 = 4 级 LNA + I/Q 无源混频 + 基带 LNA，27 / 17 dB 是整条链的变频增益。同一张表的发射侧：变频增益 16 dB、P1dB 5.4 dBm、Psat 6.5 dBm（本库假设的 Psat 是 15 dBm，见 ROADMAP C9）；相噪 −94.2 dBc/Hz @ 1 MHz（60.48 GHz）。"
 
-  survey.rx60_comm_iscas2015:
+  rx60.comm_iscas2015:
     value: {nf_db: 7.1, gain_max_db: 64.0, gain_range_db: 28.0, p1db_out_dbm: -5.5}
     unit: "dB, dB, dB, dBm"
     source: survey
@@ -78,7 +78,7 @@ entries:
     note: "公式：不加 EBG 的收发隔离（下端）= 加 EBG 的 40 dB − 改善量上端 20 dB = 20 dB；用改善量下端 15 dB 得上端 25 dB。原文没有直接给这个数，是摘要里两个数相减（见 isolation.tx_rx_tue2018 的 note；正文里不加 EBG 的整机只有仿真 21–27 dB、天线级实测 21–28 dB，都是 fmcw_radar 的转述）。fmcw_radar 0.2.8 起在引用里做这次减法（mmw60_trx:isolation.tx_rx_tue2018#with_ebg_db-improvement_max_db）；spec_sources 的引用只做查找，减法落在这一条（0.1.0）。mmw60_trx 的 assumed.frontend_faces_pick 取的也是这个数。"
 
   # ------------------------------------------------------------ 封装内天线
-  survey.antenna60_okada2013_dbi:
+  antenna60.okada2013_dbi:
     value: 6.0
     unit: dBi
     source: survey

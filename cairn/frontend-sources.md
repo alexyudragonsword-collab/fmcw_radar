@@ -29,7 +29,7 @@ authoring_mode: ai_generated
   | `tx_rx_isolation_db` | 20 dB | `isolation.tx_rx_tue2018_no_ebg_min_db`(derived:40 − 20;0.2.9 及以前本库自己解析 `#with_ebg_db-improvement_max_db`) | Adela 等,IEEE TAP 66(10) 2018 |
 
 - **不读什么**:天线增益(各 10 dBi)与 RX 增益档(40 dB)仍是 `assumed`。天线增益是设计选择:读到的是封装内 2 dBi(mmw60_trx 的通信收发机条目)与板上 8 元阵实测约 12 dBi(Adela 2018),
-  差 10 dB,而 MIMO 阵元两者都不是;对 SNR 是 1 dB 对 1 dB,所以不拿一个不对口的数冒充出处。LO、TDC、互耦、77 GHz 一档的全部也仍是占位(23 条 `assumed`,5 条 `spec`,9 条 `survey`)。
+  差 10 dB,而 MIMO 阵元两者都不是;对 SNR 是 1 dB 对 1 dB,所以不拿一个不对口的数冒充出处。LO、TDC、互耦、77 GHz 一档的全部也仍是占位(0.2.8 时 23 条 `assumed`、5 条 `spec`、9 条 `survey`;0.2.11 起 25 / 6 / 6,另 2 条 `derived`:`rx_rapp_p` 两条占位,氧气与人体 RCS 改读 spec_sources)。
 - **决定(contains:decision):只 vendor 来源表,不 vendor `Frontend60`。** 0.2.8–0.2.9 是 mmw60_trx 的 `spec.py` 与 `data/spec/survey.yaml`;**0.2.10 起这些条目迁进了共享库 spec_sources**(fmcw_radar#13),vendor 的是它的 `reader.py` 与 `data/frontend60.yaml`,`vendor/mmw60/` 只剩 ×10 LO 剖面。理由:(1) `Frontend60` 站在 wifitrx 整条收发链上;
   (2) 它的基准前端 `surveyed_frontend` 取的是通信收发机(Asada 2011:增益 27 dB、NF 6.1 dB、天线 2 dBi、带外压缩点 None),雷达最要紧的带外压缩点在那一档是空的,只有它表里的雷达芯片条目有。
   代价是没有"同一个 `Frontend60` 实例",只有同一份数和出处;已在 #14 说明。
