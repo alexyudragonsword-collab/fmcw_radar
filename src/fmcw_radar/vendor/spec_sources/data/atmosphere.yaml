@@ -1,0 +1,102 @@
+# Vendored from spec_sources@dfaa36b67a144eb53acf692727efd431c4ac34e4: src/spec_sources/data/atmosphere.yaml
+# Adapted-copy policy: see src/fmcw_radar/vendor/__init__.py
+# atmosphere —— 大气衰减：ITU-R P.676 的逐线法与它推出的海平面比衰减。
+#
+# 标签：spec（对过原文，带 quote 与 section）/ survey（未核实，note 写明）/ derived（只由本库的 spec、
+# survey 条目推出，note 或 cite 是公式）。本表不收 assumed：哪个库自己的取舍留在那个库的本地表。
+# 只有条目自己的标签行写成"标签词 + 冒号"，说明文字里不写，所以对四个标签各跑一次 grep -c
+# 都恰好等于该标签的条目数（tests/test_iron_rules.py 跑真的 grep）。
+#
+# 出处：里程碑 2 第 4 批（fmcw_radar 的 oxygen.* 两条）。本库直接读原文建条目，不是从哪个库迁入的。
+# 前缀：itu_p676.*。
+
+entries:
+
+  # ------------------------------------------------------------ ITU-R P.676-13 Annex 1：逐线法（只录氧气 / 干空气一支）
+  itu_p676.oxygen_lines:
+    value:
+      columns: [f0_ghz, a1, a2, a3, a4, a5, a6]
+      rows:
+        - [50.474214, 0.975, 9.651, 6.69, 0.0, 2.566, 6.85]
+        - [50.987745, 2.529, 8.653, 7.17, 0.0, 2.246, 6.8]
+        - [51.50336, 6.193, 7.709, 7.64, 0.0, 1.947, 6.729]
+        - [52.021429, 14.32, 6.819, 8.11, 0.0, 1.667, 6.64]
+        - [52.542418, 31.24, 5.983, 8.58, 0.0, 1.388, 6.526]
+        - [53.066934, 64.29, 5.201, 9.06, 0.0, 1.349, 6.206]
+        - [53.595775, 124.6, 4.474, 9.55, 0.0, 2.227, 5.085]
+        - [54.130025, 227.3, 3.8, 9.96, 0.0, 3.17, 3.75]
+        - [54.67118, 389.7, 3.182, 10.37, 0.0, 3.558, 2.654]
+        - [55.221384, 627.1, 2.618, 10.89, 0.0, 2.56, 2.952]
+        - [55.783815, 945.3, 2.109, 11.34, 0.0, -1.172, 6.135]
+        - [56.264774, 543.4, 0.014, 17.03, 0.0, 3.525, -0.978]
+        - [56.363399, 1331.8, 1.654, 11.89, 0.0, -2.378, 6.547]
+        - [56.968211, 1746.6, 1.255, 12.23, 0.0, -3.545, 6.451]
+        - [57.612486, 2120.1, 0.91, 12.62, 0.0, -5.416, 6.056]
+        - [58.323877, 2363.7, 0.621, 12.95, 0.0, -1.932, 0.436]
+        - [58.446588, 1442.1, 0.083, 14.91, 0.0, 6.768, -1.273]
+        - [59.164204, 2379.9, 0.387, 13.53, 0.0, -6.561, 2.309]
+        - [59.590983, 2090.7, 0.207, 14.08, 0.0, 6.957, -0.776]
+        - [60.306056, 2103.4, 0.207, 14.15, 0.0, -6.395, 0.699]
+        - [60.434778, 2438.0, 0.386, 13.39, 0.0, 6.342, -2.825]
+        - [61.150562, 2479.5, 0.621, 12.92, 0.0, 1.014, -0.584]
+        - [61.800158, 2275.9, 0.91, 12.63, 0.0, 5.014, -6.619]
+        - [62.41122, 1915.4, 1.255, 12.17, 0.0, 3.029, -6.759]
+        - [62.486253, 1503.0, 0.083, 15.13, 0.0, -4.499, 0.844]
+        - [62.997984, 1490.2, 1.654, 11.74, 0.0, 1.856, -6.675]
+        - [63.568526, 1078.0, 2.108, 11.34, 0.0, 0.658, -6.139]
+        - [64.127775, 728.7, 2.617, 10.88, 0.0, -3.036, -2.895]
+        - [64.67891, 461.3, 3.181, 10.38, 0.0, -3.968, -2.59]
+        - [65.224078, 274.0, 3.8, 9.96, 0.0, -3.528, -3.68]
+        - [65.764779, 153.0, 4.473, 9.55, 0.0, -2.548, -5.002]
+        - [66.302096, 80.4, 5.2, 9.06, 0.0, -1.66, -6.091]
+        - [66.836834, 39.8, 5.982, 8.58, 0.0, -1.68, -6.393]
+        - [67.369601, 18.56, 6.818, 8.11, 0.0, -1.956, -6.475]
+        - [67.900868, 8.172, 7.708, 7.64, 0.0, -2.216, -6.545]
+        - [68.431006, 3.397, 8.652, 7.17, 0.0, -2.492, -6.6]
+        - [68.960312, 1.334, 9.65, 6.69, 0.0, -2.773, -6.65]
+        - [118.750334, 940.3, 0.01, 16.64, 0.0, -0.439, 0.079]
+        - [368.498246, 67.4, 0.048, 16.4, 0.0, 0.0, 0.0]
+        - [424.76302, 637.7, 0.044, 16.4, 0.0, 0.0, 0.0]
+        - [487.249273, 237.4, 0.049, 16.0, 0.0, 0.0, 0.0]
+        - [715.392902, 98.1, 0.145, 16.0, 0.0, 0.0, 0.0]
+        - [773.83949, 572.3, 0.141, 16.2, 0.0, 0.0, 0.0]
+        - [834.145546, 183.1, 0.145, 14.7, 0.0, 0.0, 0.0]
+    unit: "f0 in GHz; a1–a6 as used in equations (3), (6a), (7)"
+    source: spec
+    cite: "Recommendation ITU-R P.676-13 (08/2022), 'Attenuation by atmospheric gases and related effects'；www.itu.int（R-REC-P.676-13-202208-I，英文 PDF），2026-11-13 读原文"
+    section: "Annex 1, §1 Specific attenuation, Table 1 and Table 1 (end)"
+    quote: "TABLE 1 Spectroscopic data for oxygen attenuation f0 a1 a2 a3 a4 a5 a6"
+    note: "44 条谱线，从 PDF 文本层抽出，逐行对照过 Table 1；原文里的负号是 en dash。60 GHz 频带 37 条（50.474–68.960 GHz），118.750 GHz 1 条，368–834 GHz 6 条。"
+
+  itu_p676.method:
+    value: "γo = 0.1820·f·(Σi Si·Fi + N″D(f)) [dB/km]; Si = a1·1e-7·p·θ^3·exp[a2·(1 − θ)]; Fi = (f/fi)·[(Δf − δ·(fi − f))/((fi − f)^2 + Δf^2) + (Δf − δ·(fi + f))/((fi + f)^2 + Δf^2)]; Δf = a3·1e-4·(p·θ^(0.8 − a4) + 1.1·e·θ), then Δf = sqrt(Δf^2 + 2.25e-6); δ = (a5 + a6·θ)·1e-4·(p + e)·θ^0.8; N″D(f) = f·p·θ^2·[6.14e-5/(d·(1 + (f/d)^2)) + 1.4e-12·p·θ^1.5/(1 + 1.9e-5·f^1.5)]; d = 5.6e-4·(p + e)·θ^0.8; θ = 300/T; e = ρ·T/216.7"
+    unit: formula
+    source: spec
+    cite: "Recommendation ITU-R P.676-13 (08/2022), 'Attenuation by atmospheric gases and related effects'；www.itu.int（R-REC-P.676-13-202208-I，英文 PDF），2026-11-13 读原文"
+    section: "Annex 1, §1, equations (1), (2a), (3), (4), (5), (6a), (6b), (7), (8), (9)"
+    quote: "The specific gaseous attenuation is given by: γ = γo + γw = 0.1820 f (N″Oxygen(f) + N″Water Vapour(f)) (dB/km) (1) where γo and γw are the specific attenuations (dB/km) due to dry air (oxygen, pressure-induced nitrogen and non-resonant Debye attenuation) and water vapour, respectively, f is the frequency (GHz)"
+    note: "只录了氧气（干空气）这一支。f 单位 GHz；p 是干空气压、e 是水汽分压（hPa，总压 = p + e）；T 单位 K。式 (5)–(9) 在 PDF 文本层里丢了希腊字母和 θ，是渲染原文第 7、10 页读的。"
+
+  itu_p676.figure1_conditions:
+    value: {p_hpa: 1013.25, t_c: 15.0, rho_standard_g_m3: 7.5, rho_dry_g_m3: 0.0}
+    unit: "hPa, °C, g/m³, g/m³"
+    source: spec
+    cite: "Recommendation ITU-R P.676-13 (08/2022), 'Attenuation by atmospheric gases and related effects'；www.itu.int（R-REC-P.676-13-202208-I，英文 PDF），2026-11-13 读原文"
+    section: "Annex 1, §1, text before Figure 1"
+    quote: "Figure 1 shows the specific attenuation using the prediction method, calculated from 0 to 1 000 GHz at 1 GHz intervals, for a pressure of 1 013.25 hPa, temperature of 15 C for the cases of a water vapour density of 7.5 g/m3 (Standard) and a dry atmosphere (Dry)."
+    note: "原文没说 1013.25 hPa 是总压还是干空气分压。干大气（e = 0）两种读法相同，所以本库只按干大气推导。湿空气在 60 GHz 两种读法差约 0.12 dB/km（按总压读 14.50，按干空气压读 14.62）。"
+
+  # ------------------------------------------------------------ 推导：海平面干大气的氧气比衰减
+  itu_p676.gamma_o_dry_sea_level:
+    value: {f_ghz: [57.0, 60.0, 64.0, 76.0, 77.0, 77.5, 81.0], db_per_km: [10.079, 14.651, 6.836, 0.108, 0.096, 0.091, 0.065]}
+    unit: "GHz, dB/km"
+    source: derived
+    cite: "itu_p676.method 用 itu_p676.oxygen_lines，在 itu_p676.figure1_conditions 的干大气（1013.25 hPa、15 °C、ρ = 0）下逐线求和；保留三位小数"
+    note: "公式：γo = 0.1820·f·(Σ Si·Fi + N″D)，各项见 itu_p676.method。频点取 fmcw_radar 两个频段的上下沿与中心（57–64 GHz、76–81 GHz）。独立核对：Python 包 itur 0.4.0（P.676-12，氧气部分与 -13 相同）的 gamma0_exact 在 60 / 61 / 77 GHz 给 14.6511 / 15.0369 / 0.0962 dB/km，与本条一致。77 GHz 的 0.096 只有 fmcw_radar 原记 0.4 dB/km 的四分之一左右：标准大气（7.5 g/m³）下水汽另有 0.251 dB/km，合计 0.348 dB/km，0.4 应是总气体衰减而不是氧气。"
+
+  itu_p676.gamma_o_dry_sea_level_peak:
+    value: {f_ghz: 60.81, db_per_km: 15.06}
+    unit: "GHz, dB/km"
+    source: derived
+    cite: "同 itu_p676.gamma_o_dry_sea_level，在 50–70 GHz 内以 0.01 GHz 步长取最大值"
+    note: "公式同上。海平面上 60 GHz 附近的谱线并成一个宽吸收带（原文 'Near 60 GHz, many oxygen absorption lines merge together at sea-level pressures to form a single, broad absorption band'），峰值 15.06 dB/km 在 60.81 GHz。fmcw_radar 原记的'约 15 dB/km'指的就是这个峰；它的 60 GHz 中心频点本身是 14.651。"

@@ -11,7 +11,9 @@ from fmcw_radar.link import adc_amplitudes, link_budget, snr_vs_range
 
 def test_r_to_the_fourth():
     a, b = link_budget(RadarConfig(), 5.0), link_budget(RadarConfig(), 10.0)
-    assert a.pr_dbm - b.pr_dbm == pytest.approx(40 * math.log10(2) + 15.0 * 2 * 5 / 1000, abs=1e-9)
+    alpha, _ = RadarConfig().oxygen_db_per_km()
+    assert alpha == 14.651
+    assert a.pr_dbm - b.pr_dbm == pytest.approx(40 * math.log10(2) + alpha * 2 * 5 / 1000, abs=1e-9)
     assert a.snr_cell_db - b.snr_cell_db == pytest.approx(a.pr_dbm - b.pr_dbm, abs=1e-9)
 
 

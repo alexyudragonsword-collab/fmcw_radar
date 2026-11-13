@@ -20,7 +20,7 @@ leakage budget (TX 12 dBm, isolation 20 dB (source: spec), reflector at 0.02 m -
   ADC headroom after the high-pass                                   33.16 dB
   high-pass attenuation still needed (6 dB below full scale)          0.00 dB
   target at the ADC                                                 -55.76 dBm
-  leakage window sidelobe at the target's cell                     -111.41 dBc
+  leakage window sidelobe at the target's cell                     -111.42 dBc
   high-pass at the target's beat                                      0.00 dB
   chirp-start step at the ADC (leakage phase jump)                    8.78 V
   high-pass time constant                                             1.13 us
@@ -31,10 +31,10 @@ leakage budget (TX 12 dBm, isolation 20 dB (source: spec), reflector at 0.02 m -
 time engine: clipped ADC samples and the target, with and without the high-pass, with and without blanking; the far floor relative to the target with the thermal noise on (what a frame sees) and off (what the transient alone leaves)
   high-pass                        | blank [us] | clipped [%] | after blanking [%] | floor 2-4 m rel. target, noise on / off [dB] | target found | at [m] | level rel. map peak [dB]
   none                             |        0.0 |      100.00 |             100.00 |                   -2.3 /   -1.7         | yes |  5.012 | -88.6
-  1st order 200 kHz                |        0.0 |        3.10 |               3.10 |                  -33.8 /  -43.2         | yes |  5.003 | -57.2
+  1st order 200 kHz                |        0.0 |        3.10 |               3.10 |                  -33.7 /  -43.2         | yes |  5.003 | -57.2
   2nd order 200 kHz                |        0.0 |        3.60 |               3.60 |                  -31.9 /  -34.4         | yes |  5.003 | -28.2
-  2nd order 50 kHz                 |        0.0 |       15.22 |              15.22 |                  -25.7 /  -25.7         | yes |  5.003 | -52.4
-  1st order 200 kHz, blanked       |        4.2 |        3.10 |               0.10 |                  -33.7 /  -43.9         | yes |  5.003 | -57.2
+  2nd order 50 kHz                 |        0.0 |       15.22 |              15.22 |                  -25.6 /  -25.7         | yes |  5.003 | -52.4
+  1st order 200 kHz, blanked       |        4.2 |        3.10 |               0.10 |                  -33.7 /  -44.0         | yes |  5.003 | -57.2
   2nd order 200 kHz, blanked       |        4.8 |        3.60 |               0.10 |                  -34.0 /  -43.2         | yes |  5.003 | -28.2
-  2nd order 50 kHz, blanked        |       21.3 |       15.22 |               0.10 |                  -33.2 /  -44.2         | yes |  5.003 | -52.2
+  2nd order 50 kHz, blanked        |       21.3 |       15.22 |               0.10 |                  -33.2 /  -44.3         | yes |  5.003 | -52.2
   (reference, no leakage at all: floor -35.8 / -54.2 dB rel. the target, noise on / off. With the filter the clipped samples are the flyback transient at each chirp's start and the budget's recommended blank covers them; what remains after the blank is the chirp's last samples, where the engine's circular IF filter rings the next step back)

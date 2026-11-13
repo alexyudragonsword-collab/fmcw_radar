@@ -194,7 +194,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: alexyudragonsword-collab/spec_sources
-          ref: d7b4d1eb510617d69784622c593c8ed31ab32b8b
+          ref: dfaa36b67a144eb53acf692727efd431c4ac34e4
           path: _siblings/spec_sources
       - uses: actions/setup-python@v5
         with:

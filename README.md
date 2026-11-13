@@ -25,7 +25,7 @@ print(res.stat.snr_cell_db, res.time.snr_cell_db, res.stat.pn_floor[1.0])
 ```
 
 配置是唯一真值(`src/fmcw_radar/config/schema.py`):频段(57–64 GHz 窗内,默认 58–62 GHz,B 可到 7 GHz)、chirp(锯齿,100 µs × 64)、
-LO(15 GHz ADPLL ×4:fref、环路带宽、Kdco、TDC 分辨率、两点增益与校准方式、引擎)、前端占位、信道(自由空间 + 氧气)、点目标、
+LO(15 GHz ADPLL ×4:fref、环路带宽、Kdco、TDC 分辨率、两点增益与校准方式、引擎)、前端占位、信道(自由空间 + 氧气:ITU-R P.676 干空气海平面,60 GHz 14.65 dB/km、77.5 GHz 0.091 dB/km,不含水汽)、点目标、
 IF / ADC、窗与 CFAR、仿真。77 GHz 车载一档结构相同只换数(`configs/radar_77g_automotive.yaml`)。
 
 ## 模块地图
@@ -33,7 +33,7 @@ IF / ADC、窗与 CFAR、仿真。77 GHz 车载一档结构相同只换数(`conf
 | 模块 | 做什么 | 铁律 |
 |---|---|---|
 | `config/` | frozen `RadarConfig`、YAML 加载、表单字段声明(GUI 以后做) | 1 |
-| `sources.py` + `data/sources.yaml` | 每个不是设计决定的数:占位 `assumed`、文献 `survey`、原文 `spec`;`upstream:` 指向共享库 spec_sources 的条目(只查找),加载时核对两边相等 | 5 |
+| `sources.py` + `data/sources.yaml` | 每个不是设计决定的数:占位 `assumed`、文献 `survey`、原文 `spec`、由原文按公式算出的 `derived`;`upstream:` 指向共享库 spec_sources 的条目(只查找),加载时核对两边相等 | 5 |
 | `lo.py` | vendored ADPLL 的构造;LO 相噪剖面 = analyze() ×N²(fref/2 以上取 DCO 自身)或剖面文件 | 2 |
 | `phase_noise/` | range correlation:残余 PSD = 2(1 − cos 2πfτ)·S_φ,合成与闭式 | 2 |
 | `chirp/` | 斜坡经 event / response / ideal 引擎 → 瞬时频率误差曲线;离线 LS / 在线 sign-sign 两点校准 | 4, 6 |
@@ -53,8 +53,8 @@ IF / ADC、窗与 CFAR、仿真。77 GHz 车载一档结构相同只换数(`conf
 - 60 GHz、B = 4 GHz、100 µs × 64、10 MS/s、Hann:c/2B 3.75 cm,Hann 下 5.34 cm;最大距离 15 m(IF 4 MHz);速度分辨率 0.39 m/s,±12.5 m/s。
 - 前端(0.2.8):发射 12 dBm、NF 12 dB、两个接收压缩点(带外 −12 dBm、带内 −34 dBm @ 40 dB 增益)、收发隔离 20 dB 是读过原文的数(一颗 60 GHz 雷达芯片的手册、一篇板上阵的文章,
   经共享库 spec_sources,最初经 mmw60_trx 的来源表);天线增益各 10 dBi、RX 增益 40 dB 仍是占位。
-- 人体(−10 dBsm,survey)5 m:P_r −85.1 dBm,C/N0 76.8 dBHz,格点 SNR 51.3 dB(矩形窗 54.9,窗损失 3.5 dB),Pd = 1 @ Pfa 1e-4;
-  时域引擎在同一格读 51.09 dB,与统计引擎扣掉格点失配、带内相噪与拍频音相干损失后的期望 51.08 dB 差 +0.00 dB(三个距离 −0.05 / −0.07 / −0.05 dB;0.2.5 量的 12 个 seed 平均 ±0.06 dB 内)。
+- 人体(−10 dBsm,spec:77 GHz 行人射线追踪仿真的同极化下端)5 m:P_r −85.1 dBm,C/N0 76.8 dBHz,格点 SNR 51.3 dB(矩形窗 54.9,窗损失 3.5 dB),Pd = 1 @ Pfa 1e-4;
+  时域引擎在同一格读 51.09 dB,与统计引擎扣掉格点失配、带内相噪与拍频音相干损失后的期望 51.09 dB 差 +0.00 dB(三个距离 −0.06 / −0.07 / −0.05 dB;0.2.5 量的 12 个 seed 平均 ±0.06 dB 内)。
 - LO(占位 15 GHz ADPLL ×4,TDC 5 ps、抖动 1 ps)L(1 MHz) −79.6 dBc/Hz;5 m 处残余 55.3 mrad(LO 自身 202.0);距离维旁瓣 +1 m −63.3、+5 m −51.4 dBc/格(单 chirp,
   高斯相位的精确谱;一阶 S_res/2 在近目标处低估:100 m 目标 +0.25 m 处差 8 dB),距离–多普勒格再低 16.3 dB。τ = 0 残余逐位为零;
   1 / 10 / 100 m 残余 PSD 闭式 vs 合成 0.11 dB;FFT 上量到的旁瓣 +1 / +2 / +5 m 差 +0.10 / −0.02 / −0.44 dB。

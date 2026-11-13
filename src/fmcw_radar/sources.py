@@ -1,9 +1,10 @@
 """Every number that is not the user's own design decision, with its source (invariant #5).
 
-The front-end placeholders (``source: assumed``, to be replaced when
-mmw60_trx's front end exists), the atmospheric and RCS figures and the window
-table (``source: survey``, read in summaries and unverified) live in
-``src/fmcw_radar/data/sources.yaml``, one entry each.  Code takes them through
+The placeholders (``source: assumed``), the figures read in summaries only
+(``source: survey``, unverified), those read in the original (``source:
+spec``, quoted) and those computed from such originals by a stated formula
+(``source: derived``: the oxygen attenuation, ITU-R P.676's line-by-line
+sum) live in ``src/fmcw_radar/data/sources.yaml``, one entry each.  Code takes them through
 :func:`number` by key and carries the source along; the budget report prints
 the tag next to every such value.  ``grep -c "source:"`` on the file counts
 exactly the entries (the header is written so it cannot match).
@@ -18,9 +19,9 @@ the table reads on its own, and loading refuses a pair that disagrees: a
 re-pin that moves the shared figure fails until this file follows.
 
 d2d_link's ``spec`` module is the model (its ``survey`` / ``spec`` / ``model``
-tags become ``survey`` / ``spec`` / ``assumed`` here: a radar has no
-specification to quote yet, and what the siblings call a model estimate is
-here a front-end placeholder waiting for a sibling library).
+tags become ``survey`` / ``spec`` / ``assumed`` here); ``derived`` is
+spec_sources' fourth tag, taken over in 0.2.11 when the first computed figure
+arrived: a derived entry must name its upstream and carry its formula.
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ from typing import Any
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 SOURCES_FILE = DATA_DIR / "sources.yaml"
-SOURCES = ("assumed", "survey", "spec")
+SOURCES = ("assumed", "survey", "spec", "derived")
 
 
 @dataclass(frozen=True)
@@ -54,6 +55,8 @@ class SourcedNumber:
             raise ValueError(f"entry {self.key!r}: cite is required")
         if self.source == "spec" and not self.quote:
             raise ValueError(f"entry {self.key!r}: source 'spec' needs the quoted text")
+        if self.source == "derived" and not (self.upstream and self.note):
+            raise ValueError(f"entry {self.key!r}: a derived number names the entry it is read from (upstream) and its formula (note)")
         if self.source == "survey" and "未核实" not in self.note:
             raise ValueError(f"entry {self.key!r}: a survey entry's note must say it is unverified (未核实)")
 

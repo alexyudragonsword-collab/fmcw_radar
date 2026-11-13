@@ -1,0 +1,23 @@
+# Vendored from spec_sources@dfaa36b67a144eb53acf692727efd431c4ac34e4: src/spec_sources/data/radar_targets.yaml
+# Adapted-copy policy: see src/fmcw_radar/vendor/__init__.py
+# radar_targets —— 雷达目标的 RCS（行人、车辆、标准反射体）。
+#
+# 标签：spec（对过原文，带 quote 与 section）/ survey（未核实，note 写明）/ derived（只由本库的 spec、
+# survey 条目推出，note 或 cite 是公式）。本表不收 assumed：哪个库自己的取舍留在那个库的本地表。
+# 只有条目自己的标签行写成"标签词 + 冒号"，说明文字里不写，所以对四个标签各跑一次 grep -c
+# 都恰好等于该标签的条目数（tests/test_iron_rules.py 跑真的 grep）。
+#
+# 出处：里程碑 2 第 4 批（fmcw_radar 的 rcs.* 三条）。本库直接读原文建条目，不是从哪个库迁入的。
+# 前缀：target_rcs.*。
+
+entries:
+
+  # ------------------------------------------------------------ 行人
+  target_rcs.deep2019_pedestrian_77g:
+    value: {co_pol_min_dbsm: -10.0, co_pol_max_dbsm: 5.0, cross_pol_below_co_db: 10.0}
+    unit: "dBsm, dBsm, dB"
+    source: spec
+    cite: "Y. Deep, P. Held, S. S. Ram, D. Steinhauser, A. Gupta, F. Gruson, A. Koch, A. Roy, 'Polarimetric Radar Cross-Sections of Pedestrians at Automotive Radar Frequencies', arXiv:1910.13706v1, 2019-10-30；arxiv.org，2026-11-13 读原文"
+    section: "III.B Results from electromagnetic ray tracing; Fig. 4"
+    quote: "We present the results for a complete walking stride - the full swing motion of a hand/leg - of 69 frames from 2.8 s to 3.9 s in Fig. 4 for different incident aspect angles. The figure shows that the co-polarization (σvv and σhh) components range from -10 dBsm to +5 dBsm. The cross-polarization components are generally weaker by approximately 10 dB. These RCS values are within the range of those reported from measurement studies of pedestrians at X-band frequencies [32, 41]. [Fig. 4: Simulated monostatic RCS ... obtained from ray tracing at 77 GHz for three aspect angles (a) front incidence (φi = 0°) (b) oblique incidence (φi = 45°) and (c) 90° incidence (φi = 90°).]"
+    note: "**是射线追踪仿真，不是实测**：一名受试者行走一个步态的 69 帧（动作捕捉数据），77 GHz，入射方位角 0° / 45° / 90°。作者把由此生成的雷达信号与同一受试者 77 GHz 的实测信号比，结构相似度在 81 % 以上；RCS 的范围只与 X 波段的实测研究相比。fmcw_radar 原记的人体 −10 dBsm 正好是这个范围的下端。要 60 / 77 GHz 的实测 RCS 还得读 Belgiovane 2014 或 JRC 的报告（cairn/Reference/README.md）。"

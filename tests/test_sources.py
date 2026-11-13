@@ -19,6 +19,8 @@ def test_every_entry_is_tagged_and_cited():
             assert "未核实" in e.note, f"{key}: a survey entry's note must say it is unverified"
         if e.source == "assumed":
             assert "占位" in e.note, f"{key}: a placeholder's note must say it is one"
+        if e.source in ("spec", "derived"):
+            assert e.upstream, f"{key}: a figure read in the original here comes through spec_sources"
 
 
 def test_grep_lists_every_sourced_number():
@@ -80,6 +82,33 @@ def test_sourced_front_end_figures_are_the_sibling_tables():
         sources.load_sources(fh.name)
 
 
+def test_oxygen_and_human_rcs_are_read_from_the_originals():
+    """0.2.11, fmcw_radar#15: the oxygen attenuation is ITU-R P.676-13's
+    line-by-line sum for dry air at sea level, at each band's centre (a
+    derived figure: the original prints the lines and the formula, not the
+    number); the human RCS is the low end of a ray-traced pedestrian's
+    co-polar range.  The old 15.0 and 0.4 were the 60.81 GHz peak and
+    (near enough) the total gaseous attenuation at 77 GHz."""
+    from fmcw_radar.vendor import spec_sources as ss
+
+    o60, o77 = sources.number("oxygen.60g_db_per_km"), sources.number("oxygen.77g_db_per_km")
+    assert (o60.value, o60.source) == (14.651, "derived") and (o77.value, o77.source) == (0.091, "derived")
+    curve = ss.value("itu_p676.gamma_o_dry_sea_level")
+    assert ss.survey("itu_p676.gamma_o_dry_sea_level").source == "derived"
+    assert dict(zip(curve["f_ghz"], curve["db_per_km"]))[60.0] == 14.651
+    peak = ss.value("itu_p676.gamma_o_dry_sea_level_peak")
+    assert peak == {"f_ghz": 60.81, "db_per_km": 15.06}                            # what the old 15 dB/km was
+    assert RadarConfig().oxygen_db_per_km() == (14.651, "derived")
+    human = sources.number("rcs.human_dbsm")
+    assert (human.value, human.source) == (-10.0, "spec") and "ray tracing" in human.section
+    assert ss.value("target_rcs.deep2019_pedestrian_77g")["co_pol_max_dbsm"] == 5.0
+    # a derived entry without its upstream or its formula does not load
+    with pytest.raises(ValueError, match="derived"):
+        sources.SourcedNumber("x", 1.0, "dB", "derived", "cite", note="formula")
+    with pytest.raises(ValueError, match="derived"):
+        sources.SourcedNumber("x", 1.0, "dB", "derived", "cite", upstream="spec_sources:a.b")
+
+
 def test_vendored_shared_table_counts_its_tags():
     """spec_sources' grep guard on the copy vendored here: for each of its four
     tags, ``grep -c "source: <tag>"`` equals the entries carrying it (the
@@ -87,7 +116,7 @@ def test_vendored_shared_table_counts_its_tags():
     from fmcw_radar.vendor import spec_sources as ss
 
     files = ss.data_files()
-    assert [f.name for f in files] == ["frontend60.yaml"]
+    assert [f.name for f in files] == ["atmosphere.yaml", "frontend60.yaml", "radar_targets.yaml"]
     for f in files:
         assert ss.audit_tags(f) == []
 
@@ -120,13 +149,14 @@ def test_spec_source_needs_a_quote_and_survey_needs_unverified():
 def test_budget_inputs_carry_their_sources():
     b = link_budget(RadarConfig())
     srcs = {k: s for k, (_, s) in b.inputs.items()}
-    assert srcs["tx_power_dbm"] == "spec" and srcs["tx_gain_dbi"] == "assumed" and srcs["rcs_dbsm"] == "survey"
+    assert srcs["tx_power_dbm"] == "spec" and srcs["tx_gain_dbi"] == "assumed" and srcs["rcs_dbsm"] == "spec"
+    assert srcs["oxygen_db_per_km"] == "derived"
     assert srcs["range_m"] == "config" and srcs["p1db_inband_dbm"] == "spec"
 
 
 def test_code_does_not_hardcode_the_table():
     """No engine or config module spells a table value as a literal: the
-    oxygen 15 dB/km, the -10 dBsm human, the 10 dBm placeholder power."""
+    oxygen 15 dB/km (now 14.651), the -10 dBsm human, the 10 dBm placeholder power."""
     import re
 
     from conftest import REPO

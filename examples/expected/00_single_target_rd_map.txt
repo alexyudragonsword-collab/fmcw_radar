@@ -1,6 +1,6 @@
 60 GHz sensing radar: 4 GHz sweep, 100 us chirps x 64, 10 MS/s, hann windows
   TX 12 (source: spec) dBm + 10 (source: assumed) dBi; RX 10 (source: assumed) dBi, NF 12 (source: spec) dB
-  target: human at 5 m, +2 m/s, RCS -10 dBsm (source: survey)
+  target: human at 5 m, +2 m/s, RCS -10 dBsm (source: spec)
 radar equation:
   EIRP                                                 22.00 dBm
   free-space path loss (4pi)^3 R^4 / lambda^2         106.96 dB
@@ -14,7 +14,7 @@ radar equation:
   ADC quantisation noise density                     -140.00 dBm/Hz
   total noise density at the ADC                     -121.91 dBm/Hz
   C/N0                                                 76.80 dBHz
-  SNR, one chirp, one range bin                        35.03 dB
+  SNR, one chirp, one range bin                        35.04 dB
   SNR, one range-Doppler cell                          51.34 dB
   SNR, rectangular windows (matched filter)            54.86 dB
   window loss                                           3.52 dB
@@ -23,8 +23,8 @@ radar equation:
   Pd 1.0000 at Pfa 0.0001 (Swerling 0, cell SNR 51.34 dB)
 time engine (64 chirps, 5 GS/s envelope, 500000 samples per chirp):
   peak at 5.012 m (interpolated 5.016 m), +1.952 m/s; configured 5 m, +2 m/s
-  measured cell SNR 51.09 dB vs statistical 51.08 dB expected on the grid (scalloping 0.03 + 0.09 dB, LO noise -68.6 dBc per cell over the band): difference +0.01 dB
+  measured cell SNR 51.09 dB vs statistical 51.09 dB expected on the grid (scalloping 0.03 + 0.09 dB, LO noise -68.6 dBc per cell over the band): difference +0.01 dB
   -3 dB width of the range response 5.37 cm (window theory 5.34 cm, c/2B 3.75 cm)
-  CA-CFAR (guard 2, train 8, Pfa 0.0001): 41 cells over threshold, 21 in the target's lobe (the zero-padded grid's neighbours), 20 elsewhere: 8.62 m / -9.76 m/s, 8.63 m / -9.76 m/s, 8.64 m / -9.76 m/s, 8.65 m / -5.46 m/s
+  CA-CFAR (guard 2, train 8, Pfa 0.0001): 43 cells over threshold, 21 in the target's lobe (the zero-padded grid's neighbours), 22 elsewhere: 8.62 m / -9.76 m/s, 8.63 m / -9.76 m/s, 8.64 m / -9.76 m/s, 8.65 m / -5.46 m/s
     expected elsewhere: 10.5 noise false-alarm cells a frame (per-cell Pfa 1.02e-04 on 102400 in-band cells, in clumps) and 0.00 detections of the chirp's ghost targets (the strongest at -3.8 dB SNR); the target itself: Pd 1.000, a Pd of 0.9 takes 12.24 dB on this map (CFAR loss 0.49 dB)
   wrote examples/output/00_single_target_rd_map.png
