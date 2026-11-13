@@ -43,25 +43,31 @@ SOURCED_60G = ("tx_power_dbm", "nf_db", "p1db_oob_dbm", "p1db_inband_dbm", "tx_r
 
 
 def test_sourced_front_end_figures_are_the_sibling_tables():
-    """The five 60 GHz figures name their entry in mmw60_trx's table (the
-    vendored copy) and equal it; loading refuses a table that disagrees, so a
-    re-pin that moves the sibling's number cannot pass unnoticed."""
+    """The five 60 GHz figures name their entry in spec_sources (the vendored
+    copy) and equal it; loading refuses a table that disagrees, so a re-pin
+    that moves the shared number cannot pass unnoticed.  A reference only
+    looks a number up: the isolation's subtraction is a derived entry there."""
     import yaml
 
-    from fmcw_radar.vendor.mmw60 import spec
+    from fmcw_radar.vendor import spec_sources as ss
 
-    radar = spec.value("rx60.radar_iwr6843")
-    assert spec.survey("rx60.radar_iwr6843").source == "spec"
+    radar = ss.value("rx60.radar_iwr6843")
+    assert ss.survey("rx60.radar_iwr6843").source == "spec"
     got = {n: sources.frontend_placeholder("60g_sensing", n) for n in SOURCED_60G}
-    assert all(e.upstream.startswith("mmw60_trx:") and e.quote and e.section for e in got.values())
+    assert all(e.upstream.startswith("spec_sources:") and e.quote and e.section for e in got.values())
     assert got["tx_power_dbm"].value == radar["tx_power_dbm"] == 12.0 and got["nf_db"].value == radar["nf_db"] == 12.0
     assert got["p1db_oob_dbm"].value == radar["p1db_in_oob_dbm"] == -12.0
-    fig = spec.value("rx60.radar_iwr6843_fig7_2")
+    fig = ss.value("rx60.radar_iwr6843_fig7_2")
     assert got["p1db_inband_dbm"].value == dict(zip(fig["gain_db"], fig["p1db_inband_dbm"]))[40.0] == -34.0
-    iso = spec.value("isolation.tx_rx_tue2018")
-    assert got["tx_rx_isolation_db"].value == iso["with_ebg_db"] - iso["improvement_max_db"] == 20.0
-    assert sources.upstream_value("mmw60_trx:rx60.radar_iwr6843_fig7_2#p1db_inband_dbm@gain_db=48") == -42.0
-    for bad in ("polar_tx:x#y", "mmw60_trx:rx60.radar_iwr6843", "mmw60_trx:rx60.radar_iwr6843_fig7_2#p1db_inband_dbm@gain_db=41"):
+    iso = ss.value("isolation.tx_rx_tue2018")
+    assert ss.survey("isolation.tx_rx_tue2018_no_ebg_min_db").source == "derived"
+    assert got["tx_rx_isolation_db"].value == ss.value("isolation.tx_rx_tue2018_no_ebg_min_db") == 20.0 \
+        == iso["with_ebg_db"] - iso["improvement_max_db"]
+    assert sources.upstream_value("spec_sources:rx60.radar_iwr6843_fig7_2#p1db_inband_dbm@gain_db=48") == -42.0
+    for bad in ("polar_tx:x#y",
+                "mmw60_trx:rx60.radar_iwr6843#nf_db",                                             # the old library's name
+                "spec_sources:rx60.radar_iwr6843_fig7_2#p1db_inband_dbm@gain_db=41",               # no such point
+                "spec_sources:isolation.tx_rx_tue2018#with_ebg_db-improvement_max_db"):            # a subtraction: refused
         with pytest.raises(ValueError):
             sources.upstream_value(bad)
     # a table whose number has drifted from its upstream does not load
@@ -74,14 +80,26 @@ def test_sourced_front_end_figures_are_the_sibling_tables():
         sources.load_sources(fh.name)
 
 
+def test_vendored_shared_table_counts_its_tags():
+    """spec_sources' grep guard on the copy vendored here: for each of its four
+    tags, ``grep -c "source: <tag>"`` equals the entries carrying it (the
+    attribution header added on top must not break the count)."""
+    from fmcw_radar.vendor import spec_sources as ss
+
+    files = ss.data_files()
+    assert [f.name for f in files] == ["frontend60.yaml"]
+    for f in files:
+        assert ss.audit_tags(f) == []
+
+
 def test_in_band_compression_follows_the_gain():
     """The radar chip's in-band input P1dB is a straight line against the
     receive gain, 1 dB down per dB (its Figure 7-2): the placeholder is the
     point at the band's gain and a config with another gain reads the line."""
     from fmcw_radar.config import apply_overrides
-    from fmcw_radar.vendor.mmw60 import spec
+    from fmcw_radar.vendor import spec_sources as ss
 
-    fig = spec.value("rx60.radar_iwr6843_fig7_2")
+    fig = ss.value("rx60.radar_iwr6843_fig7_2")
     for g, p in zip(fig["gain_db"], fig["p1db_inband_dbm"]):
         assert apply_overrides(RadarConfig(), {"frontend.rx_gain_db": g}).p1db_inband() == (p, "spec")
     assert apply_overrides(RadarConfig(), {"frontend.p1db_inband_dbm": -30.0, "frontend.rx_gain_db": 46.0}).p1db_inband() == (-30.0, "config")

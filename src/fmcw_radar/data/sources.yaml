@@ -4,8 +4,9 @@
 #   survey   外部文献 / 标准的数,只读到二手转述或摘要,未核对原文(note 里写"未核实")。
 #   spec     已对照原文的数(需要 quote 与 section)。0.2.8 起有五条:60 GHz 雷达前端的发射功率、NF、两个接收压缩点、收发隔离。
 #
-# upstream 一栏(可选)= 这个数在姊妹库来源表里的条目:"mmw60_trx:<条目>#<字段>",指向 vendored 的
-# src/fmcw_radar/vendor/mmw60/data/spec/survey.yaml。数在这里也写一遍(这张表要能单独读),加载时核对两边相等,不等就拒绝加载。
+# upstream 一栏(可选)= 这个数在共享库 spec_sources 里的引用:"spec_sources:<条目>[#<字段>[@<轴>=<值>]]",用 vendored 的
+# src/fmcw_radar/vendor/spec_sources/ 读取器的 ref() 查,只查找;减法之类的式子在 spec_sources 是一条 derived 条目。
+# 数在这里也写一遍(这张表要能单独读),加载时核对两边相等,不等就拒绝加载。
 #
 # 用 grep 数标签行(README 里写的那条命令,tests/test_sources.py 跑它)得到的数必须等于表里的条目数:
 # 所以文件头里不出现"标签名 + 冒号"这个字串。
@@ -18,7 +19,7 @@ entries:
     value: 12.0
     unit: dBm
     source: spec
-    upstream: "mmw60_trx:rx60.radar_iwr6843#tx_power_dbm"
+    upstream: "spec_sources:rx60.radar_iwr6843#tx_power_dbm"
     cite: "TI IWR6843 / IWR6443 datasheet SWRS219F (Oct. 2018, revised Apr. 2025), a single-chip 60-64 GHz FMCW radar sensor"
     section: "7.9 RF Specification, p. 32"
     quote: "Transmitter: Output power, TYP 12 dBm; Power backoff range 26 dB"
@@ -45,7 +46,7 @@ entries:
     value: 12.0
     unit: dB
     source: spec
-    upstream: "mmw60_trx:rx60.radar_iwr6843#nf_db"
+    upstream: "spec_sources:rx60.radar_iwr6843#nf_db"
     cite: "TI IWR6843 / IWR6443 datasheet SWRS219F (Oct. 2018, revised Apr. 2025), a single-chip 60-64 GHz FMCW radar sensor"
     section: "7.9 RF Specification, p. 32"
     quote: "Receiver: Noise figure, 60 to 64 GHz, TYP 12 dB"
@@ -54,7 +55,7 @@ entries:
     value: -12.0
     unit: dBm
     source: spec
-    upstream: "mmw60_trx:rx60.radar_iwr6843#p1db_in_oob_dbm"
+    upstream: "spec_sources:rx60.radar_iwr6843#p1db_in_oob_dbm"
     cite: "TI IWR6843 / IWR6443 datasheet SWRS219F (Oct. 2018, revised Apr. 2025), a single-chip 60-64 GHz FMCW radar sensor"
     section: "7.9 RF Specification, p. 32, footnote (1)"
     quote: "1-dB compression point (Out Of Band), TYP -12 dBm. (1) 1-dB Compression Point (Out Of Band) is measured by feed a Continuous wave Tone (10 kHz) well below the lowest HPF cut-off frequency."
@@ -63,7 +64,7 @@ entries:
     value: -34.0
     unit: dBm
     source: spec
-    upstream: "mmw60_trx:rx60.radar_iwr6843_fig7_2#p1db_inband_dbm@gain_db=40"
+    upstream: "spec_sources:rx60.radar_iwr6843_fig7_2#p1db_inband_dbm@gain_db=40"
     cite: "TI IWR6843 / IWR6443 datasheet SWRS219F (Oct. 2018, revised Apr. 2025), a single-chip 60-64 GHz FMCW radar sensor"
     section: "7.9 RF Specification, Figure 7-2. Noise Figure, In-band P1dB vs Receiver Gain"
     quote: "Figure 7-2 shows variations of noise figure and in-band P1dB parameters with respect to receiver gain programmed."
@@ -109,7 +110,7 @@ entries:
     value: 20.0
     unit: dB
     source: spec
-    upstream: "mmw60_trx:isolation.tx_rx_tue2018#with_ebg_db-improvement_max_db"
+    upstream: "spec_sources:isolation.tx_rx_tue2018_no_ebg_min_db"
     cite: "B. B. Adela, M. C. van Beurden, P. van Zeijl, A. B. Smolders, 'High-Isolation Array Antenna Integration for Single-Chip Millimeter-Wave FMCW Radar', IEEE Trans. Antennas Propag., vol. 66, no. 10, Oct. 2018, DOI 10.1109/TAP.2018.2854286"
     section: "Abstract; Section V-B, Figs. 16 and 17"
     quote: "Measurement results in the 57-64 GHz band show the TX-RX isolation of 40 dB, which is 15-20 dB better than the isolation between TX and RX arrays without EBG structures."

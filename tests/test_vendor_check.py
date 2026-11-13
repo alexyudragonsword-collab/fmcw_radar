@@ -18,7 +18,7 @@ sys.modules["vendor_check"] = vc
 _spec.loader.exec_module(vc)
 
 PINS = {"polar_tx": "b007e60477bac68806138db733cbafd0c0761282", "array_tx": "e897c159e5fc5b2e26af6336cf9f6164461ff7f5",
-        "mmw60_trx": "ef0f00c50c508271abdf1423fde7062ba0a0b92d"}
+        "mmw60_trx": "ef0f00c50c508271abdf1423fde7062ba0a0b92d", "spec_sources": "d7b4d1eb510617d69784622c593c8ed31ab32b8b"}
 PIN = PINS["polar_tx"]
 
 
@@ -47,7 +47,8 @@ def test_every_file_has_a_full_sha_header_pinned_to_its_sibling():
     for f in files:
         first = f.read_text().splitlines()[0]
         m = vc.HEADER.match(first)
-        want = PINS["array_tx" if "arraytx" in f.parts else "mmw60_trx" if "mmw60" in f.parts else "polar_tx"]
+        want = PINS["array_tx" if "arraytx" in f.parts else "mmw60_trx" if "mmw60" in f.parts
+                    else "spec_sources" if "spec_sources" in f.parts else "polar_tx"]
         if not m or m["sha"] != want or m["repo"] not in PINS:
             bad.append(str(f.relative_to(REPO)))
     assert not bad, "vendored files not pinned to their sibling's full SHA: " + ", ".join(bad)

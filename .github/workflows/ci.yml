@@ -162,7 +162,7 @@ jobs:
           retention-days: 30
 
   # Vendor drift: src/fmcw_radar/vendor must still match the pinned polar_tx,
-  # array_tx and mmw60_trx commits (polar_tx's vendor_check method).  The sibling is checked out at
+  # array_tx, mmw60_trx and spec_sources commits (polar_tx's vendor_check method).  The sibling is checked out at
   # exactly the pinned SHA, so --strict (stale pins fail) is satisfiable here
   # and --fail-on-skip makes an unverified file red rather than a pass.
   vendor-drift:
@@ -190,6 +190,12 @@ jobs:
           repository: alexyudragonsword-collab/mmw60_trx
           ref: ef0f00c50c508271abdf1423fde7062ba0a0b92d
           path: _siblings/mmw60_trx
+      - name: Checkout spec_sources (pinned)
+        uses: actions/checkout@v4
+        with:
+          repository: alexyudragonsword-collab/spec_sources
+          ref: d7b4d1eb510617d69784622c593c8ed31ab32b8b
+          path: _siblings/spec_sources
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -200,3 +206,4 @@ jobs:
           --siblings polar_tx=${{ github.workspace }}/_siblings/polar_tx
           array_tx=${{ github.workspace }}/_siblings/array_tx
           mmw60_trx=${{ github.workspace }}/_siblings/mmw60_trx
+          spec_sources=${{ github.workspace }}/_siblings/spec_sources

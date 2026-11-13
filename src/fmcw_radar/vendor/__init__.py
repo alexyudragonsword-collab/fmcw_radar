@@ -1,4 +1,4 @@
-"""Adapted copies of the sibling libraries fmcw_radar builds on (polar_tx, array_tx, mmw60_trx).
+"""Adapted copies of the sibling libraries fmcw_radar builds on (polar_tx, array_tx, mmw60_trx, spec_sources).
 
 This tree is a VERIFIABLE COPY, not a fork (polar_tx CONTRIBUTING 3): every
 file carries an attribution header naming its upstream repository, commit and
@@ -42,18 +42,23 @@ Pins
   - ``touchstone.py`` (the .sNp reader / writer).
 
 * ``mmw60/`` -- mmw60_trx @ ``ef0f00c50c508271abdf1423fde7062ba0a0b92d``
-  (its ``main``), its sourced-number table and the reader, nothing else:
+  (its ``main``), one file: its x10 LO phase-noise profile
+  ``data/clock_profiles/pllsim_wu19_x10_60p48g_floor150.yaml``, read by
+  ``configs/radar_60g_x10lo.yaml`` (a YAML file carries the same attribution
+  header in its ``#`` comments and is compared byte for byte like a module).
 
-  - ``spec.py`` (``value(key)`` / ``survey(key)`` with the provenance tag),
-  - ``data/spec/survey.yaml`` (the table; a YAML file carries the same
-    attribution header in its ``#`` comments and is compared byte for byte
-    like a module).
+* ``spec_sources/`` -- spec_sources @ ``d7b4d1eb510617d69784622c593c8ed31ab32b8b``
+  (its ``main``, milestone 1), the siblings' shared table of outside numbers:
 
-  ``Frontend60`` is not vendored: it stands on wifitrx's whole chain, and its
-  surveyed baseline is a communication transceiver, which leaves blank the
-  one figure a radar needs most (the compression point ahead of the IF
-  high-pass).  ``fmcw_radar.sources`` reads the radar chip's and the
-  isolation entries by key (``upstream:`` in ``data/sources.yaml``).
+  - ``reader.py`` (``ref()`` / ``value()`` / ``survey()``, lookup only),
+  - ``data/frontend60.yaml`` (the 60 GHz radar chip's figures and Figure 7-2,
+    the TX-RX isolation and its derived no-EBG figure).
+
+  ``fmcw_radar.sources`` reads the five 60 GHz front-end figures by reference
+  (``upstream:`` in ``data/sources.yaml``).  ``Frontend60`` is not vendored
+  from mmw60_trx: it stands on wifitrx's whole chain, and its surveyed
+  baseline is a communication transceiver, which leaves blank the figure a
+  radar needs most (the compression point ahead of the IF high-pass).
 
 Local changes
 -------------

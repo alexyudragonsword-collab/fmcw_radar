@@ -9,9 +9,14 @@
 1. **天线增益与 77 GHz 一档还没有出处**(mmw60_trx#14 的三个面 0.2.8 已消化,见 `cairn/frontend-sources.md`;剩下的不在它那里等,而是没有对口的出处)。
    - 天线增益各 10 dBi 仍是 `assumed`:读到的是封装内 2 dBi(mmw60_trx `rx60.comm_asada2011`)与板上 8 元阵实测约 12 dBi(Adela 2018),MIMO 的单个阵元两者都不是。
      对 SNR 是 1 dB 对 1 dB(两副共 2 dB 对 1 dB):换成 2 dBi,5 m 人体的 51.3 dB 约变 35 dB(按雷达方程算的,没跑)。要一份给"单个贴片 / 封装内阵元在阵里的增益"的出处,或者等 array_tx 给阵元方向图的绝对增益。
-   - 77 GHz 一档 14 条全是 `assumed`,两个压缩点都沿用拆分前的 −20 dBm;读过的雷达芯片是 60–64 GHz 的。
+   - 77 GHz 一档 15 条全是 `assumed`(0.2.9 加了 `rx_rapp_p`),两个压缩点都沿用拆分前的 −20 dBm;读过的雷达芯片是 60–64 GHz 的。
    - mmw60_trx 的通信前端没有带外压缩点(它的 ROADMAP C9):如果以后雷达要读"同一个 `Frontend60`",得先有这个数。它问过我们有没有通信接收机的出处,没有。
    - 上游表里还有三份没读原文的雷达文档(AOP 手册 SWRS237B、勘误 SWRZ092B、E2E 论坛帖),本库没有用它们的数。
+
+2. **本库自己的 9 条 survey 等 spec_sources 的里程碑 2**(fmcw_radar#13 的"以后"一节):`oxygen.60g_db_per_km` / `oxygen.77g_db_per_km`(ITU-R P.676)、
+   `rcs.human_dbsm` / `rcs.car_dbsm` / `rcs.corner_reflector_dbsm`、`window.{rect,hann,hamming,blackman}_3db_bins`(Harris 1978 Table I)现在都是"只读到转述"。
+   spec_sources 会把它们迁进去并核对原文,到时另开 issue;本库再把这 9 条改成 `upstream:` 引用(数若因核对而动,是 numbers-move)。
+   另:本库新加任何 `upstream:` 引用,要在 spec_sources 开 issue 登记进它的 `consumers.yaml`(它看不到本库的表)。
 
 ## P1 — 结论的可信度
 
