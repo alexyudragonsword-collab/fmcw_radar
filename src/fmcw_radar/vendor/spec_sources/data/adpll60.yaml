@@ -1,0 +1,23 @@
+# Vendored from spec_sources@e49979f4358476fc120de0045a013663613f67c1: src/spec_sources/data/adpll60.yaml
+# Adapted-copy policy: see src/fmcw_radar/vendor/__init__.py
+# adpll60 —— 60 GHz 全数字锁相环（ADPLL）的测量值：TDC、带内相噪。
+#
+# 标签：spec（对过原文，带 quote 与 section）/ survey（未核实，note 写明）/ derived（只由本库的 spec、
+# survey 条目推出，note 或 cite 是公式）。本表不收 assumed：哪个库自己的取舍留在那个库的本地表。
+# 只有条目自己的标签行写成"标签词 + 冒号"，说明文字里不写，所以对四个标签各跑一次 grep -c
+# 都恰好等于该标签的条目数（tests/test_iron_rules.py 跑真的 grep）。
+#
+# 出处：里程碑 2 第 2 批（fmcw_radar 的 TDC 占位）。本库直接读原文建条目，不是从哪个库迁入的。
+# 前缀：adpll60.*。
+
+entries:
+
+  # ------------------------------------------------------------ TDC
+  adpll60.wu_jssc2014_tdc:
+    value: {tdc_res_s: 1.22e-11, vdd_v: 1.2, f_ref_mhz: 100.0, f_carrier_ghz: 60.0, inband_pn_theory_dbc_hz: -78.0, inband_pn_meas_dbc_hz: -77.0, loop_bw_meas_mhz: 1.5}
+    unit: "s, V, MHz, GHz, dBc/Hz, dBc/Hz, MHz"
+    source: spec
+    cite: "W. Wu, R. B. Staszewski, J. R. Long, 'A 56.4-to-63.4 GHz Multi-Rate All-Digital Fractional-N PLL for FMCW Radar Applications in 65 nm CMOS', IEEE J. Solid-State Circuits vol. 49 no. 5, pp. 1081–1096, May 2014, doi 10.1109/JSSC.2014.2301764（Delft University of Technology、Marvell）；用户从 IEEE Xplore 下载，2026-11-14 读原文；带内相噪的公式是嵌入的公式对象，文本层也丢了 Δtres 与负号、斜杠、∼ 这些符号，都按渲染的第 12 页补"
+    section: "III.C Phase Detection and Glitch Removal（TDC 结构）；VI Experimental Results（100 MHz 参考）；VI.A ADPLL in Continuous-Wave (CW) Mode Operation（TDC 分辨率、带内相噪公式、Fig. 16）"
+    quote: "its integer part is determined by counting the number of rising clock transitions of the variable clock (CKV/32), while the fractional part is obtained by a TDC based on a pseudo-differential delay chain [23]. [...] A 100 MHz off-chip crystal oscillator provides the frequency reference to the PLL [...] The TDC is self-calibrating during normal operation of the ADPLL for PVT inverter delay variations. The average time resolution of the TDC (Δtres) is 12.2 ps at a 1.2 V supply, which corresponds to a theoretical in-band PN of −78 dBc/Hz for a 60 GHz carrier, calculated as ℒ = (2π)²/12 · (Δtres/TV)² · 1/fR = (2π)²/12 · (12.2 ps/(1/(60GHz)))² · 1/100MHz = −78 dBc/Hz [17]. As seen from Fig. 16, the measured in-band PN is −77 dBc/Hz at 60 GHz band for a loop bandwidth of ∼1.5 MHz, and thus is dominated by the TDC quantization noise."
+    note: "分辨率按秒记（tdc_res_s = 1.22e-11 s，即原文的 12.2 ps），让按秒读的库直接引用：引用只做查找，不做换算。TDC 量 CKV/32（约 1.9 GHz）相对参考沿的小数相位。12.2 ps 是延迟链单级的平均时间分辨率（反相器延迟，随 PVT 自校准），是量化步长，不是抖动。按原文公式复算：60 GHz、100 MHz 参考时 −77.54 dBc/Hz，原文取整为 −78；量化的等效 rms 时间误差 Δtres/√12 = 3.52 ps。**原文没有给 TDC 自身的输入参考抖动**：实测带内 −77 与只算量化的 −78 只差 1 dB，两个都是整数 dB，只能说 TDC 自身的抖动不是主项，推不出它的值。正文说把 Δtres 降到 4 ps，带内相噪可低 20·log10(12.2/4) = 9.7 dB。摘要里的 rms 抖动 590.2 fs 是合成器输出在 61.87 GHz、10 kHz–10 MHz 的积分值，不是 TDC 的。"

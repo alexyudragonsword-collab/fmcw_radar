@@ -97,7 +97,8 @@ def test_mismatch_widens_nothing_but_raises_the_sidelobes_and_calibration_restor
     base = run_statistical(apply_overrides(RadarConfig(), {"lo.dp_cal": "none", "chirp.n_chirps": 3}))
     bad = run_statistical(apply_overrides(RadarConfig(), {"lo.dp_gain": 1.05, "lo.dp_cal": "none", "chirp.n_chirps": 3}))
     cal = run_statistical(apply_overrides(RadarConfig(), {"lo.dp_gain": 1.05, "lo.dp_cal": "offline", "chirp.n_chirps": 3}))
-    assert bad.nonlinearity["phase_rms_rad"] > 10 * base.nonlinearity["phase_rms_rad"]
+    # 1.08 rad over the matched loop's quantisation, 0.134 rad on the 12.2 ps TDC (0.2.12; the bound was 10x on 5 ps)
+    assert bad.nonlinearity["phase_rms_rad"] > 5 * base.nonlinearity["phase_rms_rad"]
     assert bad.nonlinearity["islr_db"] > base.nonlinearity["islr_db"] - 1.0
     assert cal.nonlinearity["phase_rms_rad"] == pytest.approx(base.nonlinearity["phase_rms_rad"], rel=0.1)
     assert cal.chirp["dp_gain_used"] == pytest.approx(1.0, abs=0.002)
@@ -105,20 +106,23 @@ def test_mismatch_widens_nothing_but_raises_the_sidelobes_and_calibration_restor
 
 def test_tdc_ghost_targets_are_reported_and_scale_with_the_tdc():
     """The TDC's quantisation on a ramp, two ways.  Undithered (the noise-off
-    curve): a pattern with a ghost at a fixed range offset, +-4.9 m and about
-    -45 dBc for the 5 ps default, 8 dB and more lower for 2 ps; the time
-    engine shows the same one with its phase noise switched off.  As a frame
-    sees it (the noise-on curve, what stays coherent over the ramps): the
-    TDC's own jitter dithers the pattern -- with the 1 ps placeholder every
-    spur is 5 dB and more under the undithered ghost, with no jitter the
-    loop's other noise alone leaves them within 5 dB of it."""
+    curve): a pattern with ghosts at fixed range offsets -- on the sourced
+    12.2 ps TDC -34 dBc at -10.3 m and a pair at +-2.8 m (0.2.12; the 5 ps
+    placeholder before it: -45 dBc at +-4.9 m), 8 dB and more lower for
+    2 ps; the time engine shows the same ones with its phase noise switched
+    off.  As a frame sees it (the noise-on curve, what stays coherent over
+    the ramps): the TDC's own jitter dithers the pattern, but the 1 ps
+    placeholder is 0.08 of a 12.2 ps bin and takes only 2-5 dB off -- every
+    spur stays over the search limit.  On the 5 ps TDC the same 1 ps (0.2
+    bin) leaves none over it; with no jitter the loop's other noise alone
+    leaves them within 3 dB of the undithered ghost."""
     cfg = apply_overrides(RadarConfig(), {"chirp.n_chirps": 16})
     base = run_statistical(cfg)
     quiet = base.nonlinearity["ghosts_quiet"]
     assert quiet and base.nonlinearity["ghosts_vouched"]
     off, lvl = quiet[0]
-    assert 4.0 < abs(off) < 6.0 and -50.0 < lvl < -40.0
-    assert any(abs(o + off) < 0.1 for o, _ in quiet)                      # a symmetric pair
+    assert 10.0 < abs(off) < 10.6 and -38.0 < lvl < -30.0
+    assert any(abs(o + p) < 0.1 for o, _ in quiet for p, _ in quiet if abs(p) > 1.0)    # a symmetric pair
     fine = run_statistical(apply_overrides(RadarConfig(), {"chirp.n_chirps": 3, "lo.tdc_res_s": 2e-12}))
     assert fine.nonlinearity["ghosts_quiet"][0][1] < lvl - 8.0
     c8 = apply_overrides(RadarConfig(), {"chirp.n_chirps": 8, "target.velocity_mps": 0.0})
@@ -126,13 +130,17 @@ def test_tdc_ghost_targets_are_reported_and_scale_with_the_tdc():
     half = tm.rd_db.shape[1] // 2
     i, j = tm.extras["peak_rc"]
     row = tm.rd_db[i, :half] - tm.rd_db[i, j]
-    jj = int(np.argmin(np.abs(tm.range_axis_m[:half] - (c8.target.range_m + off))))
-    assert np.max(row[jj - 8:jj + 9]) == pytest.approx(lvl, abs=3.0)
+    o_v, l_v = next((o, v) for o, v in quiet if 0.5 < c8.target.range_m + o < tm.range_axis_m[half - 9])   # one on the axis
+    jj = int(np.argmin(np.abs(tm.range_axis_m[:half] - (c8.target.range_m + o_v))))
+    assert np.max(row[jj - 8:jj + 9]) == pytest.approx(l_v, abs=3.0)
     # what a frame sees
     live = base.nonlinearity["ghosts"]
-    assert base.nonlinearity["ghost_chirps"] == 15 and all(level < lvl - 5.0 for _, level in live)
+    assert base.nonlinearity["ghost_chirps"] == 15 and live
+    assert all(base.nonlinearity["ghost_limit_dbc"] < level < lvl - 2.0 for _, level in live[:3])
+    five = run_statistical(apply_overrides(cfg, {"lo.tdc_res_s": 5e-12})).nonlinearity
+    assert five["ghosts"] == [] and -50.0 < five["ghosts_quiet"][0][1] < -40.0
     bare = run_statistical(apply_overrides(cfg, {"lo.tdc_jitter_s": 0.0})).nonlinearity
-    assert bare["ghosts"] and lvl - 6.0 < bare["ghosts"][0][1] < lvl - 1.0
+    assert bare["ghosts"] and lvl - 3.0 < bare["ghosts"][0][1] < lvl
     assert bare["ghosts_quiet"] == quiet                                  # the noise-off curve has no jitter in it
     # the search cannot tell a spur from the LO's noise below a limit that falls 3 dB per doubling of the ramps
     longer = run_statistical(apply_overrides(RadarConfig(), {"chirp.n_chirps": 64})).nonlinearity

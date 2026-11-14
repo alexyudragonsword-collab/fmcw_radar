@@ -5,7 +5,7 @@ summary: "里程碑 2 的知识:TDM-MIMO 虚拟阵列测角(位置之和、u 格
 tags: [mimo, tdm, dbf, coupling, array_tx, leakage, hpf, cfar, multi-target]
 contains: [decision, lesson, experience]
 created: "2026-11-07"
-updated: "2026-11-12"
+updated: "2026-11-14"
 related: [architecture-invariants, range-correlation]
 authoring_mode: ai_generated
 ---
@@ -43,7 +43,7 @@ authoring_mode: ai_generated
   (5 m 处每 chirp 的公共相位 < 0.1 mrad,且对同一 chirp 的各 RX 是共模)都不在账上。
 - **坑(contains:少量 seed 的 RMS 会骗人)**:N 个 seed 的 RMS 相对标准差是 1/√(2N):6 个 ±29 %,24 个 ±14 %,128 个 ±6 %。归因过程中 24 个 seed 读 0.0325(−16 %)、
   128 个读 0.0434(+12 %,2σ),384 个才收敛到 0.0395。里程碑 2 的"2 倍没有归因"= 1.77 倍的估计器代价 + 6 个 seed 的抽样误差(0.050 对 0.041,+22 %,不到 1σ)。
-  示例 07 现在用 32 个 seed 并把 ±% 打出来(cos 元:0.042° 对期望 0.041°,真多普勒 + 均匀权 0.024° 对 0.027°;0.2.8 换前端数之前 0.043° / 0.025°);要 5 % 以内的对照得上百个。
+  示例 07 现在用 32 个 seed 并把 ±% 打出来(cos 元:0.044° 对期望 0.041°,真多普勒 + 均匀权 0.024° 对 0.027°;0.2.12 换 TDC 之前 0.042°,0.2.8 换前端数之前 0.043° / 0.025°);要 5 % 以内的对照得上百个。
 
 ## 3. 互耦:array_tx 的矩阵三来源,校准后残差 < 0.01°
 
@@ -63,8 +63,8 @@ authoring_mode: ai_generated
 > **0.2.9 起默认接收机会压缩**(`cairn/frontend-sources.md` 的"接收机的压缩"一节)。本节下面的数是**线性接收机**的(`frontend.compression: false`,机制测试也这样跑);
 > 默认(有压缩,示例 08)对应:前级把泄漏压掉 5.24 dB,ADC 处 26.8 dBm(线性 32.0);2 阶 200 kHz 后 −29.2 dBm、裕量 +33.2 dB、削波 3.6 %;阶跃 8.78 V、推荐 blanking 4.77 µs、
 > blank 后 0.1 %(每 chirp 末尾 1 个样本);1 阶 200 kHz 裕量 5.3 dB、削波 3.1 %、blank 4.2 µs 后 0.1 %——**下面"1 阶不够"那条坑是线性接收机的结论**;2 阶 50 kHz 推荐 21.3 µs,能 blank。
-> 代价在回波上:−10.65 dB,目标对图峰 −28.2 dB(线性 −23.0);无噪声的 2–4 m 底相对目标 blank 后 −43.2 dB(无泄漏参照 −54.2)——回波低了 10.7 dB,"相对目标"的底跟着高 10.7 dB,
-> 不是瞬态没盖住;有噪声时 −34.0 对参照 −35.8,差的是 SNR 的 2.3 dB。
+> 代价在回波上:−10.65 dB,目标对图峰 −28.3 dB(线性 −23.0;0.2.12 前 −28.2);无噪声的 2–4 m 底相对目标 blank 后 −44.0 dB(无泄漏参照 −53.3)——回波低了 10.7 dB,"相对目标"的底跟着高 10.7 dB,
+> 不是瞬态没盖住;有噪声时 −34.0 对参照 −36.4,差的是 SNR 的 2.3 dB。(0.2.12 换 TDC 之前 −43.2 / −54.2、−34.0 / −35.8:无噪声的参照底里有 LO 的 chirp 误差。)
 - `link/leakage.py`:直接泄漏(τ 0.2 ns → 拍频 8 kHz)+ 近端反射体(2 cm,−10 dB 相对)。经同一 LO,τ ≈ 0 的 range correlation 让它几乎不带相噪
   (`window_sidelobe_at_target_db` −117 dBc:泄漏在目标格只剩窗旁瓣),但幅度:接收端 −8 dBm,ADC 裕量 **−28 dB**(满幅削波,时域引擎 `clipped_fraction` > 0.9)。
 - **压缩点是两个量(contains:decision)**:拍频低于高通截止的项在 IF 级之前就被滤掉,只压高通之前的那几级 → 对带外压缩点(−12 dBm);没有高通、或拍频高于截止(够远的反射体)
@@ -96,7 +96,7 @@ authoring_mode: ai_generated
 - `engine/statistical.py::target_rows`:每个目标的 ADC 电平、格点 SNR、最强的他者在本格的裙边(窗旁瓣包络 ±0.5 格内取最大,或相噪)与"被遮蔽"判断。
   30 cm 外 +20 dBsm 的车不遮蔽 5 m 人体(裙边 −43.7 dBc);5.05 m 处 −45 dBsm 的点在车的窗裙下(`masked`,`interference_kind = window`)。
 - 时域 `found_targets`:每个目标在 ±3 距离格 / ±2 多普勒格内找峰。**坑(contains:邻目标的瓣被当成本目标)**:12 cm 外的 −20 dBsm 点原来"找到"的是车的主瓣
-  (电平差 +30 dB);改为两目标分格(各自只搜离自己更近的格)且峰必须是距离维局部极大,之后找到 5.434 m −28.3 dB,对统计 −30.4 dB(车的裙边相干叠加)。
+  (电平差 +30 dB);改为两目标分格(各自只搜离自己更近的格)且峰必须是距离维局部极大,之后找到 5.434 m −28.4 dB(0.2.12 前 −28.3),对统计 −30.4 dB(车的裙边相干叠加)。
 - CA-CFAR 的蒙卡(`cfar_pd_monte_carlo`,Swerling 0 / 1)对已知噪底闭式:Pd 0.9 处 CFAR 损失 N = 16 **1.35 dB**、N = 32 **0.74 dB**;Swerling 1 的闭式
   `cfar_pd_swerling1` 与蒙卡 0.02 内;−300 dB 的"目标"过阈率 = Pfa(±25 %)。时域引擎纯噪声帧 64000 格 4 个虚警(6.3e-5 对 1e-4)。
   **更正(0.2.3)**:那 4 个格是抽样(期望 5.2 格 ≈ 2 团),格相关对 Pfa 的两个效应与精确式见 `cairn/cfar-statistics.md`。

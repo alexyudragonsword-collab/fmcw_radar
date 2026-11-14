@@ -1,39 +1,39 @@
 window alone (hann): -3 dB width 5.34 cm, peak sidelobe -32.2 dB; c/2B = 3.75 cm
 DCO 15 GHz x4, ramp 1000 MHz at the DCO in 100 us, fref 100 MHz, loop 1 MHz
 
-matched, event (loop + quantisation) [event, 0.28 s]
-  ramp 2: initial error 0.200 MHz settled to +-2680 kHz in 0 ns; peak 1.400 MHz, RMS 513.2 kHz, floor 536.0 kHz RMS (carrier)
-  range response: -3 dB width 5.34 cm, peak sidelobe -31.5 dB, ISLR -28.6 dB, beat phase perturbation 56.1 mrad RMS
-  this ramp's pattern, undithered (offset m, dBc): +4.86 / -45.5, -4.86 / -45.8, -12.18 / -46.1, -3.93 / -47.7
+matched, event (loop + quantisation) [event, 0.17 s]
+  ramp 2: initial error 0.199 MHz settled to +-6227 kHz in 0 ns; peak 2.800 MHz, RMS 1215.0 kHz, floor 1245.4 kHz RMS (carrier)
+  range response: -3 dB width 5.34 cm, peak sidelobe -31.6 dB, ISLR -22.6 dB, beat phase perturbation 134.3 mrad RMS
+  this ramp's pattern, undithered (offset m, dBc): -10.31 / -34.7, +2.81 / -36.0, -2.81 / -36.2, +4.68 / -38.2
 
-5 % mismatch, event, no cal [event, 0.26 s]
-  ramp 2: initial error 199.401 MHz settled to +-3988 kHz in 1470 ns; peak 199.400 MHz, RMS 6187.8 kHz, floor 544.2 kHz RMS (carrier)
-  range response: -3 dB width 5.34 cm, peak sidelobe -31.5 dB, ISLR -29.0 dB, beat phase perturbation 1070.0 mrad RMS
-  this ramp's pattern, undithered (offset m, dBc): -15.93 / -47.7, -13.31 / -48.1, +6.18 / -48.1, +7.32 / -48.2
+5 % mismatch, event, no cal [event, 0.27 s]
+  ramp 2: initial error 199.001 MHz settled to +-6210 kHz in 1060 ns; peak 199.000 MHz, RMS 6307.6 kHz, floor 1242.1 kHz RMS (carrier)
+  range response: -3 dB width 5.34 cm, peak sidelobe -31.5 dB, ISLR -23.0 dB, beat phase perturbation 1079.3 mrad RMS
+  this ramp's pattern, undithered (offset m, dBc): -14.05 / -35.4, -17.81 / -36.0, -10.31 / -38.8, +8.43 / -39.3
 
 5 % mismatch, response (linearised) [response, 0.00 s]
   ramp 2: initial error 200.000 MHz settled to +-4000 kHz in 1100 ns; peak 200.000 MHz, RMS 6147.3 kHz, floor 0.0 kHz RMS (carrier)
   range response: -3 dB width 5.34 cm, peak sidelobe -31.5 dB, ISLR -33.0 dB, beat phase perturbation 1064.4 mrad RMS
   this ramp's pattern, undithered (offset m, dBc): +10.01 / -62.4, +17.46 / -65.7  [linearised curve: not vouched for]
 
-5 % mismatch, event, offline cal x2 [event, 0.59 s] passes eps=0.0500,0.0001
-  ramp 2: initial error 0.200 MHz settled to +-2702 kHz in 0 ns; peak 1.400 MHz, RMS 514.1 kHz, floor 540.5 kHz RMS (carrier)
-  range response: -3 dB width 5.34 cm, peak sidelobe -31.5 dB, ISLR -28.4 dB, beat phase perturbation 57.1 mrad RMS
-  this ramp's pattern, undithered (offset m, dBc): +7.68 / -47.2, -3.93 / -47.2, +3.93 / -47.3, -7.69 / -47.4
+5 % mismatch, event, offline cal x2 [event, 1.01 s] passes eps=0.0500,0.0000
+  ramp 2: initial error 0.399 MHz settled to +-6230 kHz in 0 ns; peak 2.800 MHz, RMS 1215.8 kHz, floor 1246.0 kHz RMS (carrier)
+  range response: -3 dB width 5.34 cm, peak sidelobe -31.5 dB, ISLR -22.6 dB, beat phase perturbation 130.7 mrad RMS
+  this ramp's pattern, undithered (offset m, dBc): -10.31 / -34.6, +2.81 / -35.3, -2.81 / -35.5, -12.19 / -37.8
 
-5 % mismatch, event, online cal [event, 0.29 s] online gain 1.05 -> 1.0311 -> 1.0082 -> 1.0023 -> 1.0004 over 4 chirps (post-flyback LMS)
-  ramp 2: initial error 32.599 MHz settled to +-2689 kHz in 810 ns; peak 32.600 MHz, RMS 957.4 kHz, floor 537.8 kHz RMS (carrier)
-  range response: -3 dB width 5.34 cm, peak sidelobe -31.5 dB, ISLR -28.4 dB, beat phase perturbation 135.9 mrad RMS
-  this ramp's pattern, undithered (offset m, dBc): +4.86 / -45.2, -4.86 / -45.6, +7.68 / -46.2, -2.81 / -46.2
+5 % mismatch, event, online cal [event, 0.35 s] online gain 1.05 -> 1.0318 -> 1.0090 -> 1.0026 -> 1.0007 over 4 chirps (post-flyback LMS)
+  ramp 2: initial error 35.599 MHz settled to +-6262 kHz in 650 ns; peak 35.800 MHz, RMS 1524.6 kHz, floor 1252.3 kHz RMS (carrier)
+  range response: -3 dB width 5.34 cm, peak sidelobe -31.5 dB, ISLR -22.5 dB, beat phase perturbation 193.3 mrad RMS
+  this ramp's pattern, undithered (offset m, dBc): -10.31 / -34.4, +2.81 / -35.6, -2.81 / -36.0, -12.19 / -38.4
 
-event / response on the first 40 cycles after the flyback: ratio 1.0053 +- 0.0455 (event floor 544 kHz RMS, response floor 0: the quantisation)
+event / response on the first 40 cycles after the flyback: ratio 1.0212 +- 0.1933 (event floor 1242 kHz RMS, response floor 0: the quantisation)
 
-reference group: analytic quadratic of the same RMS (6188 kHz at the carrier): -3 dB width 7.53 cm, peak sidelobe -58.2 dB, ISLR -56.9 dB -- the loop's step-and-decay puts its energy elsewhere than a parabola would
+reference group: analytic quadratic of the same RMS (6308 kHz at the carrier): -3 dB width 7.64 cm, peak sidelobe -57.9 dB, ISLR -56.7 dB -- the loop's step-and-decay puts its energy elsewhere than a parabola would
 
-the pattern above is one noise-off ramp.  With the loop's noise on, over 32 ramps, what stays coherent (TDC 5 ps; its own jitter dithers the quantisation and is noise in the LO profile):
+the pattern above is one noise-off ramp.  With the loop's noise on, over 32 ramps, what stays coherent (TDC 12.2 ps; its own jitter dithers the quantisation and is noise in the LO profile):
   TDC jitter [ps RMS] | strongest coherent spurs (offset m / dBc)             | search limit [dBc] | LO L(1 MHz) [dBc/Hz]
-                  0.0 | -12.19 / -49.1, +7.68 / -49.7, -7.69 / -49.8         |              -57.3 |                -80.2
-                  0.5 | +7.68 / -50.7, -7.69 / -50.7, +9.18 / -51.8          |              -56.9 |                -80.0
-                  1.0 | -11.81 / -54.8, -9.20 / -56.1, +9.19 / -56.4         |              -56.2 |                -79.6  <- the placeholder
-                  2.0 | none above the limit                                 |              -54.8 |                -78.1
+                  0.0 | -10.31 / -35.7, +2.81 / -36.4, -2.81 / -36.6         |              -55.6 |                -76.1
+                  0.5 | -10.31 / -36.3, +2.81 / -36.6, -2.81 / -36.8         |              -55.0 |                -76.1
+                  1.0 | +2.81 / -37.5, -2.81 / -37.6, -10.31 / -37.9         |              -54.1 |                -75.9  <- the placeholder
+                  2.0 | -14.05 / -41.1, +2.81 / -41.3, -8.43 / -41.3         |              -52.4 |                -75.2
   wrote examples/output/02_chirp_nonlinearity.png

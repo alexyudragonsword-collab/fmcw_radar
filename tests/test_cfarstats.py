@@ -180,16 +180,26 @@ def test_cfar_pd_closed_form():
 
 
 def test_ghost_targets_enter_the_false_alarm_account():
-    """A coherent spur of the chirp is a steady target at SNR + level.  With
-    the placeholder's 1 ps of TDC jitter the spurs sit 55 dB under the
-    target and add nothing under the default human.  With the jitter set to
-    zero they sit at -49 dBc: under a corner reflector every one in view is
-    detected, on the time engine's map too."""
+    """A coherent spur of the chirp is a steady target at SNR + level.  On
+    the sourced 12.2 ps TDC (0.2.12) the placeholder's 1 ps of jitter is
+    0.08 of a bin and does not break the quantisation up: the spurs sit
+    37 dB under the target, and under the default human at 5 m (32 chirps)
+    a frame holds 1.4 of them, two in view, on the time engine's map too.
+    On the 5 ps placeholder before it the same 1 ps (0.2 bin) put them 55
+    dB under and added nothing.  With the jitter set to zero, under a
+    corner reflector every one in view is detected."""
     base = apply_overrides(RadarConfig(), {"chirp.n_chirps": 32})
     human = run_statistical(base).cfar
-    assert human["ghosts_vouched"] and human["ghost_detections_per_frame"] < 0.1 and human["pd_target"] > 0.999
-    assert all(g["level_dbc"] < -52.0 for g in human["ghosts"])
+    assert human["ghosts_vouched"] and human["pd_target"] > 0.999
+    assert human["ghost_detections_per_frame"] == pytest.approx(1.40, abs=0.05)
+    assert all(-40.0 < g["level_dbc"] < -37.0 for g in human["ghosts"][:3])
+    seen = [g for g in human["ghosts"] if g["in_view"] and g["pd"] > 0.4]
+    assert len(seen) == 2
+    d = np.array(run_time(base).cfar_detections)
+    assert all(np.any(np.abs(d[:, 1] - g["range_m"]) < 1.5 * base.range_resolution_m) for g in seen)
     assert human["cfar_loss_db"] == pytest.approx(human["snr_pd90_db"] - snr_for_pd(0.9, 1e-4)) and 0.2 < human["cfar_loss_db"] < 1.0
+    fine = run_statistical(apply_overrides(base, {"lo.tdc_res_s": 5e-12})).cfar
+    assert fine["ghost_detections_per_frame"] < 0.01 and all(g["level_dbc"] < -52.0 for g in fine["ghosts"])
     cfg = apply_overrides(base, {"target.kind": "corner_reflector", "lo.tdc_jitter_s": 0.0})
     strong = run_statistical(cfg).cfar
     view = [g for g in strong["ghosts"] if g["in_view"]]

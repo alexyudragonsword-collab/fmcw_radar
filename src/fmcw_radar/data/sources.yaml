@@ -96,16 +96,19 @@ entries:
     cite: "placeholder: 15 GHz DCO far-out floor"
     note: "占位。"
   60g_sensing.tdc_res_s:
-    value: 5.0e-12
+    value: 1.22e-11
     unit: s
-    source: assumed
-    cite: "placeholder: TDC resolution of a mmWave ADPLL (a 15 GHz DCO period is 66.7 ps, so ~13 codes per period)"
-    note: "占位:TDC 量化经环路是匹配两点增益时 chirp 频率误差的主项(cairn/chirp-engine.md)。"
+    source: spec
+    upstream: "spec_sources:adpll60.wu_jssc2014_tdc#tdc_res_s"
+    cite: "W. Wu, R. B. Staszewski, J. R. Long, 'A 56.4-to-63.4 GHz Multi-Rate All-Digital Fractional-N PLL for FMCW Radar Applications in 65 nm CMOS', IEEE JSSC vol. 49 no. 5, pp. 1081-1096, May 2014; read in the original by spec_sources (2026-11-14)"
+    section: "VI.A ADPLL in Continuous-Wave (CW) Mode Operation"
+    quote: "The average time resolution of the TDC (Δtres) is 12.2 ps at a 1.2 V supply, which corresponds to a theoretical in-band PN of −78 dBc/Hz for a 60 GHz carrier [...] the measured in-band PN is −77 dBc/Hz at 60 GHz band for a loop bandwidth of ∼1.5 MHz, and thus is dominated by the TDC quantization noise."
+    note: "延迟链单级的平均时间分辨率(1.2 V,随 PVT 自校准),量化步长不是抖动。时间步长可以直接搬到本库的 15 GHz ×4 环路:TDC 的带内相噪底 L = (2π)²/12·(Δt·f_c)²/f_ref 只由绝对时间步长和载频决定,与分频的是哪个时钟无关;60 GHz、100 MHz 参考时 −77.54 dBc/Hz,与原文理论 −78、实测 −77 一致。15 GHz DCO 周期 66.7 ps,约 5.5 个码。TDC 量化经环路是匹配两点增益时 chirp 频率误差的主项(cairn/chirp-engine.md)。**更正(0.2.12)**:0.2.11 及以前是 5 ps 的占位(assumed);换成原文的 12.2 ps 后带内相噪底高 7.8 dB,周期性量化鬼影在 1 ps 抖动下打不散(ROADMAP P1 #1(a))。"
   60g_sensing.tdc_jitter_s:
     value: 1.0e-12
     unit: s
     source: assumed
-    cite: "placeholder: input-referred RMS jitter of the TDC (0.2 LSB of the 5 ps placeholder)"
+    cite: "placeholder: input-referred RMS jitter of the TDC (0.2 LSB of a 5 ps TDC; 0.08 LSB of the 60 GHz band's 12.2 ps); unsourced, spec_sources read Wu, Staszewski, Long, JSSC 2014 and Staszewski et al., TCAS-II 2006 in the original and neither gives it"
     note: "占位:TDC 自身的抖动既是噪声(线性模型里与量化同一节点的白时间误差,功率比 12 sigma^2 / t_res^2),也是量化的 dither;取 0 时量化不被打散,chirp 上出确定性鬼目标(cairn/chirp-engine.md)。"
 
   60g_sensing.tx_rx_isolation_db:
@@ -196,12 +199,12 @@ entries:
     unit: s
     source: assumed
     cite: "placeholder"
-    note: "占位。"
+    note: "占位。不套 60 GHz 频段的 12.2 ps(Wu 2014 是一颗 60 GHz 芯片,77 GHz 频段是另一颗假想芯片)。"
   77g_automotive.tdc_jitter_s:
     value: 1.0e-12
     unit: s
     source: assumed
-    cite: "placeholder: input-referred RMS jitter of the TDC (0.2 LSB of the 5 ps placeholder)"
+    cite: "placeholder: input-referred RMS jitter of the TDC (0.2 LSB of the 5 ps placeholder); unsourced, spec_sources read Wu, Staszewski, Long, JSSC 2014 and Staszewski et al., TCAS-II 2006 in the original and neither gives it"
     note: "占位:TDC 自身的抖动既是噪声(线性模型里与量化同一节点的白时间误差,功率比 12 sigma^2 / t_res^2),也是量化的 dither;取 0 时量化不被打散,chirp 上出确定性鬼目标(cairn/chirp-engine.md)。"
 
   77g_automotive.tx_rx_isolation_db:

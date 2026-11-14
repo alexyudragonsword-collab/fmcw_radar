@@ -1,34 +1,34 @@
 LO: vendored ADPLL analyze() at 15 GHz x4, the DCO alone above fref/2 (source: assumed)
-  L(1 kHz) = -81.7 dBc/Hz at 60 GHz
-  L(10 kHz) = -83.2 dBc/Hz at 60 GHz
-  L(100 kHz) = -82.5 dBc/Hz at 60 GHz
-  L(1000 kHz) = -79.6 dBc/Hz at 60 GHz
-  L(10000 kHz) = -100.3 dBc/Hz at 60 GHz
+  L(1 kHz) = -76.7 dBc/Hz at 60 GHz
+  L(10 kHz) = -77.1 dBc/Hz at 60 GHz
+  L(100 kHz) = -76.8 dBc/Hz at 60 GHz
+  L(1000 kHz) = -75.9 dBc/Hz at 60 GHz
+  L(10000 kHz) = -96.6 dBc/Hz at 60 GHz
 
 range-FFT noise bandwidth per bin 15.0 kHz (hann); the sidelobe floor [dBc per bin, one chirp] at a range offset from the target -- exact Gaussian-phase spectrum, and in brackets
 the first-order S_res/2 where it differs by more than 1 dB (the in-band noise beating with itself fills in
 near the tone once the residual is no longer small):
   target range [m] | tau [ns] | 1/(6 tau) [kHz] |          +0.25 m |             +1 m |             +5 m | residual RMS [mrad] | carrier loss [dB]
-               0.1 |     0.67 |          249827 | -112.2          |  -97.6          |  -85.3          |                1.12 |            -0.008
-               0.3 |     2.00 |           83276 | -102.6          |  -88.0          |  -75.8          |                3.35 |            -0.009
-                 1 |     6.67 |           24983 |  -91.7          |  -77.5          |  -65.3          |               11.18 |            -0.016
-                 3 |    20.01 |            8328 |  -80.1 ( -82.6) |  -67.9          |  -55.8          |               33.41 |            -0.038
-                10 |    66.71 |            2498 |  -65.8 ( -72.2) |  -57.1          |  -45.4          |              107.10 |            -0.110
-                30 |   200.14 |             833 |  -52.9 ( -62.6) |  -47.0 ( -48.1) |  -36.8          |              238.49 |            -0.287
-               100 |   667.13 |             250 |  -44.4 ( -52.2) |  -37.4          |  -42.1 ( -43.7) |              312.77 |            -0.470
-  (the LO itself: 202.0 mrad RMS over [10 kHz, 4 MHz])
+               0.1 |     0.67 |          249827 | -106.3          |  -92.8          |  -81.7          |                1.70 |            -0.008
+               0.3 |     2.00 |           83276 |  -96.7          |  -83.2          |  -72.2          |                5.09 |            -0.010
+                 1 |     6.67 |           24983 |  -85.7          |  -72.7          |  -61.7          |               16.97 |            -0.027
+                 3 |    20.01 |            8328 |  -73.5 ( -76.7) |  -63.0          |  -52.2          |               50.73 |            -0.079
+                10 |    66.71 |            2498 |  -58.8 ( -66.3) |  -52.0          |  -41.8          |              162.67 |            -0.245
+                30 |   200.14 |             833 |  -45.7 ( -56.7) |  -41.5 ( -43.3) |  -33.1          |              363.54 |            -0.657
+               100 |   667.13 |             250 |  -36.9 ( -46.3) |  -32.1 ( -33.2) |  -36.7 ( -40.1) |              487.93 |            -1.129
+  (the LO itself: 319.4 mrad RMS over [10 kHz, 4 MHz])
 
 closed form vs synthesised residual (one-sided PSD, averaged over octave bands):
-      1 m: worst band difference 0.113 dB over 24 blocks of 16384
-     10 m: worst band difference 0.113 dB over 24 blocks of 16384
-    100 m: worst band difference 0.113 dB over 24 blocks of 16384
+      1 m: worst band difference 0.112 dB over 24 blocks of 16384
+     10 m: worst band difference 0.112 dB over 24 blocks of 16384
+    100 m: worst band difference 0.112 dB over 24 blocks of 16384
   tau = 0: residual max |phi| = 0 rad
 
 the LO: the placeholder ADPLL against mmw60_trx's x10 LO (a 6.048 GHz fractional-N PLL x10, floor -150 dBc/Hz), the target at 5 m:
   LO                                                   | L(100 kHz) | L(1 MHz) | L(4 MHz) | LO RMS [mrad] | residual RMS [mrad] | floor +1 m / +5 m [dBc/bin]
-  placeholder 15 GHz ADPLL x4 (its own analysis)       |      -82.5 |    -79.6 |    -92.2 |         202.0 |               55.30 |   -63.3 /  -51.4
+  placeholder 15 GHz ADPLL x4 (its own analysis)       |      -76.8 |    -75.9 |    -88.6 |         319.4 |               83.97 |   -58.4 /  -47.7
   x10 file alone (lo.engine: ideal)                    |      -92.1 |    -98.6 |   -110.3 |          30.4 |                6.86 |   -76.6 /  -69.9
-  x10 file + the chirp generator's quantisation        |      -84.3 |    -85.1 |    -97.8 |         115.3 |               29.22 |   -66.9 /  -57.0
-  (in band the generator's 5 ps TDC, not the x10 LO, sets the floor: its quantisation is in the chirp curve whatever noise
+  x10 file + the chirp generator's quantisation        |      -77.2 |    -77.5 |    -90.2 |         273.0 |               69.62 |   -59.4 /  -49.4
+  (in band the generator's 12.2 ps TDC, not the x10 LO, sets the floor: its quantisation is in the chirp curve whatever noise
    file is named, and the file does not know of it -- the profile adds the two terms once; the file's 6 spurs ride on top)
   wrote examples/output/01_phase_noise_vs_range.png

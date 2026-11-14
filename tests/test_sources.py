@@ -1,5 +1,6 @@
 """Invariant #5: every external number carries its source; ``grep source:`` lists them all."""
 
+import math
 import subprocess
 
 import pytest
@@ -40,8 +41,9 @@ def test_every_front_end_placeholder_exists_for_every_band():
             assert e.placeholder != sourced and (e.source == "spec") == sourced, (band, name)
 
 
-#: the 60 GHz figures read from originals through mmw60_trx's sourced table (0.2.8); the 77 GHz band has none
-SOURCED_60G = ("tx_power_dbm", "nf_db", "p1db_oob_dbm", "p1db_inband_dbm", "tx_rx_isolation_db")
+#: the 60 GHz figures read from originals through spec_sources (the five front-end figures since 0.2.8, the TDC since
+#: 0.2.12); the 77 GHz band has none
+SOURCED_60G = ("tx_power_dbm", "nf_db", "p1db_oob_dbm", "p1db_inband_dbm", "tx_rx_isolation_db", "tdc_res_s")
 
 
 def test_sourced_front_end_figures_are_the_sibling_tables():
@@ -109,6 +111,33 @@ def test_oxygen_and_human_rcs_are_read_from_the_originals():
         sources.SourcedNumber("x", 1.0, "dB", "derived", "cite", upstream="spec_sources:a.b")
 
 
+def test_tdc_resolution_is_the_60_ghz_adpll_paper_and_its_floor_carries_over():
+    """0.2.12, fmcw_radar#17: the 60 GHz band's TDC is Wu, Staszewski, Long
+    (JSSC 2014): 12.2 ps.  Its loop divides CKV/32, ours reads the 15 GHz
+    DCO; the time step carries over because the TDC's in-band floor,
+    (2 pi)^2 / 12 (dt f_c)^2 / f_ref, depends on the step and the carrier
+    alone.  Our own profile's TDC term at the carrier is the paper's formula
+    (-77.54, printed -78; measured -77).  The jitter has no source in either
+    paper spec_sources read; the 77 GHz band is another chip and keeps 5 ps."""
+    from fmcw_radar.lo import LOProfile
+    from fmcw_radar.vendor import spec_sources as ss
+
+    tdc = sources.frontend_placeholder("60g_sensing", "tdc_res_s")
+    paper = ss.value("adpll60.wu_jssc2014_tdc")
+    assert (tdc.value, tdc.source) == (paper["tdc_res_s"], "spec") == (1.22e-11, "spec")
+    cfg = RadarConfig()
+    assert cfg.lo_value("tdc_res_s")[0] == 1.22e-11 and cfg.lo.fref_hz == paper["f_ref_mhz"] * 1e6
+    floor = 10.0 * math.log10((2.0 * math.pi) ** 2 / 12.0 * (tdc.value * cfg.band.center_hz) ** 2 / cfg.lo.fref_hz)
+    assert floor == pytest.approx(-77.54, abs=0.005) and round(floor) == paper["inband_pn_theory_dbc_hz"]
+    assert floor - paper["inband_pn_meas_dbc_hz"] == pytest.approx(-0.5, abs=0.05)
+    prof = LOProfile.from_config(cfg)
+    assert 10.0 * math.log10(float(prof.components["tdc_quant"][0]) / 2.0) == pytest.approx(floor, abs=0.1)
+    for band in ("60g_sensing", "77g_automotive"):
+        jit = sources.frontend_placeholder(band, "tdc_jitter_s")
+        assert jit.source == "assumed" and "neither gives it" in jit.cite
+    assert sources.frontend_placeholder("77g_automotive", "tdc_res_s").value == 5.0e-12
+
+
 def test_vendored_shared_table_counts_its_tags():
     """spec_sources' grep guard on the copy vendored here: for each of its four
     tags, ``grep -c "source: <tag>"`` equals the entries carrying it (the
@@ -116,7 +145,7 @@ def test_vendored_shared_table_counts_its_tags():
     from fmcw_radar.vendor import spec_sources as ss
 
     files = ss.data_files()
-    assert [f.name for f in files] == ["atmosphere.yaml", "frontend60.yaml", "radar_targets.yaml"]
+    assert [f.name for f in files] == ["adpll60.yaml", "atmosphere.yaml", "frontend60.yaml", "radar_targets.yaml"]
     for f in files:
         assert ss.audit_tags(f) == []
 

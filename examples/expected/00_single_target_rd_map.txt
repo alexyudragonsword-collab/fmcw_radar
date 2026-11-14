@@ -23,8 +23,8 @@ radar equation:
   Pd 1.0000 at Pfa 0.0001 (Swerling 0, cell SNR 51.34 dB)
 time engine (64 chirps, 5 GS/s envelope, 500000 samples per chirp):
   peak at 5.012 m (interpolated 5.016 m), +1.952 m/s; configured 5 m, +2 m/s
-  measured cell SNR 51.09 dB vs statistical 51.09 dB expected on the grid (scalloping 0.03 + 0.09 dB, LO noise -68.6 dBc per cell over the band): difference +0.01 dB
-  -3 dB width of the range response 5.37 cm (window theory 5.34 cm, c/2B 3.75 cm)
-  CA-CFAR (guard 2, train 8, Pfa 0.0001): 43 cells over threshold, 21 in the target's lobe (the zero-padded grid's neighbours), 22 elsewhere: 8.62 m / -9.76 m/s, 8.63 m / -9.76 m/s, 8.64 m / -9.76 m/s, 8.65 m / -5.46 m/s
-    expected elsewhere: 10.5 noise false-alarm cells a frame (per-cell Pfa 1.02e-04 on 102400 in-band cells, in clumps) and 0.00 detections of the chirp's ghost targets (the strongest at -3.8 dB SNR); the target itself: Pd 1.000, a Pd of 0.9 takes 12.24 dB on this map (CFAR loss 0.49 dB)
+  measured cell SNR 50.96 dB vs statistical 50.91 dB expected on the grid (scalloping 0.03 + 0.09 dB, LO noise -65.0 dBc per cell over the band): difference +0.05 dB
+  -3 dB width of the range response 5.38 cm (window theory 5.34 cm, c/2B 3.75 cm)
+  CA-CFAR (guard 2, train 8, Pfa 0.0001): 56 cells over threshold, 21 in the target's lobe (the zero-padded grid's neighbours), 35 elsewhere: 8.62 m / -9.76 m/s, 8.63 m / -9.76 m/s, 0.31 m / +1.95 m/s, 0.32 m / +1.95 m/s
+    expected elsewhere: 10.5 noise false-alarm cells a frame (per-cell Pfa 1.02e-04 on 102400 in-band cells, in clumps) and 2.75 detections of the chirp's ghost targets (the strongest at +13.6 dB SNR); the target itself: Pd 1.000, a Pd of 0.9 takes 12.24 dB on this map (CFAR loss 0.49 dB)
   wrote examples/output/00_single_target_rd_map.png

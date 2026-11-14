@@ -23,21 +23,29 @@
 ## P1 — 结论的可信度
 
 1. **TDC 量化在斜坡上的相干杂散(鬼目标)**。0.2.6:TDC 抖动接成占位(1 ps,`assumed`),鬼目标取一帧里开噪声后仍相干的部分,进虚警账(`cairn/chirp-engine.md`、
-   `cairn/cfar-statistics.md`)。不抖动 −45.3 dBc;抖动 0 / 1 / 2 ps 时 −49 / −55 dBc / 低于检出限。还没做的:
-   (a) 1 ps 这个占位决定了结论(−55 dBc、每帧 0.00 个);它是 `assumed`,等 polar_tx / pll_simulator 的 TDC 实测或文献数。1 ps 时哪几个杂散过检出限随 seed 变,
-       也随抖动的实现变(0.2.7 重新 pin 后示例 02 的 32 个 ramp:−11.81、−9.20、+9.19 m,−54.8 … −56.4 dBc;pin 之前是另外三个位置),
-       离 32 / 64 个 ramp 的检出限(−56 / −59 dBc)只有 1–3 dB。
+   `cairn/cfar-statistics.md`)。0.2.12 起 60 GHz 的 TDC 是原文的 12.2 ps(spec,fmcw_radar#17),结论翻了:不抖动 −34.1 dBc(−10.31 / ±2.81 m);
+   抖动 0 / 0.5 / 1 / 2 ps 时 −35.7 / −36.3 / −37.5 / −41.1 dBc,全在 32 个 ramp 的检出限(−52 … −56 dBc)之上(示例 02)。还没做的:
+   (a) **默认配置每帧 2.75 个鬼目标检出**(5 m 人体,鬼目标 SNR +11 … +13.6 dB;示例 00 主瓣外 35 格对 0.2.11 的 22 格;四目标帧里 +10 dBsm 的车把超门限格从 70 推到 284,示例 05)。
+       原因:1 ps 抖动只有 12.2 ps 的 0.08 格,打不散量化(5 ps 时 0.2 格,−55 dBc、每帧 0.00 个)。抖动没有出处(spec_sources 查过 Wu 2014 与 Staszewski 2006 原文,都没给),
+       不为了压鬼目标去调它。同一个原因让斜坡上的线性剖面也不准了:逐周期引擎对剖面 100 / 300 kHz 差 −3.5 / +3.4 dB(5 ps 时 0.6 dB 内;半格抖动 1.2 dB 内),
+       `tests/test_lo_noise_split.py::test_the_default_tdc_is_not_dithered_enough_for_the_profile`。12.2 ps 下扫抖动(默认 64 chirp,`run_statistical`):1 / 1.8 / 2.44 / 3 ps(0.08 / 0.15 / 0.20 / 0.25 格)→ 最强 −37.3 / −39.5 / −42.0 / −44.7 dBc,
+       每帧 2.75 / 2.08 / 0.92 / 0.16 个,L(1 MHz) −75.9 / −75.4 / −74.8 / −74.3 dBc/Hz。
+       要做:建模真实芯片打散 TDC 量化的手段——DTC / 参考路径注入的 dither、FCW 的 Σ-Δ 抖动(polar_tx / pll_simulator 有没有现成的,先问),
+       或者找到 TDC 自身抖动的出处;在此之前,报表把默认配置的鬼目标当作结论的一部分报出(现在就是)。
+       0.2.7 重新 pin 后鬼目标的位置随 seed 与抖动的实现变;12.2 ps 下 −10.31 / ±2.81 / ±8.43 / −14.05 m 在 0 … 2 ps 间稳定。
    (b) 带 `lo.profile` 文件的配置:0.2.9 起量化只算一次(导出的文件带分项;外来文件在 event 引擎下由剖面加上发生器的两项量化,`cairn/chirp-engine.md`)。
-       剩下的:文件下逐周期曲线不开噪声,没有东西给 TDC dither,鬼目标是不抖动的 −45.3 dBc(±4.85 m),一帧里 3–5 m 的底比闭式高 1.3–2.1 dB
+       剩下的:文件下逐周期曲线不开噪声,没有东西给 TDC dither,鬼目标是不抖动的 −34.1 dBc(−10.31 / ±2.81 m;5 ps 时 −45.3 dBc @ ±4.85 m),一帧里 1–5 m 的底比闭式高 −1.5 … +3.2 dB(均 +0.9)
        (示例 04 末表,`configs/radar_60g_x10lo.yaml`)。要做:只开 TDC 抖动跑曲线(pllsim 的噪声开关是全开全关,需要它分开),或者在报表里把文件档的鬼目标标成"上限"。
-   (c) CW / `chirp.idle_s` 空闲段:TDC 抖动 1 ps 时带内相噪仍比线性剖面高(死区):`simulate − analyze` 在 30 / 100 / 300 kHz 是 +5.5 / +5.9 / +10.9 dB
-       (0.2.7 重新 pin 之后经本库 vendored 的副本量的,与在 pll_simulator@5564c64 上量的一致;pin 之前 +9 … +15);要到约半个量化格(2.5 ps)才对得上(2 ps:+0.1 … +1.6 dB)。
+   (c) CW / `chirp.idle_s` 空闲段:TDC 抖动 1 ps 时带内相噪仍比线性剖面高(死区):12.2 ps TDC 上 `simulate − analyze` 在 30 / 100 / 300 kHz 是 +15.5 / +19.2 / +9.8 dB
+       (0.08 格;抖动 0 / 3 / 5 / 6.5 ps 时均值 +18.8 / +4.2 / +0.9 / +1.1);要到约半个量化格(6.1 ps)才对得上。5 ps TDC 时是 +5.5 / +5.9 / +10.9 dB,
+       半格 2.5 ps(0.2.7 重新 pin 之后经本库 vendored 的副本量的,与在 pll_simulator@5564c64 上量的一致;pin 之前 +9 … +15)。
        0.2.7 起报表在相噪一节下标出来(`lo.parked_lo` / "The LO while it is not ramping":载波处与斜坡起点各自的 FCW 是否整数、抖动几格、空闲占 PRI 多少,
        附上游 `analyze()` 的原话);默认 config 载波处 FCW 150 在死区,起点 FCW 145 也是。还没做的是**数**:停着时的相噪没有剖面(要用就得从逐周期引擎的 CW 段取),
-       空闲段的 LO 误差也没有进帧。判据本身偏保守:2 ps(0.41 格)仍被标,而那里只差 +0.1 … +1.6 dB。
+       空闲段的 LO 误差也没有进帧。判据本身偏保守:0.41 格仍被标,而那里只差 +0.9 dB(12.2 ps 上的 5 ps;5 ps TDC 上的 2 ps:+0.1 … +1.6 dB)。
    复现:`run_statistical(cfg).nonlinearity["ghosts"]` / `["ghosts_quiet"]` / `["ghost_limit_dbc"]`;`python examples/02_chirp_nonlinearity.py` 末尾的表。
 2. **TDC 按标称周期归一化,斜坡把 DCO 带离标称 ±3.3 %**(`ChirpResult.dco_dev_frac_p99`;polar_tx#19 的答复里点出的效应,它推断"在锯齿上被环路吃掉",
-   在本库的配置上量了,不成立)。vendored 的 `_sim_tdc` 用 `code / cpp_nom` 把 TDC 码换成小数周期,读数差 `小数 × Δf/f`。默认 config、匹配增益、noise=False:
+   在本库的配置上量了,不成立)。vendored 的 `_sim_tdc` 用 `code / cpp_nom` 把 TDC 码换成小数周期,读数差 `小数 × Δf/f`。以下是 5 ps TDC 时(0.2.11 及以前)量的,
+   12.2 ps 下没重量(那里鬼目标已在检出限之上 15 dB 以上,这一项相对小)。默认 config、匹配增益、noise=False:
    斜坡频率误差 513.8 kHz RMS(载波处);把那一行临时改成按实际周期归一化(不入库的改动)是 498.4 kHz,飞回后初始误差 400 → 200 kHz,
    最强静态鬼目标 −45.7 → −48.1 dBc。不改 vendored 代码也能复现:给 `ADPLL.simulate` 传 vendored 的 `TdcPeriodCal`(EMA 1e-3 / 1e-2 / 1e-1 → 507.1 / 500.7 / 499.6 kHz)。
    开噪声(TDC 抖动 1 ps、32 个 ramp)时看不出差别:鬼目标本来就贴着检出限(−55.4 dBc 对检出限 −55.9;开 `TdcPeriodCal` −54.9 … 无)。
@@ -65,7 +73,7 @@
    - `found_targets` 的分格规则只分到格:两目标近于一个距离格(3.75 cm)时仍找同一个峰;那是分辨率,不是 bug,但报表没有标。
    - 泄漏只有直接路径 + 一个反射体,相噪经 τ ≈ 0 几乎全抵消是对的,但发射机的 AM 噪声 / 泄漏的幅度噪声没有模型(mmw60_trx 到位再说)。
 1. (0.2.5 了结,见 LOG:时域 SNR 对期望的差 12 个 seed 平均 +0.06 / −0.04 / +0.06 dB(2 / 5 / 10 m),单 seed 标准差 0.10–0.21 dB;原来单 seed 的 −0.07 … −0.10 dB 里有 TDC 量化重复计的一份。)
-2. **FFT 上量相噪旁瓣的方差 ±0.3 dB**(64 chirp × ±10 格,Blackman,高斯相位精确谱对照):示例 04 +1 / +2 / +5 m 差 +0.10 / −0.02 / −0.44 dB,
+2. **FFT 上量相噪旁瓣的方差 ±0.3 dB**(64 chirp × ±10 格,Blackman,高斯相位精确谱对照):示例 04 +1 / +2 / +5 m 差 +0.11 / −0.04 / −0.45 dB(5 ps TDC 时 +0.10 / −0.02 / −0.44),
    换 seed 在 ±0.4 dB 内摆。要压到 0.1 dB 需要 10 倍的 chirp 数或直接比残余 PSD(那条已经 0.1 dB)。更近的偏移(< 10 格)要更低旁瓣的窗(Blackman-Harris / Taylor)。
 3. **时域引擎按 chirp 独立合成相噪**(块 500k 点,最低 10 kHz),chirp 间 LO 低频相关没有表示;对多普勒维噪底无影响的论证见 `cairn/range-correlation.md`,
    但慢目标 / 长帧(PRF 10 kHz 以下的相噪)没有验证。

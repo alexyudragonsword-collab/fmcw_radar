@@ -86,9 +86,12 @@ def parked_lo(cfg: RadarConfig) -> dict:
     the TDC's input parks inside one bin: the loop cannot see the DCO drift
     there, and the cycle-accurate engine reads more in-band phase noise
     than ``analyze()`` -- pllsim's ``tdc_dead_zone`` (pll_simulator #77),
-    measured on the default loop through the vendored copy: +15.8 dB at 30
-    kHz with no TDC jitter, +5.5 dB at the 1 ps placeholder (0.22 bin),
-    +0.1 dB at 2 ps (0.41 bin: flagged, already harmless), none at 5 ps.
+    measured on the default loop through the vendored copy, mean over 30 /
+    100 / 300 kHz: on the 12.2 ps TDC (0.2.12) +18.8 dB with no TDC jitter,
+    +14.9 dB at the 1 ps placeholder (0.09 bin), +4.2 at 3 ps, +0.9 at 5 ps
+    (0.41 bin: flagged, nearly harmless), +1.1 at 6.5 ps (0.53 bin: not
+    flagged); on the 5 ps placeholder before it, +15.8 dB at 30 kHz with no
+    jitter, +5.5 dB at 1 ps (0.22 bin), +0.1 dB at 2 ps (0.41 bin).
     A frequency ramp sweeps the fraction of a cycle the TDC reads across
     its bins every reference cycle, which is a dither: on the ramp the
     engine and the profile agree within 0.6 dB (tests/test_lo_noise_split.py),

@@ -30,12 +30,13 @@ def test_profile_is_the_analysis_times_n_squared(cfg60):
     s_dco = np.interp(np.log10(f), np.log10(ana.f), np.log10(ana.pn_breakdown["total"]))
     assert float(prof.l_dbc(f)) == pytest.approx(10 * s_dco + 20 * np.log10(4) - 10 * np.log10(2), abs=0.05)
     assert "tdc_jitter" not in prof.components
-    live = LOProfile.from_config(cfg60)                                  # the 1 ps placeholder on a 5 ps TDC
+    live = LOProfile.from_config(cfg60)                                  # the 1 ps placeholder on the 12.2 ps TDC
     assert cfg60.lo_value("tdc_jitter_s") == (1e-12, "assumed") and build_adpll(cfg60).cfg.tdc.jitter_rms_s == 1e-12
-    assert np.allclose(live.components["tdc_jitter"], live.components["tdc_quant"] * 12.0 * (1.0 / 5.0) ** 2, rtol=1e-9)
+    assert cfg60.lo_value("tdc_res_s") == (1.22e-11, "spec")
+    assert np.allclose(live.components["tdc_jitter"], live.components["tdc_quant"] * 12.0 * (1.0 / 12.2) ** 2, rtol=1e-9)
     assert np.allclose(live.s_phi, prof.s_phi + live.components["tdc_jitter"], rtol=1e-9)
     assert np.allclose(live.s_phi, sum(live.components.values()), rtol=1e-12)            # in the total once
-    assert float(live.l_dbc(f)) - float(prof.l_dbc(f)) == pytest.approx(0.6, abs=0.15)      # a third of the in-band noise, half as much again
+    assert float(live.l_dbc(f)) - float(prof.l_dbc(f)) == pytest.approx(0.25, abs=0.05)     # 12 (1 / 12.2)^2 = 8 % of the quantisation (0.6 dB on 5 ps)
     # the sampled loop's images are cut: beyond fref/2 the DCO alone (Leeson 1/f^2 down to its floor)
     osc = build_adpll(cfg60).cfg.osc
     for f in (1e8, 1e9):
@@ -50,9 +51,9 @@ def test_parked_lo_names_the_dead_zone_where_the_parked_frequency_is_integer_n(c
     parked: the carrier (CW) or the ramp's start frequency (chirp.idle_s)."""
     k = parked_lo(cfg60)
     assert k["known"] and k["fcw_center"] == 150.0 and k["dead_zone_center"]
-    assert k["dither_bins"] == pytest.approx(0.22, abs=0.02) and k["idle_s"] == 0.0
+    assert k["dither_bins"] == pytest.approx(0.089, abs=0.005) and k["idle_s"] == 0.0
     assert LOProfile.from_config(cfg60).notes and "dead zone" in LOProfile.from_config(cfg60).notes[0]
-    half_a_bin = apply_overrides(cfg60, {"lo.tdc_jitter_s": 2.6e-12})                   # the TDC's own jitter dithers it
+    half_a_bin = apply_overrides(cfg60, {"lo.tdc_jitter_s": 6.5e-12})                   # the TDC's own jitter dithers it
     assert not parked_lo(half_a_bin)["dead_zone_center"] and not LOProfile.from_config(half_a_bin).notes
     idle = parked_lo(apply_overrides(cfg60, {"chirp.idle_s": 10e-6}))                   # 14.5 GHz / 100 MHz = 145
     assert idle["fcw_idle"] == 145.0 and idle["dead_zone_idle"] and idle["idle_fraction"] == pytest.approx(10.0 / 110.0)
@@ -65,8 +66,10 @@ def test_parked_lo_names_the_dead_zone_where_the_parked_frequency_is_integer_n(c
 def test_the_dead_zone_flag_is_where_the_cycle_accurate_loop_leaves_the_profile(cfg60):
     """Two implementations of the same parked loop: where parked_lo says dead
     zone the cycle-accurate engine reads several dB more in band than the
-    linear analysis (CW, 30 kHz - 300 kHz: +7 to +8 dB at the 1 ps
-    placeholder, +15.8 with no jitter); where it does not, they agree."""
+    linear analysis (CW, mean over 30 / 100 / 300 kHz, on the 12.2 ps TDC:
+    +14.9 dB at the 1 ps placeholder (0.09 bin), +18.8 with no jitter, +4.2
+    at 3 ps, +0.9 at 5 ps (0.41 bin: flagged, nearly harmless)); where it
+    does not, they agree (6.5 ps, 0.53 bin: +1.1)."""
     fq = np.array([3e4, 1e5, 3e5])
 
     def excess_db(jitter_s):
@@ -79,7 +82,7 @@ def test_the_dead_zone_flag_is_where_the_cycle_accurate_loop_leaves_the_profile(
 
     parked, flagged = excess_db(1e-12)
     assert flagged and parked > 4.0, parked
-    dithered, flagged = excess_db(5e-12)
+    dithered, flagged = excess_db(6.5e-12)
     assert not flagged and abs(dithered) < 2.0, dithered
 
 
@@ -135,8 +138,9 @@ def test_foreign_noise_file_gets_the_chirp_generators_quantisation_once(cfg60):
     assert np.allclose(prof.components["tdc_quant"] + prof.components["dco_quant"],
                        np.interp(prof.f_hz, live.f_hz, q) * (prof.f_hz <= 0.5 * cfg60.lo.fref_hz), rtol=1e-6)
     assert np.allclose(prof.without("tdc_quant", "dco_quant").l_dbc(f), bare.l_dbc(f), atol=1e-6)
-    # the generator's quantisation, not the x10 LO, is the floor in band: -85.1 against the file's -98.6 at 1 MHz
-    assert float(prof.l_dbc(1e6)) == pytest.approx(-85.1, abs=0.1) and prof.notes and len(prof.spurs) == 6
+    # the generator's quantisation, not the x10 LO, is the floor in band: -77.5 against the file's -98.6 at 1 MHz
+    # (the 12.2 ps TDC; -85.1 on the 5 ps placeholder before 0.2.12)
+    assert float(prof.l_dbc(1e6)) == pytest.approx(-77.5, abs=0.1) and prof.notes and len(prof.spurs) == 6
 
 
 def test_bad_profile_file_is_refused(tmp_path):
