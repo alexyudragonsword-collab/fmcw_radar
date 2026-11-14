@@ -1,4 +1,4 @@
-# Vendored from spec_sources@e49979f4358476fc120de0045a013663613f67c1: src/spec_sources/data/radar_targets.yaml
+# Vendored from spec_sources@f87cc9b54af9d6510e406d8356c04267fa1dd388: src/spec_sources/data/radar_targets.yaml
 # Adapted-copy policy: see src/fmcw_radar/vendor/__init__.py
 # radar_targets —— 雷达目标的 RCS（行人、车辆、标准反射体）。
 #
@@ -8,6 +8,7 @@
 # 都恰好等于该标签的条目数（tests/test_iron_rules.py 跑真的 grep）。
 #
 # 出处：里程碑 2 第 4 批（fmcw_radar 的 rcs.* 三条）。本库直接读原文建条目，不是从哪个库迁入的。
+# 乘用车用 NHTSA DOT HS 813 648 转引的 ISO 19206-3:2021 边界；三面角反射器用 Sandia SAND2008-0396 的公式。
 # 前缀：target_rcs.*。
 
 entries:
@@ -21,3 +22,39 @@ entries:
     section: "III.B Results from electromagnetic ray tracing; Fig. 4"
     quote: "We present the results for a complete walking stride - the full swing motion of a hand/leg - of 69 frames from 2.8 s to 3.9 s in Fig. 4 for different incident aspect angles. The figure shows that the co-polarization (σvv and σhh) components range from -10 dBsm to +5 dBsm. The cross-polarization components are generally weaker by approximately 10 dB. These RCS values are within the range of those reported from measurement studies of pedestrians at X-band frequencies [32, 41]. [Fig. 4: Simulated monostatic RCS ... obtained from ray tracing at 77 GHz for three aspect angles (a) front incidence (φi = 0°) (b) oblique incidence (φi = 45°) and (c) 90° incidence (φi = 90°).]"
     note: "**是射线追踪仿真，不是实测**：一名受试者行走一个步态的 69 帧（动作捕捉数据），77 GHz，入射方位角 0° / 45° / 90°。作者把由此生成的雷达信号与同一受试者 77 GHz 的实测信号比，结构相似度在 81 % 以上；RCS 的范围只与 X 波段的实测研究相比。fmcw_radar 原记的人体 −10 dBsm 正好是这个范围的下端。要 60 / 77 GHz 的实测 RCS 还得读 Belgiovane 2014 或 JRC 的报告（cairn/Reference/README.md）。"
+
+  # ------------------------------------------------------------ 乘用车（ISO 19206-3:2021 的边界，经 NHTSA 报告转引）
+  target_rcs.iso19206_3_car_rear:
+    value: {p_far_dbsm: 20.0, half_width_db: 10.0, d_far_m: 40.0, k_dec_db_per_m2: 0.013, angle_deg: 180.0}
+    unit: "dBsm, dB, m, dB/m², deg"
+    source: spec
+    cite: "R. Zeits, I. Nagy, B. Peterson, I. Davis, G. J. Forkenbrock, A. Neer, 'Passenger Vehicle Surrogate Test Target Radar Return Repeatability', Report No. DOT HS 813 648, National Highway Traffic Safety Administration, January 2025（Transportation Research Center），rosap.ntl.bts.gov/view/dot/79093；表 8、表 9 是它转引的 ISO 19206-3:2021（ISO 本身没读）；2026-11-14 读原文"
+    section: "Test Equipment（Table 1：两颗 76–77 GHz 雷达）；Test Procedure（180° 是从车尾接近）；Fixed Angle RCS Boundaries（Equation 4、5，Table 8）；VUT Fixed Angle Approach（Table 13）"
+    quote: "Both radar sensors operate in the 76 to 77 GHz range. [...] A measurement approach of 180° is referencing an approach to the rear of the vehicle. [...] ISO 19206-3:2021 defines that at least 92 percent of the filtered data points of the composite line must fall within the upper and lower boundaries to be considered valid. [...] Equation 4: Upper Boundary Line B_U = P_FAR − K_DEC ∗ min(D − D_FAR, 0)² + ΔP; Equation 5: Lower Boundary Line B_L = P_FAR − K_DEC ∗ min(D − D_FAR, 0)² − ΔP [...] Table 8. RCS Boundary Parameters defined in ISO 19206-3:2021: Angle (°) 180 | K_DEC (dBm²/m²) 0.013 | D_FAR (m) 40 | P_FAR (dBm²) 20 | ΔP (dBm²) 10 [...] For the 180° fixed angle approach, all passenger vehicles achieved the inbounds criteria"
+    note: "ISO 19206-3:2021 给真实乘用车定的、76–77 GHz 雷达从车尾（180°）直线接近时的 RCS 带：40 m 以外平均 20 dBsm、上下各 10 dB（10–30 dBsm）；更近时按 K_DEC·(D − 40 m)² 往下降（5 m 处中心约 4.1 dBsm）。是边界，不是某辆车的实测值；NHTSA 测的轿车、两厢、MPV、SUV、轻卡在 180° 都落在带内（Bosch 雷达测 MPV 95.9 %，其余 100 %）。dBm² 即 dBsm。远距离下界见 target_rcs.iso19206_3_car_rear_far_lower_dbsm。ISO 19206-3 原文要购买，没读；这里读的是 NHTSA 报告里转引的表。"
+
+  target_rcs.iso19206_3_car_30m:
+    value: {angle_deg: [0.0, 10.0, 30.0, 60.0, 80.0, 90.0, 100.0, 120.0, 150.0, 170.0, 180.0], lower_dbsm: [1.0, -4.0, -6.0, -5.0, -2.0, 13.0, -2.0, -5.0, -5.0, -2.0, 2.0], upper_dbsm: [19.0, 14.0, 8.0, 12.0, 20.0, 30.0, 20.0, 12.0, 12.0, 18.0, 25.0]}
+    unit: "deg, dBsm, dBsm"
+    source: spec
+    cite: "R. Zeits, I. Nagy, B. Peterson, I. Davis, G. J. Forkenbrock, A. Neer, 'Passenger Vehicle Surrogate Test Target Radar Return Repeatability', Report No. DOT HS 813 648, National Highway Traffic Safety Administration, January 2025（Transportation Research Center），rosap.ntl.bts.gov/view/dot/79093；表 8、表 9 是它转引的 ISO 19206-3:2021（ISO 本身没读）；2026-11-14 读原文"
+    section: "Fixed Range RCS Boundaries（Table 9）；Test Procedure（30 m 半径绕车一周）"
+    quote: "Like the fixed angle RCS boundaries, ISO 19206-3:2021 defines for fixed range approaches that at least 95 percent of the filtered data points of a composite line must fall within the upper and lower boundaries. The upper and lower boundaries are defined by a cubic spline function of the data in Table 9 [...] Table 9. Fixed Range RCS Boundary Breakpoints defined in ISO 19206-3:2021: Angle (°) | Lower boundary (dBm²) | Upper boundary (dBm²): 0 | 1 | 19; 10 | -4 | 14; 30 | -6 | 8; 60 | -5 | 12; 80 | -2 | 20; 90 | 13 | 30; 100 | -2 | 20; 120 | -5 | 12; 150 | -5 | 12; 170 | -2 | 18; 180 | 2 | 25 [...] a constant radius of 30 meters is followed for 360°"
+    note: "30 m 半径绕车一周时各视角的 RCS 上下界（三次样条插值的折点；读法如 ref('target_rcs.iso19206_3_car_30m#upper_dbsm@angle_deg=180')）。180° 是车尾，0° 是车头，90° 是侧面（侧面最大，13–30 dBsm）。与 target_rcs.iso19206_3_car_rear 一样是 ISO 19206-3 的边界，经 NHTSA 报告转引。"
+
+  target_rcs.iso19206_3_car_rear_far_lower_dbsm:
+    value: 10.0
+    unit: dBsm
+    source: derived
+    cite: "target_rcs.iso19206_3_car_rear 的 p_far_dbsm − half_width_db"
+    note: "公式：P_FAR − ΔP = 20 − 10 = 10 dBsm，即 ISO 19206-3 给乘用车车尾、40 m 以外的 RCS 带的下界。fmcw_radar 原记的乘用车 10 dBsm 正好是它。"
+
+  # ------------------------------------------------------------ 三面角反射器（几何光学的峰值 RCS）
+  target_rcs.trihedral_peak:
+    value: {triangular: "4π a⁴ / (3 λ²)", square: "12π a⁴ / λ²", circular: "15.6 a⁴ / λ²", a: "interior edge dimension", boresight_grazing_deg: 35.26}
+    unit: "m², m², m², text, deg"
+    source: spec
+    cite: "A. W. Doerry, 'Reflectors for SAR Performance Testing', Sandia National Laboratories Report SAND2008-0396, January 2008（unlimited release），OSTI 929123，www.osti.gov/servlets/purl/929123；2026-11-14 读原文"
+    section: "2.1 The Trihedral 'Corner' Reflector；2.1.1 Triangular Trihedral（式 1、Table 1）；2.1.2 The Square Trihedral（式 4）；2.1.3 The Circular (Quarter-disc) Trihedral（式 7）；Figure 2"
+    quote: "We define ‘a’ as the dimension of the interior edge, likewise the height of the reflector if sitting with one plate flat, i.e. horizontal. [...] Consider a trihedral with sides comprised of isosceles right triangles. The peak RCS of such a trihedral is calculating using geometrical optics as σ_triangle,peak = 4π a⁴ / (3λ²) (1) where λ is the nominal wavelength. This assumes that edge dimension a is large with respect to a wavelength. [...] a grazing angle of tan⁻¹(1/√2) or approximately 35.26 degrees with any of the side plates. [...] For a trihedral corner reflector made up of square plates, as in Figure 2(b), the peak RCS is calculated as σ_square,peak = 12π a⁴ / λ² (4) [...] For a trihedral corner reflector made up of circular, or quarter-disc plates, as in Figure 2(c), the peak RCS is calculated as σ_circular,peak = 15.6 a⁴ / λ² (7)"
+    note: "几何光学下三面角反射器的峰值 RCS（a 远大于波长）；峰值方向与每块板成 35.26°，三角形的 −3 dB 宽度方位约 50°、俯仰约 40°。a 与 λ 都以 m 计。用原文 Table 1（Ku 波段，原文没写具体频率）复核：取 16.7 GHz，式 1 给 a = 12 / 16 / 20 英寸 20.5 / 25.5 / 29.4 dBsm，表上是 20.5 / 25.5 / 29.3，差不到 0.1 dB。反射器尺寸是用的人自己定的，本表不登记具体 RCS。按式 1，a = 10 cm 的三角形在 60 GHz 是 12.2 dBsm、77 GHz 是 14.4 dBsm；同尺寸的方形（式 4）多 9.5 dB（约 21.8 / 23.9 dBsm）。fmcw_radar 原记'10 cm 边、60 GHz、约 20 dBsm'，按三角形的式 1 实为 12.2 dBsm，接近 20 dBsm 的是方形。"

@@ -1,4 +1,4 @@
-# Vendored from spec_sources@e49979f4358476fc120de0045a013663613f67c1: src/spec_sources/data/adpll60.yaml
+# Vendored from spec_sources@f87cc9b54af9d6510e406d8356c04267fa1dd388: src/spec_sources/data/adpll60.yaml
 # Adapted-copy policy: see src/fmcw_radar/vendor/__init__.py
 # adpll60 —— 60 GHz 全数字锁相环（ADPLL）的测量值：TDC、带内相噪。
 #

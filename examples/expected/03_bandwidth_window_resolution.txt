@@ -1,4 +1,4 @@
-window | -3 dB width [bins] (own spectrum) | Harris 1978 (source: survey) | peak sidelobe [dB]
+window | -3 dB width [bins] (own spectrum) | Harris 1978 (source: spec) | peak sidelobe [dB]
   rect     |  0.884 |  0.89 |  -13.3
   hann     |  1.438 |  1.44 |  -31.5
   hamming  |  1.301 |  1.30 |  -42.7

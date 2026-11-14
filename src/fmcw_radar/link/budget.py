@@ -4,7 +4,7 @@ Received power of a point target of RCS sigma at range R::
 
     P_r = P_t G_t G_r lambda^2 sigma / ((4 pi)^3 R^4) / L_atm / L_extra
 
-``L_atm`` is the oxygen line's specific attenuation (dB/km, source: survey)
+``L_atm`` is the oxygen line's specific attenuation (dB/km, source: derived)
 over the round trip 2R.  The noise the beat signal competes with is the
 front end's thermal noise (``k T0 F``, referred to the ADC through the
 receive gain) plus the ADC's quantisation noise (a full-scale sine's SQNR

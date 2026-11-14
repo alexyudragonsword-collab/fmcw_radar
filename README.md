@@ -33,7 +33,7 @@ IF / ADC、窗与 CFAR、仿真。77 GHz 车载一档结构相同只换数(`conf
 | 模块 | 做什么 | 铁律 |
 |---|---|---|
 | `config/` | frozen `RadarConfig`、YAML 加载、表单字段声明(GUI 以后做) | 1 |
-| `sources.py` + `data/sources.yaml` | 每个不是设计决定的数:占位 `assumed`、文献 `survey`、原文 `spec`、由原文按公式算出的 `derived`;`upstream:` 指向共享库 spec_sources 的条目(只查找),加载时核对两边相等 | 5 |
+| `sources.py` + `data/sources.yaml` | 每个不是设计决定的数:占位 `assumed`、文献转述 `survey`(0.2.13 起没有这类条目)、原文 `spec`、由原文按公式算出的 `derived`;`upstream:` 指向共享库 spec_sources 的条目(只查找),加载时核对两边相等 | 5 |
 | `lo.py` | vendored ADPLL 的构造;LO 相噪剖面 = analyze() ×N²(fref/2 以上取 DCO 自身)或剖面文件 | 2 |
 | `phase_noise/` | range correlation:残余 PSD = 2(1 − cos 2πfτ)·S_φ,合成与闭式 | 2 |
 | `chirp/` | 斜坡经 event / response / ideal 引擎 → 瞬时频率误差曲线;离线 LS / 在线 sign-sign 两点校准 | 4, 6 |

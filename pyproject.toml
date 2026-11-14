@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fmcw-radar"
-version = "0.2.12"
+version = "0.2.13"
 description = "Behavioural simulation of 60 GHz wideband FMCW radar: ADPLL chirp generation, range-correlated LO phase noise, range-Doppler processing, statistical and time-domain engines"
 readme = "README.md"
 requires-python = ">=3.10"

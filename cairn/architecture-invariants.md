@@ -30,7 +30,7 @@ polar_tx(main,现 pin b007e60;最初 7057738)被 vendor 进来做 chirp 发生�
    时域引擎(5 GS/s 包络、真混频、砖墙 IF、ADC 量化)只做一致性检查:三个距离 < 1 dB(实测 −0.3 … −0.4 dB,见 LOG)。
 4. **chirp 非线性从环路来。** `chirp/engine.py` 直接驱动 vendored `ADPLL.simulate(mod_freq=...)`,`freq_out` 就是瞬时频率误差曲线;
    解析二次项是 `quadratic_reference`,带 `engine="quadratic"` 标签,引擎目录里没有任何调用(`test_law4_*`)。
-5. **目标是输入不是模型。** 点目标四个数由 config 给;RCS 取 `rcs.<kind>_dbsm`(survey)。外部来源的数全在 `data/sources.yaml`;0.2.8 起其中五条(60 GHz 的发射功率、NF、两个压缩点、隔离)
+5. **目标是输入不是模型。** 点目标四个数由 config 给;RCS 取 `rcs.<kind>_dbsm`(人体 spec、乘用车 derived,0.2.13 起经 spec_sources;角反射器是本库自选的测试目标,assumed)。外部来源的数全在 `data/sources.yaml`;0.2.8 起其中五条(60 GHz 的发射功率、NF、两个压缩点、隔离)
    带 `upstream:`,指向 vendored 的共享库 spec_sources(0.2.10 起;之前是 mmw60_trx 的来源表),加载时核对相等(`tests/test_sources.py`、`cairn/frontend-sources.md`)。
 6. **杂散只认逐周期引擎。** `ChirpResult.vouches_for_spurs` 只有 `event` 为真;`response` 的 note 写明"线性化,不能背书"。
 7. **数值指纹。** `tools/fingerprint.py` 记两个 bundled config + 7 个合成用例共 639 个值(标量 repr、数组 SHA-256),
