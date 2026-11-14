@@ -100,14 +100,14 @@ def test_profile_spurs_pass_through_the_same_difference(tmp_path):
 
 
 def test_exact_sideband_is_first_order_when_small_and_above_it_when_not(prof):
-    """At 5 m (0.05 rad residual) the Gaussian-phase spectrum is the S_res / 2
+    """At 5 m (0.08 rad residual on the 12.2 ps TDC; 0.05 on 0.2.11's 5 ps) the Gaussian-phase spectrum is the S_res / 2
     sideband; at 100 m (0.3 rad) the in-band noise beating with itself lays a
     floor near the tone that the first order does not have."""
     cfg = RadarConfig()
     near = RangeCorrelation(prof, cfg.tau_s(5.0))
     sb = near.beat_sideband(16e6, 1 << 16, 2.5e9)
     f = np.array([2e5, 5e5, 1e6, 2e6])
-    assert np.allclose(sb.sidelobe_dbc(f, 1e4), near.sidelobe_dbc(f, 1e4), atol=0.6)   # second order: +0.5 dB at 200 kHz
+    assert np.allclose(sb.sidelobe_dbc(f, 1e4), near.sidelobe_dbc(f, 1e4), atol=1.0)   # second order: +0.8 dB at 200 kHz (+0.5 on 5 ps)
     assert sb.carrier_loss_db == pytest.approx(10 * np.log10(np.exp(-sb.sigma2)), abs=1e-9)
     assert -0.3 < sb.carrier_loss_db < 0.0
     far = RangeCorrelation(prof, cfg.tau_s(100.0))

@@ -1,11 +1,11 @@
 ---
 type: project_topic
 status: active
-summary: "chirp 发生器 = vendored polar_tx 两点 ADPLL 喂斜坡:event 引擎在 chirp 上的有效域(495 % UI/周期可用;polar_tx#19 之后真正的条件是 TDC 量程盖住一个 DCO 周期,斜坡的代价是标称周期归一化)、频率误差曲线的数(TDC 量化底 ~0.54 MHz RMS、5 % 失配 200 MHz 阶跃 1.5 µs 建立)、dp_cal 在锯齿上的行为(原版发散、差分版慢收敛、离线 LS 一次到位)。"
+summary: "chirp 发生器 = vendored polar_tx 两点 ADPLL 喂斜坡:event 引擎在 chirp 上的有效域(495 % UI/周期可用;polar_tx#19 之后真正的条件是 TDC 量程盖住一个 DCO 周期,斜坡的代价是标称周期归一化)、频率误差曲线的数(0.2.12 起 TDC 是原文的 12.2 ps:量化底 ~1.25 MHz RMS、ISLR −22.6 dB、1 ps 抖动打不散量化 → 每帧 2.75 个鬼目标;5 ps 占位时 0.54 MHz;5 % 失配 200 MHz 阶跃 1.1–1.5 µs 建立)、dp_cal 在锯齿上的行为(原版发散、差分版慢收敛、离线 LS 一次到位)。"
 tags: [adpll, chirp, two-point, dp_cal, polar_tx]
 contains: [decision, lesson, experience]
 created: "2026-11-06"
-updated: "2026-11-12"
+updated: "2026-11-14"
 related: [architecture-invariants]
 authoring_mode: ai_generated
 ---
@@ -17,6 +17,28 @@ authoring_mode: ai_generated
 `event`(逐参考周期,`ADPLL.simulate(mod_freq=...)`),后者的有效域声明为"每参考周期相位推进 ≪ 1 UI"(BLE 0.8 %、EDR 4.2 % 可以,
 LTE-20 的 29 % 不行,polar_tx ROADMAP B1)。任务要求先量一次这个指标再决定 event 引擎能不能用。
 
+## 0.2.12:TDC 换成原文的 12.2 ps(fmcw_radar#17)
+
+- 60 GHz 频段的 `tdc_res_s` 从 5 ps 占位换成 Wu、Staszewski、Long(JSSC 2014,一颗 56.4–63.4 GHz FMCW ADPLL)的 12.2 ps,经 spec_sources(`adpll60.wu_jssc2014_tdc`)。
+  原文的 TDC 量 CKV/32,本库读 15 GHz DCO;时间步长照搬成立:带内底 L = (2π)²/12·(Δt·f_c)²/f_ref 只由绝对步长和载频决定。
+  60 GHz、100 MHz 参考:−77.54 dBc/Hz,原文理论 −78、实测 −77(1.5 MHz 环路带宽);本库剖面的 `tdc_quant` 在带内也是 −77.5(`tests/test_sources.py`)。
+  77 GHz 频段不套(另一颗假想芯片),仍是 5 ps 占位。TDC 抖动仍是 1 ps 占位:两篇原文都没给(spec_sources 查过)。
+- 量程 12.2 × 127 = 1549 ps,盖 23 个 DCO 周期(66.7 ps),`build_adpll` 不拒;每周期 5.5 码(5 ps 时 13)。
+- 数(默认 config,示例 00–02、04;5 ps 时的数在括号里):L(1 MHz) −75.9(−79.6)dBc/Hz,LO 自身 319.4(202.0)mrad,5 m 残余 84.0(55.3)mrad,
+  +1 m / +5 m 底 −58.4 / −47.7(−63.3 / −51.4)dBc/格;匹配增益误差底 1.25(0.54)MHz RMS,ISLR −22.6(−28.6)dB,PSL −31.6 不变;
+  5 % 失配飞回 1.06 µs 建立到 ±6.2 MHz(1.47 µs 到 ±4.0 MHz:量化底宽了,"建立"的门也宽了);在线校准 4 个 chirp 1.05 → 1.0007(1.0004);
+  event / response 比值 1.02 ± 0.19(1.005 ± 0.046,飞回后 40 个周期里量化底占的份量大了)。
+- **鬼目标(结论翻了,ROADMAP P1 #1(a))**:不抖动 −34.1 dBc @ −10.31 / ±2.81 m(−45.3 @ ±4.85 m);开噪声 32 个 ramp,抖动 0 / 0.5 / 1 / 2 ps
+  → −35.7 / −36.3 / −37.5 / −41.1 dBc,检出限 −52 … −56(−49.1 / −50.7 / −54.8 / 无)。1 ps 只有 0.08 格(5 ps 时 0.2 格),打不散量化。
+  默认 64 chirp:−37.3 … −39.7 dBc,5 m 人体下鬼目标 SNR +11 … +13.6 dB,**每帧 2.75 个**(0.00);抖动 1.8 / 2.44 / 3 ps 时 2.08 / 0.92 / 0.16 个。
+  **下面各节的数都是 5 ps TDC(0.2.11 及以前)量的**,除非写明 0.2.12;机理不变,数没有在 12.2 ps 上逐条重量。
+- 时域对闭式(示例 04 末表):noise=True 的曲线 + fref/2 以上的剖面,1–5 m 底均 +1.03 dB(+0.18),+1 / +3 m 高 1.7 dB——一帧里相干留下的鬼目标落在那些格上。
+  CW 死区(下面"坑"一节):1 ps 时 `simulate − analyze` 均 +14.9 dB(+5.5 … +10.9),半格要 6.1 ps。
+- **坑(contains:斜坡上也不再是线性剖面)**:5 ps 时斜坡本身就是 dither,逐周期引擎(noise=True)对剖面 0.6 dB 内。12.2 ps / 1 ps 时 100 / 300 kHz 差 −3.5 / +3.4 dB,
+  一帧 1–5 m 的 LO 底比闭式高到 1.5 dB;抖动 2.44 ps(0.2 格)−1.8 / +2.2,6.5 ps(半格)−1.0 / +1.2、底 0.8 dB 内。不抖动的图样本身(noise=False)也不再像白量化:
+  100 / 300 kHz −7.0 / +3.8 dB(每周期 5.5 码;5 ps 时 13 码,2 dB 内)。所以 `tests/test_lo_noise_split.py` 的账目检查改在"12.2 ps + 半格抖动"上做,
+  量化形状的两条留在 5 ps 上,另加一条守着默认的偏离(`test_the_default_tdc_is_not_dithered_enough_for_the_profile`)。剖面是"抖够了的环路"的答案,默认没抖够。
+
 ## 当前结论
 
 - **指标量了:4.95 UI/周期(495 %)**,默认 config(15 GHz DCO、1 GHz 斜坡、fref 100 MHz):斜坡偏差 ±500 MHz 除以 fref。
@@ -24,13 +46,13 @@ LTE-20 的 29 % 不行,polar_tx ROADMAP B1)。任务要求先量一次这个指�
 - **但引擎本身在斜坡上行为正常,判断是:指标不适用于 chirp,引擎可用。** 理由:polar_tx 的指标针对的是 *亚周期相位轨迹*
   (GFSK/OFDM 的相位要靠 TDC 在一个 DCO 周期窗内分辨);计数器辅助的 ADPLL 对整数 DCO 周期用计数器、只对小数用 TDC,
   频率斜坡是环路的本职(分数 FCW 就是一个斜坡)。证据(`tests/test_chirp.py`、示例 02):
-  - 5 % 两点失配时,event 与 response 在飞回后前 40 个周期逐周期一致:比值 1.005 ± 0.046;初始误差 199.4 vs 200.0 MHz(载波处)。
-  - 匹配增益时 event 的误差只剩量化底:**载波处 ~0.54 MHz RMS**(5 ps TDC 在 15 GHz DCO 上约 13 码/周期,经比例路径 α = 0.054 → ~2 LSB Kdco);
+  - 5 % 两点失配时,event 与 response 在飞回后前 40 个周期逐周期一致:比值 1.005 ± 0.046;初始误差 199.4 vs 200.0 MHz(载波处)(5 ps TDC;12.2 ps 时 1.02 ± 0.19)。
+  - 匹配增益时 event 的误差只剩量化底:**载波处 ~0.54 MHz RMS**(5 ps TDC 在 15 GHz DCO 上约 13 码/周期,经比例路径 α = 0.054 → ~2 LSB Kdco;12.2 ps 时 1.25 MHz);
     TDC 1 ps 时底降到一半以下。
   - 5 % 失配:飞回阶跃 eps·B = 200 MHz,环路(1 MHz UGB)在 1.47 µs 内建立到 ±2 %(response 1.10 µs);斜坡末尾误差 < 5 % 阶跃。
 - **更正(2026-11-12,polar_tx#19 的答复,见本文"polar_tx#19 的答复与重新 pin"一节)**:上面"指标针对亚周期相位轨迹"的读法方向对、原因没说对。
   polar_tx 查到 LTE-20 失败是因为它的 TDC 量程只盖 0.25 个 DCO 周期(每周期饱和),与推进量无关;推进量的告警已删,指标只作描述。
-  本库的 TDC(5 ps × 127 = 635 ps)盖 9.5 个周期(66.7 ps),所以 495 % 照样跟得上。
+  本库的 TDC(5 ps × 127 = 635 ps)盖 9.5 个周期(66.7 ps),所以 495 % 照样跟得上。0.2.12 起 12.2 ps × 127 = 1549 ps,盖 23 个。
 - 所以 chirp 引擎直接驱动 `pll.simulate`(不经 `ADPLLTwoPoint._mod_event`,后者做去趋势;polar_tx a6c65f0 之前还会按推进量告警),`freq_out − (fout + mod)` 就是曲线;
   指标仍算出来放在 `ChirpResult.ui_per_ref_cycle_p99` 和报表里。response 仍经 `ADPLLTwoPoint`,作为线性参照和离线校准的回归量来源。
 - "DTC 量化"在 TDC 模式 ADPLL 里对应的是 **TDC + DCO 量化**(两点调制和 `dp_cal` 只在 TDC 模式有;dtc_bbpd 模式不接受 mod_freq)。
@@ -83,20 +105,24 @@ LTE-20 的 29 % 不行,polar_tx ROADMAP B1)。任务要求先量一次这个指�
   报表现在把这条接出来(`lo.parked_lo`、`LOProfile.notes`,相噪一节下的"The LO while it is not ramping"):死区只在 LO **停着**的频率是参考的整数倍时才有,
   所以分开看载波处(CW,默认 FCW 150)和斜坡起点(`chirp.idle_s` 停在那里,默认 FCW 145);2 GHz 扫频的起点是 147.5,分数 N,不在死区。
   测试用两条独立实现守着这个标记:被标的(1 ps)逐周期引擎在 30–300 kHz 平均比线性分析高 > 4 dB(量到 +7.8),没被标的(5 ps)在 ±2 dB 内(量到 +0.5)。
+  0.2.12 起 TDC 12.2 ps:被标的 1 ps 量到 +14.9,没被标的换成 6.5 ps(0.53 格)量到 +1.1;5 ps 在 12.2 ps 上是 0.41 格,被标,+0.9。
 - **文件剖面(0.2.9,更正上一句"没做的:文件没有分项")**:`tools/export_lo_profile.py` 导出的文件带 `components`(同单位),读回来与在线分析同样拆分。
   外来文件(别的合成器的噪声,比如 mmw60_trx 的 ×10)在 event 引擎下:chirp 仍是本库两点 ADPLL 生成的,逐周期曲线带着它的 TDC / DCO 量化,文件不知道这件事;
   剖面因此加上在线分析的这两项(`components` = file + tdc_quant + dco_quant),统计引擎算进去,时域引擎从合成里拿掉(曲线已经是它)。ideal 引擎下文件原样。
   之前:时域把曲线叠在整份文件上、统计引擎一项都没算——×10 文件下 1–5 m 的底时域比闭式高 10–15 dB(−65.0 / −57.9 / −54.7 / −54.5 对 −75.9 / −72.0 / −70.4 / −69.3 dBc/格);
   现在闭式 −65.7 / −59.3 / −56.7 / −56.4,差 +0.7 / +1.3 / +2.1 / +1.9(示例 04 末表)。剩下的差是曲线不抖动的图样:文件下没有东西给 TDC dither,鬼目标是 −45.3 dBc @ ±4.85 m。
+  (5 ps TDC 时;12.2 ps 时 +1 / +2 / +3 / +5 m 差 +2.00 / −1.54 / +3.19 / +0.12,鬼目标 −34.1 dBc @ −10.31 / ±2.81 m。)
 - **结论(contains:lesson):换更好的 LO 不够,发生器的 TDC 才是带内的底**。×10 文件本身 L(100 kHz / 1 MHz / 4 MHz) −92.1 / −98.6 / −110.3 dBc/Hz,
   加上 5 ps TDC 的量化后 −84.3 / −85.1 / −97.8(占位 ADPLL −82.5 / −79.6 / −92.2);5 m 处残余 55.3 → 29.2 mrad(文件单独 6.9),+1 m / +5 m 的底 −63.3 / −51.4 → −66.9 / −57.0 dBc/格
   (文件单独 −76.6 / −69.9)。要拿到 ×10 LO 的那 13 dB,chirp 发生器的 TDC 得细到相应程度(量化功率随 t_res² 走)。示例 01 末表。
+  0.2.12 起发生器的 TDC 是原文的 12.2 ps,差距更大:×10 文件 + 量化 −77.2 / −77.5 / −90.2,残余 69.6 mrad(本库自己的 LO 84.0),+1 m / +5 m 底 −59.4 / −49.4。
+  原文自己说把 TDC 做到 4 ps 带内低 9.7 dB——即使那样,带内仍是 TDC,不是 ×10 LO。
 - response 引擎的 noise=True 没核对过它加了什么,时域引擎拒绝它。
 
 ## TDC 抖动:既是噪声也是 dither(P1 #1(a),0.2.6)
 
 - `lo.tdc_jitter_s`(None → 占位 1 ps RMS,`assumed`,5 ps TDC 的 0.2 LSB)进 `TDCConfig.jitter_rms_s`。之前 `build_adpll` 把它留在 0,而且这个 0 不在 `sources.yaml` 里。
-- **线性模型里的一项**:TDC 抖动是与量化误差同一节点的白时间误差,所以形状同 `tdc_quant`、功率是它的 12σ²/t_res²(1 ps / 5 ps:0.48 倍)。pllsim 的 `analyze()` 当时没有这一项
+- **线性模型里的一项**:TDC 抖动是与量化误差同一节点的白时间误差,所以形状同 `tdc_quant`、功率是它的 12σ²/t_res²(1 ps / 5 ps:0.48 倍;0.2.12 起 1 ps / 12.2 ps:0.08 倍,L(1 MHz) 只抬 0.25 dB)。pllsim 的 `analyze()` 当时没有这一项
   (pll_simulator#76),`LOProfile.from_config` 自己加(`components["tdc_jitter"]`);0.2.7 重新 pin 后 `analyze()` 自带这一项(同一个式子,相对差 2e-16),本库那段代码删了。L(1 MHz) −80.2 → −79.6 dBc/Hz,LO 自身 186.7 → 202.0 mrad。
   斜坡上逐周期引擎(noise=True)对这个剖面,0.3 / 1 / 3 / 10 MHz:抖动 0 ps −0.1 / −0.3 / +0.3 / +0.1 dB,1 ps +0.2 / −0.2 / −0.1 / +0.1,2 ps +0.1 / −0.4 / 0.0 / 0.0,5 ps 0.0 / −0.3 / −0.3 / −0.2。
 - **鬼目标看一帧里什么是相干的**(`coherent_spurs`):各 ramp 的距离谱相干平均与非相干平均;杂散 = 相干平均里的局部极大,在窗自己的裙边之外(比无误差响应高 6 dB)、
@@ -108,6 +134,7 @@ LTE-20 的 29 % 不行,polar_tx ROADMAP B1)。任务要求先量一次这个指�
 - 时域引擎默认用这条带噪声的曲线(`run_time` 的 `chirp_noise` 缺省:event 引擎、没有 `lo.profile` 文件、相噪开关开着时为真),与统计引擎的鬼目标表读的是同一次逐周期运行
   (`chirp.noisy_chirp`,按 LO / 斜坡 / seed / chirp 数缓存最近 4 次)。显式传进来的曲线照用;`chirp_noise=False` 是不抖动的图样。
 - **被推翻的判断(contains:lesson)**:"鬼目标是物理的、开噪声后不消失、pllsim 没有 dither"(0.1.1)。它是"TDC 抖动为零"这个没登记的占位的结果:1 ps 抖动就把 −45 压到 −55 dBc。
+  **更正(0.2.12)**:那是 5 ps TDC 上 0.2 格的抖动;换成原文的 12.2 ps 后同样 1 ps 只有 0.08 格,鬼目标 −37.5 dBc,全过检出限(上面 0.2.12 一节)。打散量化要的是"抖动 / 步长",不是抖动本身。
   凡是进了 vendored 构造函数却没走 `sources.yaml` 的默认值,都是没标来源的占位。
 - **坑(contains:把一行噪声的极大值读成杂散)**:2026-11-11 复核时在 32 chirp 时域图的目标多普勒行上读 9.85 m ±6 cm 内的最大值,抖动 1 ps 时 −61.6 dBc,就写了"鬼目标降到 −61"。
   那一行的中位是 −69.6 dBc,几十个格里的最大值本来就高 8 dB——读到的是噪声。真正的相干杂散换到了别的偏移,−55 dBc。要说"有 / 没有杂散"得有显著性判据,所以才有上面的搜索。

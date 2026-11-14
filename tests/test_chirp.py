@@ -44,11 +44,12 @@ def test_validity_metric_is_measured_and_far_outside_polar_tx_domain(cfg60):
 def test_tdc_must_span_a_dco_period():
     """polar_tx's finding behind its B1: the counter reads whole cycles and
     the TDC the fraction, so a TDC shorter than one DCO period saturates.
-    Ours spans 9.5 periods; one that does not is refused, not simulated."""
+    Ours spans 23 periods (12.2 ps x 127; 9.5 on the 5 ps placeholder before
+    0.2.12); one that does not is refused, not simulated."""
     from fmcw_radar.lo import build_adpll
 
     pll = build_adpll(RadarConfig())
-    assert pll.cfg.tdc.t_res * (2 ** pll.cfg.tdc.n_bits - 1) * pll.cfg.fout == pytest.approx(9.525, abs=0.01)
+    assert pll.cfg.tdc.t_res * (2 ** pll.cfg.tdc.n_bits - 1) * pll.cfg.fout == pytest.approx(23.241, abs=0.01)
     for engine in ("event", "response", "ideal"):                 # 51 ps against 66.7 ps: no engine takes it
         with pytest.raises(ValueError, match="must span one period"):
             build_adpll(apply_overrides(RadarConfig(), {"lo.tdc_res_s": 0.4e-12, "lo.engine": engine}))
@@ -77,18 +78,21 @@ def test_mismatch_leaves_eps_times_the_step_and_the_loop_settles_it():
 
 
 def test_event_and_response_engines_agree_on_the_transient():
-    """Cycle by cycle on the first 40 cycles after the flyback (5 % mismatch):
-    the quantisation floor apart, the two engines are one loop."""
+    """Cycle by cycle on the first 40 cycles after the flyback (5 % mismatch,
+    a 200 MHz step): the quantisation apart, the two engines are one loop.
+    The event engine's quantisation peaks at 2.8 MHz on the 12.2 ps TDC
+    (1.4 MHz on the 5 ps placeholder before 0.2.12): the bound is that peak."""
     ce = ChirpEngine(_cfg(**{"lo.dp_gain": 1.05, "lo.dp_cal": "none"})).run().ramp_carrier(2)
     cr = ChirpEngine(_cfg(**{"lo.dp_gain": 1.05, "lo.dp_cal": "none", "lo.engine": "response"})).run().ramp_carrier(2)
     k = np.arange(0, 40)
-    assert np.allclose(ce[k], cr[k], rtol=0.03, atol=1.5e6)
+    assert np.allclose(ce[k], cr[k], rtol=0.03, atol=3.0e6)
     assert np.std(ce[-2000:]) > 1e5 and np.std(cr[-2000:]) < 1.0      # event: TDC / DCO quantisation; response: none
 
 
 def test_matched_loop_error_is_the_quantisation_floor():
     """With matched gains the only error is TDC and DCO quantisation through
-    the loop: ~0.5 MHz RMS at the carrier for a 5 ps TDC on a 15 GHz DCO x4,
+    the loop: ~1.2 MHz RMS at the carrier for the 12.2 ps TDC on a 15 GHz DCO x4
+    (~0.5 MHz for the 5 ps placeholder before 0.2.12),
     and it does not depend on the ramp (same on every ramp)."""
     r = ChirpEngine(_cfg(**{"lo.dp_cal": "none"})).run()
     rms = [np.std(r.ramp_carrier(k)) for k in (1, 2)]

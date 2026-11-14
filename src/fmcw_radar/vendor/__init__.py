@@ -47,18 +47,19 @@ Pins
   ``configs/radar_60g_x10lo.yaml`` (a YAML file carries the same attribution
   header in its ``#`` comments and is compared byte for byte like a module).
 
-* ``spec_sources/`` -- spec_sources @ ``dfaa36b67a144eb53acf692727efd431c4ac34e4``
-  (its ``main``, milestone 2 batch 4), the siblings' shared table of outside numbers:
+* ``spec_sources/`` -- spec_sources @ ``e49979f4358476fc120de0045a013663613f67c1``
+  (its ``main``, fmcw_radar#17), the siblings' shared table of outside numbers:
 
   - ``reader.py`` (``ref()`` / ``value()`` / ``survey()``, lookup only),
   - ``data/frontend60.yaml`` (the 60 GHz radar chip's figures and Figure 7-2,
     the TX-RX isolation and its derived no-EBG figure),
   - ``data/atmosphere.yaml`` (ITU-R P.676-13: the oxygen lines, the method,
     the derived sea-level oxygen attenuation),
-  - ``data/radar_targets.yaml`` (the pedestrian RCS).
+  - ``data/radar_targets.yaml`` (the pedestrian RCS),
+  - ``data/adpll60.yaml`` (the 60 GHz FMCW ADPLL's TDC resolution, 12.2 ps).
 
   ``fmcw_radar.sources`` reads the five 60 GHz front-end figures, the two
-  oxygen attenuations and the human RCS by reference
+  oxygen attenuations, the human RCS and the 60 GHz TDC resolution by reference
   (``upstream:`` in ``data/sources.yaml``).  ``Frontend60`` is not vendored
   from mmw60_trx: it stands on wifitrx's whole chain, and its surveyed
   baseline is a communication transceiver, which leaves blank the figure a

@@ -5,7 +5,7 @@ summary: "距离–多普勒图上的 CA-CFAR 不是教科书那个:窗与零填
 tags: [cfar, pfa, window, zero-padding, correlation, detection]
 contains: [decision, lesson, experience]
 created: "2026-11-10"
-updated: "2026-11-12"
+updated: "2026-11-14"
 related: [mimo-angle, architecture-invariants]
 authoring_mode: ai_generated
 ---
@@ -66,8 +66,12 @@ authoring_mode: ai_generated
 - 鬼目标 = chirp 误差里每个 ramp 都相同的那部分:和目标同多普勒、相干累积,当作 SNR = 目标每 look SNR + 电平(dBc)的稳态目标,`cfar_pd` 给它的 Pd,
   视野内的求和就是每帧"既不是目标也不是噪声"的检测数(`StatResult.cfar["ghosts"]`、`ghost_detections_per_frame`,报表有表)。
 - **电平从哪来(0.2.6 改)**:一帧的 ramp 开着环路噪声跑,距离谱相干平均里显著的局部极大(`coherent_spurs`,`cairn/chirp-engine.md`)。
-  占位的 1 ps TDC 抖动下 −55 … −57 dBc:64 chirp、5 m 人体(每 look 51.1 dB)鬼目标 SNR −4 dB,每帧 **0.00** 个;示例 00 实际主瓣外 9 格对期望 10.5 个噪声虚警格。
+  (5 ps TDC 时)占位的 1 ps TDC 抖动下 −55 … −57 dBc:64 chirp、5 m 人体(每 look 51.1 dB)鬼目标 SNR −4 dB,每帧 **0.00** 个;示例 00 实际主瓣外 9 格对期望 10.5 个噪声虚警格。
   抖动设成 0 时 −49 dBc:32 chirp 角反射器目标下视野内的鬼目标 Pd > 0.95,时域引擎的图上同一处有检测格(测试守着)。
+- **0.2.12(fmcw_radar#17,TDC 换成原文的 12.2 ps)结论翻了**:同样 1 ps 抖动只有 0.08 格,打不散量化。默认 64 chirp、5 m 人体(每 look 50.9 dB):
+  鬼目标 −37.3 … −39.7 dBc(+2.81、−10.31、−2.81、+8.43 m …),SNR +11.2 … +13.6 dB,视野内三个 Pd 0.98 / 0.98 / 0.79,**每帧 2.75 个**;
+  示例 00 主瓣外 35 格(10.5 个噪声虚警格 + 鬼目标,成团);示例 05 的四目标帧里 +10 dBsm 的车让超门限格从 70 到 284。
+  上面"占位的 1 ps 下 −55 … −57、0.00 个"是 5 ps TDC 时的。抖动 1.8 / 2.44 / 3 ps 时每帧 2.08 / 0.92 / 0.16 个(ROADMAP P1 #1(a))。
 - 更正记录:0.2.4 的数(人体 0.03、0 dBsm 2.78 对时域 2.00、车 5 对 5)用的是 noise=False 单 ramp 的不抖动图样(−45 dBc);2026-11-11 那条更正里写的"1 ps 时约 −61 dBc"
   读的是那一行噪声的极大值,不是杂散——相干搜索给的是 −55 dBc,换了位置。
 - **坑(contains:示例 00 主瓣外的 12 个格不是量化杂散)**:0.1.x 起示例 00 把主瓣外的过阈格标成"逐周期引擎的量化杂散"。64 chirp 帧期望 10.5 个噪声虚警格

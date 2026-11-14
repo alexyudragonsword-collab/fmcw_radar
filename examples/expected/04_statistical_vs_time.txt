@@ -2,29 +2,29 @@ cell SNR, 32 chirps, three ranges (statistical 'expected': the radar equation le
 scalloping at the target's fractional bins, over the thermal floor plus the LO's residual noise averaged
 over the band -- what the time engine's map-wide noise estimate sees):
   range [m] | radar equation [dB] | on the grid [dB] | expected [dB] | time engine [dB] | difference [dB]
-          2 |               64.33 |            63.16 |         62.76 |            62.70 |           -0.06
-          5 |               48.33 |            47.21 |         47.09 |            47.02 |           -0.07
-         10 |               36.14 |            34.99 |         34.87 |            34.82 |           -0.05
+          2 |               64.33 |            63.16 |         62.28 |            62.45 |           +0.18
+          5 |               48.33 |            47.21 |         46.94 |            46.92 |           -0.01
+         10 |               36.14 |            34.99 |         34.71 |            34.67 |           -0.04
 
 phase-noise floor around the target at 5 m, Blackman window, 64 chirps averaged, +-5 bins:
   offset [m] | closed form [dBc/bin] | measured [dBc/bin] | difference [dB]
-           1 |                -62.43 |             -62.33 |           +0.10
-           2 |                -54.42 |             -54.44 |           -0.02
-           5 |                -50.75 |             -51.19 |           -0.44
+           1 |                -57.51 |             -57.40 |           +0.11
+           2 |                -50.34 |             -50.38 |           -0.04
+           5 |                -47.13 |             -47.58 |           -0.45
 
 the LO's noise floor with the chirp engine's error curve in the frame (32 chirps, Blackman, +-12 bins), against the closed form of the whole profile -- nothing may be counted twice:
   who carries what                                                              | +1 m | +2 m | +3 m | +5 m | mean [dB]
-  profile: everything (no curve)                                                | +0.28 | +0.00 | +0.04 | +0.03 | +0.09
-  curve: TDC + DCO quantisation (noise off); profile: the rest                  | +0.26 | +0.09 | +0.38 | +0.72 | +0.36
-  curve: the loop to fref/2 (noise on); profile: above fref/2                   | +0.39 | -0.03 | +0.21 | +0.16 | +0.18
-  the same curve laid over the *whole* profile (what the time engine did up to 0.2.4): +0.99 dB on the 1-5 m floor -- the TDC's quantisation once as the curve's pattern and once more as the profile's noise term
+  profile: everything (no curve)                                                | +0.28 | +0.02 | +0.05 | +0.03 | +0.09
+  curve: TDC + DCO quantisation (noise off); profile: the rest                  | +1.59 | -1.30 | +2.43 | -0.06 | +0.67
+  curve: the loop to fref/2 (noise on); profile: above fref/2                   | +1.67 | -0.06 | +1.72 | +0.80 | +1.03
+  the same curve laid over the *whole* profile (what the time engine did up to 0.2.4): +2.10 dB on the 1-5 m floor -- the TDC's quantisation once as the curve's pattern and once more as the profile's noise term
   (curve: TDC and DCO quantisation (cycle-accurate); profile: everything else)
   with mmw60_trx's x10 noise file (configs/radar_60g_x10lo.yaml; the closed form is the file plus the generator's quantisation):
-  profile: everything (no curve)                                                | +0.35 | -0.09 | +0.06 | -0.12 | +0.05
-  curve: TDC + DCO quantisation (noise off); profile: the file                  | +0.67 | +1.34 | +2.14 | +1.91 | +1.51
+  profile: everything (no curve)                                                | +0.33 | -0.09 | +0.05 | -0.10 | +0.05
+  curve: TDC + DCO quantisation (noise off); profile: the file                  | +2.00 | -1.54 | +3.19 | +0.12 | +0.94
   (no dither under a file: the curve's pattern stays coherent, and its ghosts sit 3-5 m out)
 
 chirp nonlinearity: the ADPLL curve fed into one FFT vs the time engine mixing the same curve (5 % mismatch, no calibration, no noise, target at rest so both lobes sit on the same bins):
-  statistical: -3 dB width 5.39 cm, peak sidelobe -31.5 dB, ISLR -28.9 dB
-  time engine: -3 dB width 5.39 cm, peak sidelobe -31.5 dB
-  profiles within +-60 cm, where above -60 dB: max |difference| 0.00 dB, RMS 0.00 dB
+  statistical: -3 dB width 5.39 cm, peak sidelobe -31.6 dB, ISLR -23.0 dB
+  time engine: -3 dB width 5.39 cm, peak sidelobe -31.6 dB
+  profiles within +-60 cm, where above -60 dB: max |difference| 0.10 dB, RMS 0.03 dB

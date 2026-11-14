@@ -4,6 +4,23 @@
 
 ---
 
+## [0.2.12] — 2026-11-14 — 60 GHz 的 TDC 读原文的 12.2 ps;默认配置出现鬼目标检出
+
+- fmcw_radar#17(spec_sources 发起):spec_sources 重新 pin 到 `e49979f`,多 vendor 一张表 `data/adpll60.yaml`(其余四个文件相对 `dfaa36b` 不变)。
+- **`60g_sensing.tdc_res_s` 5 ps(assumed)→ 12.2 ps(spec)**:Wu、Staszewski、Long,IEEE JSSC 49(5) 2014 §VI.A,一颗 56.4–63.4 GHz FMCW ADPLL,
+  `upstream: spec_sources:adpll60.wu_jssc2014_tdc#tdc_res_s`。时间步长照搬到本库的 15 GHz ×4 环路:带内底只由步长和载频决定,本库剖面的 TDC 项 −77.5 dBc/Hz
+  对原文理论 −78、实测 −77。77 GHz 频段不套,仍 5 ps 占位;TDC 抖动仍 1 ps 占位(两篇原文都没给,cite 里写明)。来源表 24 assumed / 7 spec / 6 survey / 2 derived。
+- 后果(默认 config):L(1 MHz) −79.6 → −75.9 dBc/Hz,5 m 残余 55.3 → 84.0 mrad,+1 / +5 m 底 −63.3 / −51.4 → −58.4 / −47.7 dBc/格,期望格点 SNR 51.09 → 50.91 dB;
+  chirp 量化底 0.54 → 1.25 MHz RMS,ISLR −28.6 → −22.6 dB。**鬼目标结论翻了**:1 ps 抖动只有 0.08 格(5 ps 时 0.2 格),打不散量化,
+  最强 −54.8 → −37.3 dBc,每帧检出 0.00 → **2.75** 个(示例 00 主瓣外 22 → 35 格;示例 05 四目标帧 70 → 284 格)。ROADMAP P1 #1(a) 改写。
+- CW 死区:1 ps 时 `simulate − analyze` 均 +14.9 dB(5 ps TDC 时 +5.5 … +10.9),半格要 6.1 ps;测试的"不被标"对照从 5 ps 换成 6.5 ps。
+- 同一个原因,斜坡上逐周期引擎对线性剖面在 100 / 300 kHz 差 ±3.5 dB(5 ps 时 0.6 dB 内,半格抖动回到 1.2 dB 内)。测试:`test_lo_noise_split` 的账目检查改在
+  "12.2 ps + 半格抖动"上,量化形状两条留在 5 ps,新加一条守着默认的偏离;鬼目标、死区、chirp 的机理测试改写成新数并保留 5 ps 的对照。
+- `data/clock_profiles/adpll_15g_fingerprint.yaml` 用 `tools/export_lo_profile.py` 从新默认重新导出;示例 01 的说明行改读 config 的 TDC 值(原来写死 "5 ps")。
+- 指纹(numbers-move):2035 个值里 720 个动(1979 → 2035:过检出限的鬼目标多了);全部经 LO / chirp 传下来。77 GHz 配置、response 引擎的 chirp、接收功率与热噪声逐位不变。
+
+---
+
 ## [0.2.11] — 2026-11-13 — 氧气衰减与人体 RCS 对上原文;新增 `derived` 标签
 
 - fmcw_radar#15(spec_sources 发起):spec_sources 重新 pin 到 `dfaa36b`,多 vendor 两张表(`data/atmosphere.yaml`、`data/radar_targets.yaml`)。

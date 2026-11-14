@@ -83,7 +83,7 @@ for label, c in (("placeholder 15 GHz ADPLL x4 (its own analysis)", cfg),
     l_ = [float(p_.l_dbc(f)) for f in (1e5, 1e6, 4e6)]
     print(f"  {label:52s} | {l_[0]:10.1f} | {l_[1]:8.1f} | {l_[2]:8.1f} | {st_.lo_rms_rad * 1e3:13.1f} | {st_.pn_rms_rad * 1e3:19.2f} | "
           f"{st_.pn_floor[1.0][0]:7.1f} / {st_.pn_floor[5.0][0]:6.1f}")
-print("  (in band the generator's 5 ps TDC, not the x10 LO, sets the floor: its quantisation is in the chirp curve whatever noise\n"
+print(f"  (in band the generator's {cfg.lo_value('tdc_res_s')[0] * 1e12:g} ps TDC, not the x10 LO, sets the floor: its quantisation is in the chirp curve whatever noise\n"
       "   file is named, and the file does not know of it -- the profile adds the two terms once; the file's 6 spurs ride on top)")
 
 plt = plt_or_none()
