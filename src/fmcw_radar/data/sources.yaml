@@ -249,38 +249,51 @@ entries:
   rcs.car_dbsm:
     value: 10.0
     unit: dBsm
-    source: survey
-    cite: "passenger car RCS at 77 GHz quoted as ~10 dBsm (automotive radar literature surveys; original measurements not read)"
-    note: "未核实。"
+    source: derived
+    upstream: "spec_sources:target_rcs.iso19206_3_car_rear_far_lower_dbsm"
+    cite: "ISO 19206-3:2021's RCS band for a passenger car approached from the rear, as quoted in R. Zeits et al., 'Passenger Vehicle Surrogate Test Target Radar Return Repeatability', NHTSA DOT HS 813 648, Jan. 2025 (Tables 8-9; ISO itself not read); read in the original by spec_sources (2026-11-14)"
+    note: "公式:P_FAR − ΔP = 20 − 10 = 10 dBsm,即 ISO 19206-3 给乘用车车尾、40 m 以外那条 RCS 带的下界(带子中心 20 dBsm,76–77 GHz 雷达)。为什么取下界不取中心:近距离时 ISO 的中心按 20 − 0.013·(D − 40 m)² 往下降,15 / 10 / 5.3 m 处约 11.9 / 8.3 / 4.3 dBsm,本库的场景都在 15 m 以内,10 dBsm 比 20 更近;但本库的 RCS 不随距离变(ROADMAP)。只是车尾一个视角;侧面(90°)30 m 处是 13–30 dBsm。用在 60 GHz 档是外推,与行人 RCS 同。0.2.12 及以前标 survey(转述,未读原文),数相同。"
   rcs.corner_reflector_dbsm:
     value: 20.0
     unit: dBsm
-    source: survey
-    cite: "a trihedral corner reflector of ~10 cm edge at 60 GHz: sigma = 4 pi a^4 / (3 lambda^2) ~ 10^2 m^2 (textbook formula; a convenient test target, not a measurement)"
-    note: "未核实:按公式量级,未对照实物。"
+    source: assumed
+    cite: "this library's choice of test target: a triangular trihedral of 15.6 cm interior edge at 60 GHz (13.8 cm at 77 GHz), peak RCS by A. W. Doerry, 'Reflectors for SAR Performance Testing', Sandia SAND2008-0396, 2008, eq. (1): sigma = 4 pi a^4 / (3 lambda^2) (spec_sources:target_rcs.trihedral_peak, read in the original 2026-11-14)"
+    note: "占位(反射器的大小与形状是用的人定的,原文只给公式):60 GHz、a = 15.6 cm 时 4πa⁴/(3λ²) = 100 m² = 20.0 dBsm,峰值方向与每块板成 35.26°。两个频段共用这一个数:同一个反射器到 77 GHz 多 20 lg(77/60) = 2.17 dB,所以 77 GHz 档的 20 dBsm 对应 13.8 cm 的反射器。**更正(0.2.13)**:原 cite 写'约 10 cm 边、60 GHz,σ ~ 10² m²',按同一个公式 10 cm 只有 16.8 m² = 12.2 dBsm(方形 21.8);数保持 20 dBsm,改的是尺寸(fmcw_radar#19)。"
 
   # ---------------------------------------------------------------- 窗函数主瓣宽度(survey,Harris 1978 表)
   window.rect_3db_bins:
     value: 0.89
     unit: bins
-    source: survey
-    cite: "F. J. Harris, 'On the use of windows for harmonic analysis with the DFT', Proc. IEEE 1978, Table I: -3 dB mainlobe width of the rectangular window (two-digit table value; original table not re-read)"
-    note: "未核实:两位有效数字;示例 03 与 tests/test_processing.py 用它做 5 % 以内的对照。"
+    source: spec
+    upstream: "spec_sources:harris1978.rect#bw_3db_bins"
+    cite: "F. J. Harris, 'On the use of windows for harmonic analysis with the discrete Fourier transform', Proc. IEEE vol. 66 no. 1, pp. 51-83, Jan. 1978; read in the original by spec_sources (2026-11-14)"
+    section: "Table I 'Windows and Figures of Merit' (p. 55), rectangle row, 3.0-dB BW column"
+    quote: "TABLE I WINDOWS AND FIGURES OF MERIT -- columns: highest side-lobe level (dB) | side-lobe fall-off (dB/oct) | coherent gain | equiv. noise BW (bins) | 3.0-dB BW (bins) | scallop loss (dB) | worst case process loss (dB) | 6.0-dB BW (bins) | overlap correlation 75% OL | 50% OL. RECTANGLE | -13 | -6 | 1.00 | 1.00 | 0.89 | 3.92 | 3.92 | 1.21 | 75.0 | 50.0"
+    note: "两位有效数字,DFT-even 定义(Harris p. 52,即 scipy 的 sym=False,与 processing/windows.py 相同);spec_sources 按定义复算 0.886。示例 03 与 tests/test_processing.py 用它做 5 % 以内的对照。0.2.12 及以前标 survey(未读原文),数相同。"
   window.hann_3db_bins:
     value: 1.44
     unit: bins
-    source: survey
-    cite: "Harris 1978, Table I: Hanning (alpha = 2) -3 dB width"
-    note: "未核实。"
+    source: spec
+    upstream: "spec_sources:harris1978.hann#bw_3db_bins"
+    cite: "F. J. Harris, 'On the use of windows for harmonic analysis with the discrete Fourier transform', Proc. IEEE vol. 66 no. 1, pp. 51-83, Jan. 1978; read in the original by spec_sources (2026-11-14)"
+    section: "Table I 'Windows and Figures of Merit' (p. 55), COS^alpha(X) HANNING, alpha = 2.0 row, 3.0-dB BW column"
+    quote: "TABLE I WINDOWS AND FIGURES OF MERIT -- columns: highest side-lobe level (dB) | side-lobe fall-off (dB/oct) | coherent gain | equiv. noise BW (bins) | 3.0-dB BW (bins) | scallop loss (dB) | worst case process loss (dB) | 6.0-dB BW (bins) | overlap correlation 75% OL | 50% OL. COS^alpha(X) HANNING, alpha = 2.0 | -32 | -18 | 0.50 | 1.50 | 1.44 | 1.42 | 3.18 | 2.00 | 65.9 | 16.7"
+    note: "DFT-even 定义(Harris p. 52,即 scipy 的 sym=False)。spec_sources 按定义复算 1.441。0.2.12 及以前标 survey(未读原文),数相同。"
   window.hamming_3db_bins:
     value: 1.30
     unit: bins
-    source: survey
-    cite: "Harris 1978, Table I: Hamming -3 dB width"
-    note: "未核实。"
+    source: spec
+    upstream: "spec_sources:harris1978.hamming#bw_3db_bins"
+    cite: "F. J. Harris, 'On the use of windows for harmonic analysis with the discrete Fourier transform', Proc. IEEE vol. 66 no. 1, pp. 51-83, Jan. 1978; read in the original by spec_sources (2026-11-14)"
+    section: "Table I 'Windows and Figures of Merit' (p. 55), HAMMING row, 3.0-dB BW column"
+    quote: "TABLE I WINDOWS AND FIGURES OF MERIT -- columns: highest side-lobe level (dB) | side-lobe fall-off (dB/oct) | coherent gain | equiv. noise BW (bins) | 3.0-dB BW (bins) | scallop loss (dB) | worst case process loss (dB) | 6.0-dB BW (bins) | overlap correlation 75% OL | 50% OL. HAMMING | -43 | -6 | 0.54 | 1.36 | 1.30 | 1.78 | 3.10 | 1.81 | 70.7 | 23.5"
+    note: "DFT-even 定义(Harris p. 52,即 scipy 的 sym=False)。spec_sources 按定义复算 1.303。0.2.12 及以前标 survey(未读原文),数相同。"
   window.blackman_3db_bins:
     value: 1.68
     unit: bins
-    source: survey
-    cite: "Harris 1978, Table I: exact Blackman -3 dB width"
-    note: "未核实。"
+    source: spec
+    upstream: "spec_sources:harris1978.blackman#bw_3db_bins"
+    cite: "F. J. Harris, 'On the use of windows for harmonic analysis with the discrete Fourier transform', Proc. IEEE vol. 66 no. 1, pp. 51-83, Jan. 1978; read in the original by spec_sources (2026-11-14)"
+    section: "Table I 'Windows and Figures of Merit' (p. 55), BLACKMAN row, 3.0-dB BW column"
+    quote: "TABLE I WINDOWS AND FIGURES OF MERIT -- columns: highest side-lobe level (dB) | side-lobe fall-off (dB/oct) | coherent gain | equiv. noise BW (bins) | 3.0-dB BW (bins) | scallop loss (dB) | worst case process loss (dB) | 6.0-dB BW (bins) | overlap correlation 75% OL | 50% OL. BLACKMAN | -58 | -18 | 0.42 | 1.73 | 1.68 | 1.10 | 3.47 | 2.35 | 56.7 | 9.0"
+    note: "DFT-even 定义(Harris p. 52,即 scipy 的 sym=False)。spec_sources 按定义复算 1.644,表值宽 2.2 %(原文没说宽度怎么量),在 5 % 的对照容差内。系数 0.42 / 0.50 / 0.08,即 scipy 的 blackman。**更正(0.2.13)**:原 cite 写成 'exact Blackman',那是表 I 的另一行(3-dB 宽 1.52,且与原文自己的系数对不上);1.68 是 Blackman 那一行。0.2.12 及以前标 survey(未读原文),数相同。"

@@ -18,7 +18,7 @@ sys.modules["vendor_check"] = vc
 _spec.loader.exec_module(vc)
 
 PINS = {"polar_tx": "b007e60477bac68806138db733cbafd0c0761282", "array_tx": "e897c159e5fc5b2e26af6336cf9f6164461ff7f5",
-        "mmw60_trx": "ef0f00c50c508271abdf1423fde7062ba0a0b92d", "spec_sources": "e49979f4358476fc120de0045a013663613f67c1"}
+        "mmw60_trx": "ef0f00c50c508271abdf1423fde7062ba0a0b92d", "spec_sources": "f87cc9b54af9d6510e406d8356c04267fa1dd388"}
 PIN = PINS["polar_tx"]
 
 

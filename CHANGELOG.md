@@ -4,6 +4,20 @@
 
 ---
 
+## [0.2.13] — 2026-11-14 — 最后 6 条 survey 读了原文;来源表不再有 survey(数不动)
+
+- fmcw_radar#19(spec_sources 发起):spec_sources 重新 pin 到 `f87cc9b`,多 vendor `data/windows.yaml`,`data/radar_targets.yaml` 多 4 条;其余四个文件只改出处头里的 SHA。
+- **窗宽 4 条**(`window.{rect,hann,hamming,blackman}_3db_bins`):survey → spec,`upstream: spec_sources:harris1978.<窗>#bw_3db_bins`,quote 是表 I 那一行。值不变。
+  **更正**:Blackman 那条的 cite 原写 "exact Blackman",1.68 是 Blackman 那一行(exact Blackman 是 1.52)。
+- **乘用车** `rcs.car_dbsm` 10 dBsm:survey → derived,`upstream: spec_sources:target_rcs.iso19206_3_car_rear_far_lower_dbsm`(ISO 19206-3 车尾、40 m 以外那条带子的下界 20 − 10)。
+  保持下界不取中心 20:ISO 的中心近处下降,本库的距离(≤ 15 m)上 4–12 dBsm。
+- **角反射器** `rcs.corner_reflector_dbsm` 20 dBsm:survey → assumed(本库自选的测试目标)。**更正**:原 cite 的"10 cm 边、~10² m²"按同一公式只有 12.2 dBsm;
+  数保持 20,尺寸改成 15.6 cm 三角形三面角(60 GHz;77 GHz 档相当于 13.8 cm),公式出处 Doerry,Sandia SAND2008-0396。
+- 来源表 25 assumed / 11 spec / 0 survey / 3 derived。ROADMAP"等上游"#2 的 6 条删掉;新 P1 #5:RCS 不随距离、视角、频段变。
+- 示例 03 的表头改读条目自己的标签(原来写死 "survey")。指纹 2035 个值逐位不变。
+
+---
+
 ## [0.2.12] — 2026-11-14 — 60 GHz 的 TDC 读原文的 12.2 ps;默认配置出现鬼目标检出
 
 - fmcw_radar#17(spec_sources 发起):spec_sources 重新 pin 到 `e49979f`,多 vendor 一张表 `data/adpll60.yaml`(其余四个文件相对 `dfaa36b` 不变)。

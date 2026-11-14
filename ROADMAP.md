@@ -13,9 +13,8 @@
    - mmw60_trx 的通信前端没有带外压缩点(它的 ROADMAP C9):如果以后雷达要读"同一个 `Frontend60`",得先有这个数。它问过我们有没有通信接收机的出处,没有。
    - 上游表里还有三份没读原文的雷达文档(AOP 手册 SWRS237B、勘误 SWRZ092B、E2E 论坛帖),本库没有用它们的数。
 
-2. **本库还剩 6 条 survey 等 spec_sources**(fmcw_radar#15:原 9 条里氧气两条、人体 RCS 一条 0.2.11 已改成引用)。`rcs.car_dbsm`、`rcs.corner_reflector_dbsm`、
-   `window.{rect,hann,hamming,blackman}_3db_bins`(Harris 1978 Table I)仍是"只读到转述";原文要用户下载,spec_sources 核对后另开 issue,本库再改成 `upstream:` 引用。
-   另:本库新加任何 `upstream:` 引用,要在 spec_sources 开 issue 登记进它的 `consumers.yaml`(它看不到本库的表)。
+2. **本库新加的 `upstream:` 引用要在 spec_sources 登记**(它看不到本库的表):0.2.13 起本库已没有 `survey` 条目(fmcw_radar#19),
+   以后新加任何 `upstream:`,在 spec_sources 开 issue 登记进它的 `consumers.yaml`。#19 的 6 条由它验收时登记。
 3. **信道不含水汽**(0.2.11 起氧气按 P.676 干空气算)。77 GHz 处水汽(标准大气 7.5 g/m³)约 0.25 dB/km,是氧气(0.091)的近 3 倍,但 25 m 目标往返只多约 0.01 dB;
    60 GHz 处水汽 0.15 dB/km,约为氧气的 1 %。要做(若有长距离 77 GHz 场景):spec_sources 补 P.676 Table 2 与水汽那一支(它提过:原文图 1 的 1013.25 hPa 是总压还是干空气压没说,
    湿空气下 60 GHz 两种读法差 0.12 dB/km),本库加 `channel.water_vapour_g_m3`。
@@ -63,6 +62,13 @@
    (c) 统计引擎只算泄漏造成的压缩,不算强目标自己的:1 m 处的车(P_r −37 dBm,离带内点 3 dB)时域峰值 −0.29 dB,统计引擎 0。高通的飞回瞬态经第二级的压缩也不在预算里(被 blank 掉的那段)。
    (d) NF 取表值 12 dB 不随增益变,图 7-2 上 40 dB 增益是 11.0 dB(差 1 dB,没接)。
    复现:`tests/test_compression.py`;`python examples/08_tx_leakage.py` 的预算表(五行"receiver compression")。
+
+5. **目标 RCS 是一个常数,不随距离、视角、频段变**(fmcw_radar#19 读原文时看出来的)。
+   (a) 乘用车 10 dBsm 是 ISO 19206-3 车尾、40 m 以外那条带子的下界(带子中心 20);ISO 的中心近处按 20 − 0.013·(D − 40)² 下降,15 / 10 / 5.3 m 约 11.9 / 8.3 / 4.3 dBsm。
+       示例 05 的车在 5.3 m,按 ISO 中心应比本库低约 5.7 dB。侧面(90°,30 m)是 13–30 dBsm,本库没有视角。
+   (b) 角反射器 20 dBsm 两个频段共用:按 Doerry 式 (1),同一个反射器 77 GHz 比 60 GHz 多 2.17 dB(本库把 77 GHz 档读成 13.8 cm 的反射器)。
+   要做(若需要):目标按"种类 + 尺寸 / 视角"给,RCS 由 λ 与距离算(三面角 4πa⁴/(3λ²);车按 ISO 的带子中心或上下界);现在的常数是一个保守的单点。
+   复现:`tests/test_sources.py::test_the_last_surveys_are_read_from_the_originals`;`spec_sources:target_rcs.iso19206_3_car_rear` / `target_rcs.trihedral_peak`。
 
 ## P2 — 一致性与能力
 

@@ -5,8 +5,9 @@ Windows are DFT-even (``sym=False``), the form Harris 1978 tabulates and
 the one a spectral analysis uses.  ``mainlobe_width_bins`` reads the width
 from the window's own zero-padded spectrum -- the *theory* side of the
 resolution acceptance -- while the engines measure the same width on a
-processed point target; the survey table (``window.*_3db_bins``, Harris's
-two-digit values) is a third, external, reading of the same thing.
+processed point target; Harris's Table I (``window.*_3db_bins``, two-digit
+values read in the original through spec_sources) is a third, external,
+reading of the same thing.
 """
 
 from __future__ import annotations

@@ -2,7 +2,7 @@
 
 ``c / 2B`` is one range bin; a window widens the lobe by its -3 dB mainlobe
 width in bins (Harris 1978, Table I: rect 0.89, Hann 1.44, Hamming 1.30,
-Blackman 1.68 -- source: survey) and buys its sidelobe level.  The table is
+Blackman 1.68 -- source: spec, read through spec_sources) and buys its sidelobe level.  The table is
 the window's own spectrum on the config's grid (statistical), checked on
 the time engine's processed point target for the ideal chirp (measured):
 the rectangular lobe at the Rayleigh level is one bin = c / 2B.
@@ -18,7 +18,7 @@ from fmcw_radar.sources import number
 
 sweeps = [1e9, 2e9, 4e9, 7e9]
 windows = ["rect", "hann", "hamming", "blackman"]
-print("window | -3 dB width [bins] (own spectrum) | Harris 1978 (source: survey) | peak sidelobe [dB]")
+print(f"window | -3 dB width [bins] (own spectrum) | Harris 1978 (source: {number('window.rect_3db_bins').source}) | peak sidelobe [dB]")
 for w in windows:
     print(f"  {w:8s} | {mainlobe_width_bins(w):6.3f} | {number(f'window.{w}_3db_bins').value:5.2f} | {peak_sidelobe_db(w):6.1f}")
 

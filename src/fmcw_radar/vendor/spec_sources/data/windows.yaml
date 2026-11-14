@@ -1,0 +1,67 @@
+# Vendored from spec_sources@f87cc9b54af9d6510e406d8356c04267fa1dd388: src/spec_sources/data/windows.yaml
+# Adapted-copy policy: see src/fmcw_radar/vendor/__init__.py
+# windows —— DFT 窗函数的品质因数（主瓣宽度、等效噪声带宽、扇贝损失等）。
+#
+# 标签：spec（对过原文，带 quote 与 section）/ survey（未核实，note 写明）/ derived（只由本库的 spec、
+# survey 条目推出，note 或 cite 是公式）。本表不收 assumed：哪个库自己的取舍留在那个库的本地表。
+# 只有条目自己的标签行写成"标签词 + 冒号"，说明文字里不写，所以对四个标签各跑一次 grep -c
+# 都恰好等于该标签的条目数（tests/test_iron_rules.py 跑真的 grep）。
+#
+# 出处：里程碑 2 第 4 批（fmcw_radar 的 window.*_3db_bins 四条 survey）。本库直接读原文建条目，不是从哪个库迁入的。
+# 前缀：harris1978.*（F. J. Harris, Proc. IEEE 1978, Table I）。一个窗一条，value 是表 I 的一整行，
+# 字段按表的列序：最高旁瓣、旁瓣衰减速率、相干增益、等效噪声带宽、3-dB 宽、扇贝损失、最坏处理损失、
+# 6-dB 宽、75 % 与 50 % 重叠相关。带宽以 DFT bin 计。
+# Harris 的窗都按 DFT-even 定义（长 N、去掉右端点，Sec. II，p. 52），即 scipy.signal.windows 的 sym=False。
+# 每条 note 写了按原文的窗定义数值复算各列的结果（N = 1024，补零到 2^22 点读主瓣宽度）；复算只是核对，不是条目。
+
+entries:
+
+  # ------------------------------------------------------------ 矩形窗
+  harris1978.rect:
+    value: {sidelobe_db: -13.0, falloff_db_per_oct: -6.0, coherent_gain: 1.0, enbw_bins: 1.0, bw_3db_bins: 0.89, scallop_loss_db: 3.92, worst_case_process_loss_db: 3.92, bw_6db_bins: 1.21, overlap_corr_75_pct: 75.0, overlap_corr_50_pct: 50.0}
+    unit: "dB, dB/oct, 1, bins, bins, dB, dB, bins, %, %"
+    source: spec
+    cite: "F. J. Harris, 'On the use of windows for harmonic analysis with the discrete Fourier transform', Proc. IEEE, vol. 66, no. 1, pp. 51–83, Jan. 1978；用户从 IEEE Xplore 下载，2026-11-14 读原文，表 I 渲染出来读（文字层是 OCR，不可靠）"
+    section: "Table I 'Windows and Figures of Merit'（p. 55），RECTANGLE 一行"
+    quote: "TABLE I WINDOWS AND FIGURES OF MERIT — columns: highest side-lobe level (dB) | side-lobe fall-off (dB/oct) | coherent gain | equiv. noise BW (bins) | 3.0-dB BW (bins) | scallop loss (dB) | worst case process loss (dB) | 6.0-dB BW (bins) | overlap correlation (pcnt) 75% OL | 50% OL. RECTANGLE | -13 | -6 | 1.00 | 1.00 | 0.89 | 3.92 | 3.92 | 1.21 | 75.0 | 50.0"
+    note: "两位小数的表值。复算各列都相符：旁瓣 −13.3 dB，3-dB 宽 0.886 bins，6-dB 宽 1.207，扇贝损失 3.92 dB，重叠相关 75.0 / 50.0 %。"
+
+  # ------------------------------------------------------------ Hann（Harris 的 cos^α(x) Hanning，α = 2）
+  harris1978.hann:
+    value: {sidelobe_db: -32.0, falloff_db_per_oct: -18.0, coherent_gain: 0.5, enbw_bins: 1.5, bw_3db_bins: 1.44, scallop_loss_db: 1.42, worst_case_process_loss_db: 3.18, bw_6db_bins: 2.0, overlap_corr_75_pct: 65.9, overlap_corr_50_pct: 16.7}
+    unit: "dB, dB/oct, 1, bins, bins, dB, dB, bins, %, %"
+    source: spec
+    cite: "F. J. Harris, 'On the use of windows for harmonic analysis with the discrete Fourier transform', Proc. IEEE, vol. 66, no. 1, pp. 51–83, Jan. 1978；用户从 IEEE Xplore 下载，2026-11-14 读原文，表 I 渲染出来读（文字层是 OCR，不可靠）"
+    section: "Table I 'Windows and Figures of Merit'（p. 55），COS^α(X) HANNING 的 α = 2.0 一行"
+    quote: "TABLE I WINDOWS AND FIGURES OF MERIT — columns as harris1978.rect. COS^α(X) HANNING, α = 2.0 | -32 | -18 | 0.50 | 1.50 | 1.44 | 1.42 | 3.18 | 2.00 | 65.9 | 16.7"
+    note: "α = 2 的 cos^α 窗即 0.5 − 0.5 cos(2πn/N)（n = 0…N−1），等于 scipy.signal.windows.hann(N, sym=False)。复算各列都相符：旁瓣 −31.5 dB，3-dB 宽 1.441 bins，6-dB 宽 2.000，扇贝损失 1.42 dB，最坏处理损失 3.18 dB，重叠相关 65.9 / 16.7 %。"
+
+  # ------------------------------------------------------------ Hamming
+  harris1978.hamming:
+    value: {sidelobe_db: -43.0, falloff_db_per_oct: -6.0, coherent_gain: 0.54, enbw_bins: 1.36, bw_3db_bins: 1.30, scallop_loss_db: 1.78, worst_case_process_loss_db: 3.10, bw_6db_bins: 1.81, overlap_corr_75_pct: 70.7, overlap_corr_50_pct: 23.5}
+    unit: "dB, dB/oct, 1, bins, bins, dB, dB, bins, %, %"
+    source: spec
+    cite: "F. J. Harris, 'On the use of windows for harmonic analysis with the discrete Fourier transform', Proc. IEEE, vol. 66, no. 1, pp. 51–83, Jan. 1978；用户从 IEEE Xplore 下载，2026-11-14 读原文，表 I 渲染出来读（文字层是 OCR，不可靠）"
+    section: "Table I 'Windows and Figures of Merit'（p. 55），HAMMING 一行"
+    quote: "TABLE I WINDOWS AND FIGURES OF MERIT — columns as harris1978.rect. HAMMING | -43 | -6 | 0.54 | 1.36 | 1.30 | 1.78 | 3.10 | 1.81 | 70.7 | 23.5"
+    note: "0.54 − 0.46 cos(2πn/N)，等于 scipy.signal.windows.hamming(N, sym=False)。复算：旁瓣 −42.7 dB、相干增益 0.540、等效噪声带宽 1.363、3-dB 宽 1.303 bins、最坏处理损失 3.10 dB、6-dB 宽 1.815、75 % 重叠 70.7 相符；扇贝损失复算 1.75 dB（表 1.78），50 % 重叠 23.4（表 23.5）。表的最坏处理损失 3.10 等于 1.75 + 10 lg 1.363，不等于 1.78 + 10 lg 1.36 = 3.12，所以 1.78 像是笔误；本条照原文登记。"
+
+  # ------------------------------------------------------------ Exact Blackman（系数取式 (31a) 的分数）
+  harris1978.exact_blackman:
+    value: {sidelobe_db: -51.0, falloff_db_per_oct: -6.0, coherent_gain: 0.46, enbw_bins: 1.57, bw_3db_bins: 1.52, scallop_loss_db: 1.33, worst_case_process_loss_db: 3.29, bw_6db_bins: 2.13, overlap_corr_75_pct: 62.7, overlap_corr_50_pct: 14.0}
+    unit: "dB, dB/oct, 1, bins, bins, dB, dB, bins, %, %"
+    source: spec
+    cite: "F. J. Harris, 'On the use of windows for harmonic analysis with the discrete Fourier transform', Proc. IEEE, vol. 66, no. 1, pp. 51–83, Jan. 1978；用户从 IEEE Xplore 下载，2026-11-14 读原文，表 I 渲染出来读（文字层是 OCR，不可靠）"
+    section: "Table I 'Windows and Figures of Merit'（p. 55），EXACT BLACKMAN 一行；系数与命名：Sec. V-E 'Blackman Window'，式 (31)（p. 63）；旁瓣、衰减与相干增益 = a0：同节正文（p. 64）"
+    quote: "Blackman examined this window for K = 3 and found the values of the nonzero coefficients which place zeros at θ = 3.5 (2π/N) and at θ = 4.5 (2π/N), the position of the third and the fourth sidelobes, respectively, of the central Dirichlet kernel. These exact values and their two place approximations are a0 = 7938/18608 ≐ 0.426 590 71 ≃ 0.42, a1 = 9240/18608 ≐ 0.496 560 62 ≃ 0.50, a2 = 1430/18608 ≐ 0.076 848 67 ≃ 0.08. (31) The window which uses these two place approximations is known as the Blackman window. When we describe this window with the 'exact' coefficients we will refer to it as the exact Blackman window. [...] The sidelobe level is 51 dB down for the exact Blackman window and is 58 dB down for the Blackman window. [...] The exact terms (like the Hamming window) have a discontinuity at the boundary and falls off like 1/ω or 6 dB per octave. Table I lists the parameters of these two windows. Note that for this class of windows, the a0 coefficient is the coherent gain of the window. [...] TABLE I — columns as harris1978.rect. EXACT BLACKMAN | -51 | -6 | 0.46 | 1.57 | 1.52 | 1.33 | 3.29 | 2.13 | 62.7 | 14.0"
+    note: "照原文登记，但这一行与原文自己给的系数对不上，不要当这个窗的性质用。按式 (31a) 的系数复算：旁瓣 −68.2 dB（表与正文都写 51）、相干增益 0.427（原文同节说这类窗的相干增益就是 a0 = 0.4266，表却写 0.46）、等效噪声带宽 1.694（表 1.57）、3-dB 宽 1.609 bins（表 1.52）、扇贝损失 1.15 dB（表 1.33）、最坏处理损失 3.44（表 3.29）、6-dB 宽 2.254（表 2.13）、重叠相关 57.8 / 10.0 %（表 62.7 / 14.0）；只有衰减速率 −6 dB/oct 相符（原文说这组系数在边界不归零）。这一行各列彼此自洽（3.29 = 1.33 + 10 lg 1.57），像是按另一组系数算的，原文没说。fmcw_radar 的 window.blackman_3db_bins 在 cite 里写成 exact Blackman，但它的值 1.68 与它的代码（scipy blackman，0.42 / 0.5 / 0.08）都是下一条 harris1978.blackman。"
+
+  # ------------------------------------------------------------ Blackman（系数取两位近似 0.42 / 0.50 / 0.08）
+  harris1978.blackman:
+    value: {sidelobe_db: -58.0, falloff_db_per_oct: -18.0, coherent_gain: 0.42, enbw_bins: 1.73, bw_3db_bins: 1.68, scallop_loss_db: 1.10, worst_case_process_loss_db: 3.47, bw_6db_bins: 2.35, overlap_corr_75_pct: 56.7, overlap_corr_50_pct: 9.0}
+    unit: "dB, dB/oct, 1, bins, bins, dB, dB, bins, %, %"
+    source: spec
+    cite: "F. J. Harris, 'On the use of windows for harmonic analysis with the discrete Fourier transform', Proc. IEEE, vol. 66, no. 1, pp. 51–83, Jan. 1978；用户从 IEEE Xplore 下载，2026-11-14 读原文，表 I 渲染出来读（文字层是 OCR，不可靠）"
+    section: "Table I 'Windows and Figures of Merit'（p. 55），BLACKMAN 一行；系数与命名：Sec. V-E 'Blackman Window'，式 (31)（p. 63）；旁瓣、边界与衰减：同节正文（p. 64）"
+    quote: "The window which uses these two place approximations is known as the Blackman window. [...] The sidelobe level is 51 dB down for the exact Blackman window and is 58 dB down for the Blackman window. As an observation, note that the coefficients of the Blackman window sum to zero (0.42 -0.50 +0.08) at the boundaries while the exact coefficients do not. Thus the Blackman window is continuous with a continuous first derivative at the boundary and falls off like 1/ω³ or 18 dB per octave. [...] Table I lists the parameters of these two windows. Note that for this class of windows, the a0 coefficient is the coherent gain of the window. [...] TABLE I — columns as harris1978.rect. BLACKMAN | -58 | -18 | 0.42 | 1.73 | 1.68 | 1.10 | 3.47 | 2.35 | 56.7 | 9.0"
+    note: "0.42 − 0.50 cos(2πn/N) + 0.08 cos(4πn/N)，等于 scipy.signal.windows.blackman(N, sym=False)。复算：旁瓣 −58.1 dB、相干增益 0.420、等效噪声带宽 1.727、扇贝损失 1.10 dB、最坏处理损失 3.47 dB、重叠相关 56.7 / 9.0 % 都相符；只有两列宽度不符：3-dB 宽复算 1.644 bins（表 1.68，宽 2.2 %），6-dB 宽 2.299（表 2.35）。原文没有写宽度怎样量，查不出差在哪；本条照原文登记。fmcw_radar 的 window.blackman_3db_bins = 1.68 是这一行（它的 cite 写成 exact Blackman，那是 harris1978.exact_blackman 的 1.52）。"

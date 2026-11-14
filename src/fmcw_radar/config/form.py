@@ -75,7 +75,7 @@ SECTIONS: list[tuple[str, str, list[dict]]] = [
         _f("frontend.compression", "Model the receiver's compression", "bool"),
     ]),
     ("channel", "Channel", [
-        _f("channel.oxygen_db_per_km", "Oxygen attenuation [dB/km] (empty = survey)", "opt_float"),
+        _f("channel.oxygen_db_per_km", "Oxygen attenuation [dB/km] (empty = sourced value)", "opt_float"),
         _f("channel.extra_loss_db", "Extra two-way loss [dB]", "float"),
     ]),
     ("target", "Target", [
@@ -83,7 +83,7 @@ SECTIONS: list[tuple[str, str, list[dict]]] = [
         _f("target.range_m", "Range [m]", "float"),
         _f("target.velocity_mps", "Radial velocity [m/s] (positive receding)", "float"),
         _f("target.angle_deg", "Angle [deg] (milestone 2)", "float"),
-        _f("target.rcs_dbsm", "RCS [dBsm] (empty = survey value for the kind)", "opt_float"),
+        _f("target.rcs_dbsm", "RCS [dBsm] (empty = sourced value for the kind)", "opt_float"),
     ]),
     ("extra_targets", "More targets (milestone 2)", [
         _f("extra_targets", "Extra point targets (table: kind, range, velocity, angle, RCS)", "table",

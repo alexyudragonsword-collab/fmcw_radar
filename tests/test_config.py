@@ -82,7 +82,7 @@ def test_extra_targets_round_trip_and_the_targets_property(tmp_path):
 
     cfg = apply_overrides(RadarConfig(), {"extra_targets": [{"kind": "car", "range_m": 8.0, "velocity_mps": -3.0}]})
     assert len(cfg.targets) == 2 and cfg.targets[0] is cfg.target and cfg.targets[1].kind == "car"
-    assert cfg.rcs_of(cfg.targets[1]) == (10.0, "survey")
+    assert cfg.rcs_of(cfg.targets[1]) == (10.0, "derived")
     out = tmp_path / "t.yaml"
     dump_config(cfg, out)
     assert load_config(out) == cfg

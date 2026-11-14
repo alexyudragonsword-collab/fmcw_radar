@@ -3,6 +3,15 @@
 本文件按倒序记录实质性进展 —— 最新条目在本行正下方。每条保持简短(数字原值、被推翻的判断、下一步),
 结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-11-14 · 0.2.13:最后 6 条 survey 读了原文,数不动(fmcw_radar#19,feat/spec-sources-survey-close)
+
+- spec_sources 里程碑 2 第 4 批收尾:Harris 1978 表 I(4 窗,spec)、ISO 19206-3 车 RCS 边界经 NHTSA DOT HS 813 648(spec + 下界 derived)、Doerry 三面角公式(spec)。新 PIN `f87cc9b`。
+- 核对:三角形三面角 4πa⁴/(3λ²),a = 10 cm:60 / 77 GHz 12.24 / 14.41 dBsm,方形 21.78 / 23.95;20 dBsm 要 15.63 / 13.80 cm。窗:本库 `sym=False`,与 Harris 的 DFT-even 一致。
+- 用户定的:车保持 10(ISO 远处下界,derived);角反射器保持 20、尺寸改 15.6 cm 三角形(assumed);窗 4 条 spec。
+- **被推翻的判断(本库最早的 cite)**:"10 cm 三面角 ~10² m²"——同一公式给 16.8 m²(12.2 dBsm),差 8 dB;"exact Blackman 1.68"——1.68 是 Blackman,exact 是 1.52。
+- 车:ISO 中心 20 − 0.013·(D − 40)²,15 / 10 / 5.3 m 约 11.9 / 8.3 / 4.3 dBsm;示例 05 的车按 ISO 中心比本库低约 5.7 dB。新 ROADMAP P1 #5(RCS 是常数)。
+- 指纹 2035 / 2035 逐位相同;`vendor_check --strict` 37 个文件,36 verbatim / 1 adapted,无漂移。来源表 25 / 11 / 0 / 3。
+
 ## 2026-11-14 · 0.2.12:60 GHz 的 TDC 读原文的 12.2 ps,默认配置出现鬼目标检出(fmcw_radar#17,feat/tdc-wu2014)
 
 - spec_sources 里程碑 2 第 2 批:`adpll60.wu_jssc2014_tdc`(Wu、Staszewski、Long,JSSC 2014,spec)。新 PIN `e49979f`,相对 `dfaa36b` 只多 `data/adpll60.yaml`。

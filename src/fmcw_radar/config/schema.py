@@ -233,7 +233,7 @@ class FrontEndConfig:
 class ChannelConfig:
     """Free space plus atmospheric oxygen plus a point target; nothing else
     (no multipath, no clutter).  ``oxygen_db_per_km`` None -> the band's
-    survey value (ITU-R P.676, unverified)."""
+    value in sources.yaml (ITU-R P.676-13, dry air at sea level, derived)."""
 
     oxygen_db_per_km: Optional[float] = None
     extra_loss_db: float = 0.0              # radome, cabling: a flat two-way loss [dB]
@@ -247,7 +247,7 @@ class ChannelConfig:
 @dataclass(frozen=True)
 class TargetConfig:
     """One point target (invariant #5: an input, not a model).  ``rcs_dbsm``
-    None -> the survey value for ``kind`` (``rcs.<kind>_dbsm``)."""
+    None -> the sources.yaml value for ``kind`` (``rcs.<kind>_dbsm``)."""
 
     kind: Literal["human", "car", "corner_reflector", "custom"] = "human"
     range_m: float = 5.0

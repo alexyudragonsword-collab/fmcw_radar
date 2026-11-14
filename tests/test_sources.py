@@ -138,6 +138,37 @@ def test_tdc_resolution_is_the_60_ghz_adpll_paper_and_its_floor_carries_over():
     assert sources.frontend_placeholder("77g_automotive", "tdc_res_s").value == 5.0e-12
 
 
+def test_the_last_surveys_are_read_from_the_originals():
+    """0.2.13, fmcw_radar#19: no entry is ``survey`` any more.  The car is
+    ISO 19206-3's rear band's lower edge far out (20 - 10 dBsm, derived);
+    the four window widths are Harris 1978 Table I (spec, the scipy
+    ``sym=False`` windows this library uses).  The corner reflector is this
+    library's own test target: Doerry's triangular-trihedral formula gives
+    20 dBsm for a 15.6 cm interior edge at 60 GHz (the old "10 cm" is 12.2),
+    and the same reflector is 2.17 dB more at 77 GHz."""
+    from fmcw_radar.vendor import spec_sources as ss
+
+    assert not [k for k, e in sources.all_entries().items() if e.source == "survey"]
+    car = sources.number("rcs.car_dbsm")
+    band = ss.value("target_rcs.iso19206_3_car_rear")
+    assert (car.value, car.source) == (10.0, "derived") == (band["p_far_dbsm"] - band["half_width_db"], "derived")
+    for name in ("rect", "hann", "hamming", "blackman"):
+        w = sources.number(f"window.{name}_3db_bins")
+        assert w.source == "spec" and w.value == ss.value(f"harris1978.{name}")["bw_3db_bins"]
+    assert "exact" not in sources.number("window.blackman_3db_bins").cite
+    cr = sources.number("rcs.corner_reflector_dbsm")
+    assert (cr.value, cr.source) == (20.0, "assumed") and "4π a⁴ / (3 λ²)" in ss.value("target_rcs.trihedral_peak")["triangular"]
+
+    def trihedral_dbsm(a_m, f_hz):
+        lam = 299792458.0 / f_hz
+        return 10.0 * math.log10(4.0 * math.pi * a_m ** 4 / (3.0 * lam ** 2))
+
+    assert trihedral_dbsm(0.156, 60e9) == pytest.approx(cr.value, abs=0.05)
+    assert trihedral_dbsm(0.138, 77e9) == pytest.approx(cr.value, abs=0.1)
+    assert trihedral_dbsm(0.10, 60e9) == pytest.approx(12.2, abs=0.05)
+    assert trihedral_dbsm(0.156, 77e9) - trihedral_dbsm(0.156, 60e9) == pytest.approx(20.0 * math.log10(77.0 / 60.0))
+
+
 def test_vendored_shared_table_counts_its_tags():
     """spec_sources' grep guard on the copy vendored here: for each of its four
     tags, ``grep -c "source: <tag>"`` equals the entries carrying it (the
@@ -145,7 +176,7 @@ def test_vendored_shared_table_counts_its_tags():
     from fmcw_radar.vendor import spec_sources as ss
 
     files = ss.data_files()
-    assert [f.name for f in files] == ["adpll60.yaml", "atmosphere.yaml", "frontend60.yaml", "radar_targets.yaml"]
+    assert [f.name for f in files] == ["adpll60.yaml", "atmosphere.yaml", "frontend60.yaml", "radar_targets.yaml", "windows.yaml"]
     for f in files:
         assert ss.audit_tags(f) == []
 

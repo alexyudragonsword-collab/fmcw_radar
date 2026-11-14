@@ -1,4 +1,4 @@
-# Vendored from spec_sources@e49979f4358476fc120de0045a013663613f67c1: src/spec_sources/reader.py
+# Vendored from spec_sources@f87cc9b54af9d6510e406d8356c04267fa1dd388: src/spec_sources/reader.py
 # Adapted-copy policy: see src/fmcw_radar/vendor/__init__.py
 """Numbers about the outside world, with their provenance: the reader.
 

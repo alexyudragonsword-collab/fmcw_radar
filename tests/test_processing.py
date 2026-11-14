@@ -14,7 +14,7 @@ from fmcw_radar.sources import number
 
 @pytest.mark.parametrize("name", ["rect", "hann", "hamming", "blackman"])
 def test_mainlobe_width_matches_harris_within_5_percent(name):
-    """The window's own spectrum against Harris 1978 Table I (source: survey, two digits)."""
+    """The window's own spectrum against Harris 1978 Table I (source: spec, two digits)."""
     assert mainlobe_width_bins(name) == pytest.approx(number(f"window.{name}_3db_bins").value, rel=0.05)
 
 
