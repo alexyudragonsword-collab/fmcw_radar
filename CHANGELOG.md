@@ -4,6 +4,15 @@
 
 ---
 
+## [0.2.14] — 2026-11-17 — spec_sources 0.6.0 重新 pin(数不动)
+
+- fmcw_radar#21(spec_sources 发起):重新 pin 到 `a9af261`(spec_sources 0.6.0)。本库拷的 6 个文件里只有 `data/frontend60.yaml` 变了:
+  `rx60.comm_iscas2015` 与 `antenna60.okada2013_dbi` 由 survey 改 spec,值不变,都不是本库读的条目;其余 5 个只改出处头里的 SHA。
+- 指纹 2035 个值逐位不变;`vendor_check --strict` 37 个文件,36 verbatim / 1 adapted,无漂移。
+- ROADMAP"等上游"#1 记上 Okada 2013 的封装内 6 dBi(读过原文,但不是阵元,不替换天线增益占位);#2 删掉已办完的"#19 由它登记"。
+
+---
+
 ## [0.2.13] — 2026-11-14 — 最后 6 条 survey 读了原文;来源表不再有 survey(数不动)
 
 - fmcw_radar#19(spec_sources 发起):spec_sources 重新 pin 到 `f87cc9b`,多 vendor `data/windows.yaml`,`data/radar_targets.yaml` 多 4 条;其余四个文件只改出处头里的 SHA。

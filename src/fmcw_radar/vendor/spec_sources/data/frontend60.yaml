@@ -1,4 +1,4 @@
-# Vendored from spec_sources@f87cc9b54af9d6510e406d8356c04267fa1dd388: src/spec_sources/data/frontend60.yaml
+# Vendored from spec_sources@a9af2614c47f66eb602738e7ae19e84d164199de: src/spec_sources/data/frontend60.yaml
 # Adapted-copy policy: see src/fmcw_radar/vendor/__init__.py
 # frontend60 —— 60 GHz 收发前端的测量值：接收机（通信 / 雷达）、收发隔离、封装内天线。
 #
@@ -37,9 +37,11 @@ entries:
   rx60.comm_iscas2015:
     value: {nf_db: 7.1, gain_max_db: 64.0, gain_range_db: 28.0, p1db_out_dbm: -5.5}
     unit: "dB, dB, dB, dBm"
-    source: survey
-    cite: "'A 64 dB Gain 60 GHz Receiver with 7.1 dB Noise Figure for 802.11ad Applications in 90 nm CMOS'，IEEE ISCAS 2015（作者未读到）"
-    note: "未核实（只读到搜索摘要：双边带 NF 7.1 dB、最大变频增益 64 dB、调节范围 28 dB、输出 P1dB −5.5 dBm、177 mW）。64 dB 是含基带增益的整机增益，输出 P1dB 是输出端受限，折不到本库 LNA 档位表的字段上，所以只用它的 NF 作灵敏度档。"
+    source: spec
+    cite: "J. Luo, L. Zhang, W. Zhu, L. Zhang, Y. Wang, Z. Yu, 'A 64dB Gain 60GHz Receiver with 7.1dB Noise Figure for 802.11ad Applications in 90nm CMOS', IEEE ISCAS 2015, pp. 2401–2404, doi 10.1109/ISCAS.2015.7169168（Institute of Microelectronics, Tsinghua University）；用户从 IEEE Xplore 下载并确认其许可允许交给 spec_sources 读，2026-11-17 读原文"
+    section: "Abstract；整机测量一段（Fig. 12、Fig. 13）；Table I 'Comparison with state-of-the-arts' 的 This work 一列"
+    quote: "The entire receiver achieves a double-side-band NF of 7.1dB and a maximal conversion gain of 64dB with 28dB tuning range, while consuming only 177mW of power. The measured output P1dB is -5.5dBm. [...] A minimal noise figure of 7.1dB is observed in measurement, less than 0.5dB deviation over simulation. [...] Measured output 1-dB compression power is -5.5dBm at 0.5GHz baseband frequency [...] TABLE I, This work: Gain (dB) 36-64; BW (GHz) 57-64; NF(dB) 7.1; OP1dB (dBm) -5.5; Supply (V) 1.2, 1.4; Power (mW) 177; Tech (nm) 90"
+    note: "清华的 90 nm 超外差接收机：RF 先混到 12 GHz 左右的中频，再用 12 GHz 本振下变频；3 级差分 LNA 增益 19.8 dB、NF 6 dB。7.1 dB 是双边带 NF，而且是三个 802.11ad 信道上的最小值（原文 minimal NF），按惯例单边带 NF 约再高 3 dB，拿它作灵敏度档偏乐观。64 dB 是含基带 PGA 的整机最大变频增益（可调 36–64 dB），输出 P1dB 是在 0.5 GHz 基带频率、输出端测的，折不到 mmw60_trx LNA 档位表的字段上，所以只用它的 NF 作灵敏度档。功耗 177 mW（1.2 / 1.4 V）。迁入时的四个数读原文后都不变。"
 
   # ------------------------------------------------------------ 接收前端：雷达芯片（TI IWR6843）
   rx60.radar_iwr6843:
@@ -81,6 +83,8 @@ entries:
   antenna60.okada2013_dbi:
     value: 6.0
     unit: dBi
-    source: survey
-    cite: "Okada et al., 'Full Four-Channel 6.3-Gb/s 60-GHz CMOS Transceiver With Low-Power Analog and Digital Baseband Circuitry', IEEE JSSC vol. 48 no. 1, pp. 46–65, 2013，摘要（'a 6-dBi antenna built in an organic package'）"
-    note: "未核实（只读到搜索摘要；IEEE Xplore 对脚本访问有校验，原文没有读到）。通信收发机用的封装内天线，作灵敏度档；基准档取的是读过原文的 rx60.comm_asada2011 的 2 dBi。阵列增益是里程碑 2 的事，不在这里。"
+    source: spec
+    cite: "K. Okada, K. Kondou, M. Miyahara, … A. Matsuzawa, 'Full Four-Channel 6.3-Gb/s 60-GHz CMOS Transceiver With Low-Power Analog and Digital Baseband Circuitry', IEEE JSSC vol. 48 no. 1, pp. 46–65, Jan. 2013, doi 10.1109/JSSC.2012.2218066（Tokyo Institute of Technology，另有 Sony 等）；用户从 IEEE Xplore 下载并确认其许可允许交给 spec_sources 读，2026-11-17 读原文"
+    section: "Abstract；II.A System Requirements；III.D Measurement Results of the RF Front-End"
+    quote: "The entire system including both RF and BB using a 6-dBi antenna built in the organic package can transmit 3.1 Gb/s over 1.8 m in QPSK and 6.3 Gb/s over 0.05 m in 16QAM. [...] The PA has a 4-to-5 dB back-off from a saturated output power of 6.0 dBm and the transmitter and receiver antennas have a gain of 6.0 dBi. [...] The transmitter and receiver have two independent 6-dBi antennas, which are embedded in a generic organic ball-grid array (BGA) package [...] The RF chip is implemented in a BGA package, and two 6-dBi antennas embedded in the package for Tx and Rx [19], [20] are used for the measurement."
+    note: "65 nm 四信道 60 GHz 收发机，收、发各用一个内嵌在有机 BGA 封装里的 6 dBi 天线（封装 16.3 × 14.4 mm，芯片经 270 µm 键合线接天线，板上没有 60 GHz 连线）。原文的系统设计按 PA 从 Psat 6.0 dBm 回退 4–5 dB、收发天线各 6.0 dBi 算，目标是 QPSK 1.5 m、16QAM 0.5 m；实测 QPSK 3.1 Gb/s 传 1.8 m、16QAM 6.3 Gb/s 传 0.05 m。通信收发机用的封装内天线，作灵敏度档；基准档取的是读过原文的 rx60.comm_asada2011 的 2 dBi。阵列增益是里程碑 2 的事，不在这里。迁入时就是 6.0，读原文后值不变。"

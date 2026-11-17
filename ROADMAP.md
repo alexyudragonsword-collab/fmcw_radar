@@ -7,14 +7,15 @@
 ## 等上游
 
 1. **天线增益与 77 GHz 一档还没有出处**(mmw60_trx#14 的三个面 0.2.8 已消化,见 `cairn/frontend-sources.md`;剩下的不在它那里等,而是没有对口的出处)。
-   - 天线增益各 10 dBi 仍是 `assumed`:读到的是封装内 2 dBi(mmw60_trx `rx60.comm_asada2011`)与板上 8 元阵实测约 12 dBi(Adela 2018),MIMO 的单个阵元两者都不是。
+   - 天线增益各 10 dBi 仍是 `assumed`:读到的是封装内 2 dBi(mmw60_trx `rx60.comm_asada2011`)、封装内 6 dBi(spec_sources `antenna60.okada2013_dbi`,0.6.0 起读过原文:
+     通信收发机收、发各一个有机封装天线)与板上 8 元阵实测约 12 dBi(Adela 2018),MIMO 的单个阵元三者都不是。
      对 SNR 是 1 dB 对 1 dB(两副共 2 dB 对 1 dB):换成 2 dBi,5 m 人体的 51.3 dB 约变 35 dB(按雷达方程算的,没跑)。要一份给"单个贴片 / 封装内阵元在阵里的增益"的出处,或者等 array_tx 给阵元方向图的绝对增益。
    - 77 GHz 一档 15 条全是 `assumed`(0.2.9 加了 `rx_rapp_p`),两个压缩点都沿用拆分前的 −20 dBm;读过的雷达芯片是 60–64 GHz 的。
    - mmw60_trx 的通信前端没有带外压缩点(它的 ROADMAP C9):如果以后雷达要读"同一个 `Frontend60`",得先有这个数。它问过我们有没有通信接收机的出处,没有。
    - 上游表里还有三份没读原文的雷达文档(AOP 手册 SWRS237B、勘误 SWRZ092B、E2E 论坛帖),本库没有用它们的数。
 
 2. **本库新加的 `upstream:` 引用要在 spec_sources 登记**(它看不到本库的表):0.2.13 起本库已没有 `survey` 条目(fmcw_radar#19),
-   以后新加任何 `upstream:`,在 spec_sources 开 issue 登记进它的 `consumers.yaml`。#19 的 6 条由它验收时登记。
+   以后新加任何 `upstream:`,在 spec_sources 开 issue 登记进它的 `consumers.yaml`。
 3. **信道不含水汽**(0.2.11 起氧气按 P.676 干空气算)。77 GHz 处水汽(标准大气 7.5 g/m³)约 0.25 dB/km,是氧气(0.091)的近 3 倍,但 25 m 目标往返只多约 0.01 dB;
    60 GHz 处水汽 0.15 dB/km,约为氧气的 1 %。要做(若有长距离 77 GHz 场景):spec_sources 补 P.676 Table 2 与水汽那一支(它提过:原文图 1 的 1013.25 hPa 是总压还是干空气压没说,
    湿空气下 60 GHz 两种读法差 0.12 dB/km),本库加 `channel.water_vapour_g_m3`。

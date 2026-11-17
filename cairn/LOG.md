@@ -3,6 +3,12 @@
 本文件按倒序记录实质性进展 —— 最新条目在本行正下方。每条保持简短(数字原值、被推翻的判断、下一步),
 结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-11-17 · 0.2.14:spec_sources 0.6.0 重新 pin(fmcw_radar#21,feat/spec-sources-0.6.0)
+
+- 新 PIN `a9af261`。核对:`f87cc9b..a9af261` 在本库拷的 6 个文件上只动了 `frontend60.yaml`(+10 / −6),是两条本库不读的条目由 survey 改 spec;本库读的 11 个上游条目没动。
+- 指纹 2035 / 2035 逐位相同;vendor_check 36 verbatim / 1 adapted;pytest、ruff 绿。
+- 顺带:Okada 2013 封装内 6 dBi 现在是读过原文的数,记进 ROADMAP"等上游"#1,但它是通信收发机的封装天线、不是阵元,不替换 10 dBi 占位。
+
 ## 2026-11-14 · 0.2.13:最后 6 条 survey 读了原文,数不动(fmcw_radar#19,feat/spec-sources-survey-close)
 
 - spec_sources 里程碑 2 第 4 批收尾:Harris 1978 表 I(4 窗,spec)、ISO 19206-3 车 RCS 边界经 NHTSA DOT HS 813 648(spec + 下界 derived)、Doerry 三面角公式(spec)。新 PIN `f87cc9b`。
