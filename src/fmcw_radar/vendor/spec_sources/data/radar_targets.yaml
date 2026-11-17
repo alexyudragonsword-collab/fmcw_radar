@@ -1,4 +1,4 @@
-# Vendored from spec_sources@f87cc9b54af9d6510e406d8356c04267fa1dd388: src/spec_sources/data/radar_targets.yaml
+# Vendored from spec_sources@a9af2614c47f66eb602738e7ae19e84d164199de: src/spec_sources/data/radar_targets.yaml
 # Adapted-copy policy: see src/fmcw_radar/vendor/__init__.py
 # radar_targets —— 雷达目标的 RCS（行人、车辆、标准反射体）。
 #

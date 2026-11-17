@@ -47,8 +47,8 @@ Pins
   ``configs/radar_60g_x10lo.yaml`` (a YAML file carries the same attribution
   header in its ``#`` comments and is compared byte for byte like a module).
 
-* ``spec_sources/`` -- spec_sources @ ``f87cc9b54af9d6510e406d8356c04267fa1dd388``
-  (its ``main``, fmcw_radar#19), the siblings' shared table of outside numbers:
+* ``spec_sources/`` -- spec_sources @ ``a9af2614c47f66eb602738e7ae19e84d164199de``
+  (its ``main``, fmcw_radar#21, spec_sources 0.6.0), the siblings' shared table of outside numbers:
 
   - ``reader.py`` (``ref()`` / ``value()`` / ``survey()``, lookup only),
   - ``data/frontend60.yaml`` (the 60 GHz radar chip's figures and Figure 7-2,
