@@ -4,6 +4,16 @@
 
 ---
 
+## [0.2.16] — 2026-11-18 — polar_tx 重新 pin:扣除式 TDC dither 进了副本(默认关,数不动)
+
+- polar_tx#26(本库发起)了结:`vendor/polartx/` 重新 pin 到 polar_tx `48b7f41`,它的 pllsim 子树在 pll_simulator `3d8611f`(pll_simulator#80 的 #81 / #82)。
+  26 个文件里 23 个 pllsim 文件换了嵌套头,正文变的是 `arch/adpll.py`、`blocks/tdc.py`、`core/boundaries.py`、`core/engine.py`;本库直接 vendor 的 3 个 polar_tx 文件只改外层头。
+- 带进来的:`TDCConfig.dither_lsb` / `dither_gain_error`(默认 0)、`analyze()` 的 `tdc_dither_gain` 项、`ADPLL.tdc_dither_mod_residual`、`simulate()` 的斜坡提示、
+  锁定检测先减 `mod_freq`、死区判据计入 dither 的 RMS。**都还没接进本库的配置**(ROADMAP P1 #1(a) 列了六件要做的)。
+- 指纹 2035 个值逐位不变;`vendor_check --strict` 37 个文件,36 verbatim / 1 adapted,无漂移;pytest、ruff 绿。
+
+---
+
 ## [0.2.15] — 2026-11-18 — 更正"斜坡上线性剖面差 ±3.5 dB":稳的是相干分量(数不动)
 
 - pll_simulator#80(本库发起)的答复:在它的 main 上用本库的环路复现,按频带平均电平与 `analyze()` 差 1 dB 左右;0.2.12 的 ±3.5 dB 是单个 seed、±25 % 频带的读数,
