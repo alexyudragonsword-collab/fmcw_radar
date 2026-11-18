@@ -1,0 +1,148 @@
+# Vendored from spec_sources@18241cd698facbc745ff73c7e7b267d915436acc: src/spec_sources/data/regulatory.yaml
+# Adapted-copy policy: see src/fmcw_radar/vendor/__init__.py
+# regulatory —— 频谱规管条文（47 CFR §15.255 等）。
+#
+# 标签：spec（对过原文，带 quote 与 section）/ survey（未核实，note 写明）/ derived（只由本库的 spec、
+# survey 条目推出，note 或 cite 是公式）。本表不收 assumed：哪个库自己的取舍留在那个库的本地表。
+# 只有条目自己的标签行写成"标签词 + 冒号"，说明文字里不写，所以对四个标签各跑一次 grep -c
+# 都恰好等于该标签的条目数（tests/test_iron_rules.py 跑真的 grep）。
+#
+# 出处：条目从 mmw60_trx@13024e0b012923071d827cc557b0da5eb9a9b2aa src/mmw60/data/spec/survey.yaml
+# 逐字迁入，每个字段与源表相等（tests/test_extraction.py 对 tests/fixtures/ 里的副本逐条比）。
+# 所以 cite / note 里的"本库"指 mmw60_trx，cairn/…、examples/…、tests/…、config.…、frontend.… 是它仓库里的路径，
+# assumed.* 是它本地表里的条目；这些写法在条目下一次因核实而改动时改成明确的库名（ROADMAP）。
+#
+# 前缀：fcc15255.*。
+#
+# 2026-11-16 读了 eCFR 的现行条文（第 7 批），4 条都改成 spec，值不变。
+# 2026-11-18 按 fmcw_radar 的请求（#50）为 (c)(2) 的雷达各档建了 10 条（fcc15255.radar_*），条文与 2026-11-16 读的逐字节相同。
+# 键名里的 p 是小数点：radar_57_59p4 = 57.0–59.4 GHz。
+
+entries:
+
+  # ------------------------------------------------------------ 47 CFR §15.255：57–71 GHz 的频段与 EIRP 限值
+  fcc15255.eirp_avg_dbm:
+    value: 40.0
+    unit: dBm
+    source: spec
+    cite: "47 CFR §15.255 'Operation within the band 57-71 GHz'，eCFR（www.ecfr.gov，美国政府公开文本）2026-11-12 版的现行条文（该节最近一次修订 2023-08-23）；2026-11-16 读原文"
+    section: "§15.255(c)(1)(i)"
+    quote: "(c) Radiated power limits. Within the 57-71 GHz band, emission levels shall not exceed the following equivalent isotropically radiated power (EIRP): (1) Devices other than field disturbance sensors shall comply with one of the following power limits, as measured during the transmit interval: (i) The average power of any emission shall not exceed 40 dBm and the peak power of any emission shall not exceed 43 dBm; or (ii) For fixed point-to-point transmitters located outdoors, the average power of any emission shall not exceed 82 dBm, and shall be reduced by 2 dB for every dB that the antenna gain is less than 51 dBi."
+    note: "雷达以外器件的平均 EIRP 上限（发射期间测量），(c)(1)(i)；室外固定点对点按 (c)(1)(ii) 可到 82 dBm（天线增益低于 51 dBi 时每 dB 降 2 dB）。雷达类器件（field disturbance sensors/radars）不按这一款，按 (c)(2)：默认峰值 EIRP 10 dBm、峰值传导 −10 dBm，各档见 fcc15255.radar_* 条目。"
+
+  fcc15255.eirp_peak_dbm:
+    value: 43.0
+    unit: dBm
+    source: spec
+    cite: "47 CFR §15.255 'Operation within the band 57-71 GHz'，eCFR（www.ecfr.gov，美国政府公开文本）2026-11-12 版的现行条文（该节最近一次修订 2023-08-23）；2026-11-16 读原文"
+    section: "§15.255(c)(1)(i)"
+    quote: "(c) Radiated power limits. Within the 57-71 GHz band, emission levels shall not exceed the following equivalent isotropically radiated power (EIRP): (1) Devices other than field disturbance sensors shall comply with one of the following power limits, as measured during the transmit interval: (i) The average power of any emission shall not exceed 40 dBm and the peak power of any emission shall not exceed 43 dBm; or (ii) For fixed point-to-point transmitters located outdoors, the average power of any emission shall not exceed 82 dBm, and shall be reduced by 2 dB for every dB that the antenna gain is less than 51 dBi."
+    note: "雷达以外器件的峰值 EIRP 上限，(c)(1)(i)；与平均值 40 dBm（fcc15255.eirp_avg_dbm）同一句。"
+
+  fcc15255.band_low_hz:
+    value: 57.0e+9
+    unit: Hz
+    source: spec
+    cite: "47 CFR §15.255 'Operation within the band 57-71 GHz'，eCFR（www.ecfr.gov，美国政府公开文本）2026-11-12 版的现行条文（该节最近一次修订 2023-08-23）；2026-11-16 读原文"
+    section: "§15.255 节标题；(c) Radiated power limits 首句"
+    quote: "§ 15.255 Operation within the band 57-71 GHz. [...] (c) Radiated power limits. Within the 57-71 GHz band, emission levels shall not exceed the following equivalent isotropically radiated power (EIRP):"
+    note: "57–71 GHz 的下边。频段写在节标题与 (c) 首句；迁入时 cite 写的 '(a)' 在现行条文里是'卫星上的设备不适用本节'，出处已改正。"
+
+  fcc15255.band_high_hz:
+    value: 71.0e+9
+    unit: Hz
+    source: spec
+    cite: "47 CFR §15.255 'Operation within the band 57-71 GHz'，eCFR（www.ecfr.gov，美国政府公开文本）2026-11-12 版的现行条文（该节最近一次修订 2023-08-23）；2026-11-16 读原文"
+    section: "§15.255 节标题；(c) Radiated power limits 首句"
+    quote: "§ 15.255 Operation within the band 57-71 GHz. [...] (c) Radiated power limits. Within the 57-71 GHz band, emission levels shall not exceed the following equivalent isotropically radiated power (EIRP):"
+    note: "57–71 GHz 的上边。频段写在节标题与 (c) 首句；迁入时 cite 写的 '(a)' 在现行条文里是'卫星上的设备不适用本节'，出处已改正。"
+
+  fcc15255.radar_default:
+    value: {band_low_hz: 57.0e+9, band_high_hz: 71.0e+9, peak_eirp_dbm: 10.0, peak_conducted_dbm: -10.0}
+    unit: "Hz, Hz, dBm, dBm"
+    source: spec
+    cite: "47 CFR §15.255 'Operation within the band 57-71 GHz'，eCFR（www.ecfr.gov，美国政府公开文本）2026-11-16 版的现行条文（该节最近一次修订 2023-08-23，与本库 2026-11-16 读的 2026-11-12 版逐字节相同）；2026-11-18 读原文"
+    section: "§15.255(c) 首句；(c)(2) 首句"
+    quote: "§ 15.255 Operation within the band 57-71 GHz. [...] (c) Radiated power limits. Within the 57-71 GHz band, emission levels shall not exceed the following equivalent isotropically radiated power (EIRP): [...] (2) Field disturbance sensors/radars shall not exceed −10 dBm peak conducted output power and 10 dBm peak EIRP except that field disturbance sensors/radars that limit their operation to all or part of the specified frequency band may operate without being subject to a transmitter conducted output power limit if they operate in compliance with paragraph (b)(3) of this section or with one or more of the provisions below:"
+    note: "雷达类器件（原文 field disturbance sensors/radars）在 57–71 GHz 的默认上限：峰值 EIRP 10 dBm，**且**峰值传导输出功率 −10 dBm。只有把工作频率限制在下列某一档的频段之内（all or part of the specified frequency band）、并满足那一档的条件时，才改按那一档，且不再受传导功率限制：fcc15255.radar_57_59p4_indoor / _outdoor、radar_57_61p56 / _off_time、radar_57_64 / _outdoor、radar_61_61p5、radar_uav_60_64。可在 (c)(2) 的几档之间切换，但同一时刻只能在一档，每档至少停 33 ms（fcc15255.radar_mode_switch）。"
+
+  fcc15255.radar_57_59p4_indoor:
+    value: {band_low_hz: 57.0e+9, band_high_hz: 59.4e+9, peak_eirp_dbm: 20.0}
+    unit: "Hz, Hz, dBm"
+    source: spec
+    cite: "47 CFR §15.255 'Operation within the band 57-71 GHz'，eCFR（www.ecfr.gov，美国政府公开文本）2026-11-16 版的现行条文（该节最近一次修订 2023-08-23，与本库 2026-11-16 读的 2026-11-12 版逐字节相同）；2026-11-18 读原文"
+    section: "§15.255(c)(2)(i)"
+    quote: "(c) Radiated power limits. Within the 57-71 GHz band, emission levels shall not exceed the following equivalent isotropically radiated power (EIRP): [...] (2) Field disturbance sensors/radars shall not exceed −10 dBm peak conducted output power and 10 dBm peak EIRP except that field disturbance sensors/radars that limit their operation to all or part of the specified frequency band may operate without being subject to a transmitter conducted output power limit if they operate in compliance with paragraph (b)(3) of this section or with one or more of the provisions below: (i) 57.0-59.4 GHz: the peak EIRP level shall not exceed 20 dBm for indoor operation or 30 dBm for outdoor operation;"
+    note: "工作频率限制在 57.0–59.4 GHz 之内、在室内使用的雷达：峰值 EIRP ≤ 20 dBm，没有关断时间要求。'室内'在 §15.255 与 §15.3（定义）里都没有定义，原文没有。这一档原文明写不受发射机传导功率限制（(c)(2) 首句），所以没有传导功率字段。可在 (c)(2) 的几档之间切换，但同一时刻只能在一档，每档至少停 33 ms（fcc15255.radar_mode_switch）。"
+
+  fcc15255.radar_57_59p4_outdoor:
+    value: {band_low_hz: 57.0e+9, band_high_hz: 59.4e+9, peak_eirp_dbm: 30.0}
+    unit: "Hz, Hz, dBm"
+    source: spec
+    cite: "47 CFR §15.255 'Operation within the band 57-71 GHz'，eCFR（www.ecfr.gov，美国政府公开文本）2026-11-16 版的现行条文（该节最近一次修订 2023-08-23，与本库 2026-11-16 读的 2026-11-12 版逐字节相同）；2026-11-18 读原文"
+    section: "§15.255(c)(2)(i)"
+    quote: "(c) Radiated power limits. Within the 57-71 GHz band, emission levels shall not exceed the following equivalent isotropically radiated power (EIRP): [...] (2) Field disturbance sensors/radars shall not exceed −10 dBm peak conducted output power and 10 dBm peak EIRP except that field disturbance sensors/radars that limit their operation to all or part of the specified frequency band may operate without being subject to a transmitter conducted output power limit if they operate in compliance with paragraph (b)(3) of this section or with one or more of the provisions below: (i) 57.0-59.4 GHz: the peak EIRP level shall not exceed 20 dBm for indoor operation or 30 dBm for outdoor operation;"
+    note: "工作频率限制在 57.0–59.4 GHz 之内、在室外使用的雷达：峰值 EIRP ≤ 30 dBm，没有关断时间要求。'室外'在 §15.255 与 §15.3 里都没有定义，原文没有。这一档原文明写不受发射机传导功率限制（(c)(2) 首句），所以没有传导功率字段。可在 (c)(2) 的几档之间切换，但同一时刻只能在一档，每档至少停 33 ms（fcc15255.radar_mode_switch）。"
+
+  fcc15255.radar_57_61p56:
+    value: {band_low_hz: 57.0e+9, band_high_hz: 61.56e+9, peak_eirp_dbm: 3.0}
+    unit: "Hz, Hz, dBm"
+    source: spec
+    cite: "47 CFR §15.255 'Operation within the band 57-71 GHz'，eCFR（www.ecfr.gov，美国政府公开文本）2026-11-16 版的现行条文（该节最近一次修订 2023-08-23，与本库 2026-11-16 读的 2026-11-12 版逐字节相同）；2026-11-18 读原文"
+    section: "§15.255(c)(2)(ii)"
+    quote: "(c) Radiated power limits. Within the 57-71 GHz band, emission levels shall not exceed the following equivalent isotropically radiated power (EIRP): [...] (2) Field disturbance sensors/radars shall not exceed −10 dBm peak conducted output power and 10 dBm peak EIRP except that field disturbance sensors/radars that limit their operation to all or part of the specified frequency band may operate without being subject to a transmitter conducted output power limit if they operate in compliance with paragraph (b)(3) of this section or with one or more of the provisions below: [...] (ii) 57.0-61.56 GHz: the peak EIRP shall not exceed 3 dBm except that the peak EIRP shall not exceed 20 dBm if the sum of continuous transmitter off-times of at least two milliseconds equals at least 16.5 milliseconds within any contiguous interval of 33 milliseconds;"
+    note: "工作频率限制在 57.0–61.56 GHz 之内的雷达，不满足关断时间时：峰值 EIRP ≤ 3 dBm。满足关断时间时见 fcc15255.radar_57_61p56_off_time（20 dBm）。这一档原文明写不受发射机传导功率限制（(c)(2) 首句），所以没有传导功率字段。可在 (c)(2) 的几档之间切换，但同一时刻只能在一档，每档至少停 33 ms（fcc15255.radar_mode_switch）。"
+
+  fcc15255.radar_57_61p56_off_time:
+    value: {band_low_hz: 57.0e+9, band_high_hz: 61.56e+9, peak_eirp_dbm: 20.0, off_time_sum_min_s: 0.0165, off_time_window_s: 0.033, off_time_min_run_s: 0.002}
+    unit: "Hz, Hz, dBm, s, s, s"
+    source: spec
+    cite: "47 CFR §15.255 'Operation within the band 57-71 GHz'，eCFR（www.ecfr.gov，美国政府公开文本）2026-11-16 版的现行条文（该节最近一次修订 2023-08-23，与本库 2026-11-16 读的 2026-11-12 版逐字节相同）；2026-11-18 读原文"
+    section: "§15.255(c)(2)(ii)"
+    quote: "(c) Radiated power limits. Within the 57-71 GHz band, emission levels shall not exceed the following equivalent isotropically radiated power (EIRP): [...] (2) Field disturbance sensors/radars shall not exceed −10 dBm peak conducted output power and 10 dBm peak EIRP except that field disturbance sensors/radars that limit their operation to all or part of the specified frequency band may operate without being subject to a transmitter conducted output power limit if they operate in compliance with paragraph (b)(3) of this section or with one or more of the provisions below: [...] (ii) 57.0-61.56 GHz: the peak EIRP shall not exceed 3 dBm except that the peak EIRP shall not exceed 20 dBm if the sum of continuous transmitter off-times of at least two milliseconds equals at least 16.5 milliseconds within any contiguous interval of 33 milliseconds;"
+    note: "工作频率限制在 57.0–61.56 GHz 之内、满足关断时间的雷达：峰值 EIRP ≤ 20 dBm。关断时间按原文是：任意连续 33 ms 的窗口里，每段至少连续 2 ms 的关断加起来不少于下限；短于 2 ms 的空闲（例如 chirp 之间的回扫）不计入。这一档关断合计 ≥ 16.5 ms，即发射占比 ≤ 50 %。这一档原文明写不受发射机传导功率限制（(c)(2) 首句），所以没有传导功率字段。可在 (c)(2) 的几档之间切换，但同一时刻只能在一档，每档至少停 33 ms（fcc15255.radar_mode_switch）。"
+
+  fcc15255.radar_57_64:
+    value: {band_low_hz: 57.0e+9, band_high_hz: 64.0e+9, peak_eirp_dbm: 14.0, off_time_sum_min_s: 0.0255, off_time_window_s: 0.033, off_time_min_run_s: 0.002}
+    unit: "Hz, Hz, dBm, s, s, s"
+    source: spec
+    cite: "47 CFR §15.255 'Operation within the band 57-71 GHz'，eCFR（www.ecfr.gov，美国政府公开文本）2026-11-16 版的现行条文（该节最近一次修订 2023-08-23，与本库 2026-11-16 读的 2026-11-12 版逐字节相同）；2026-11-18 读原文"
+    section: "§15.255(c)(2)(iii)(A)"
+    quote: "(c) Radiated power limits. Within the 57-71 GHz band, emission levels shall not exceed the following equivalent isotropically radiated power (EIRP): [...] (2) Field disturbance sensors/radars shall not exceed −10 dBm peak conducted output power and 10 dBm peak EIRP except that field disturbance sensors/radars that limit their operation to all or part of the specified frequency band may operate without being subject to a transmitter conducted output power limit if they operate in compliance with paragraph (b)(3) of this section or with one or more of the provisions below: [...] (iii) 57.0-64.0 GHz: (A) The peak EIRP shall not exceed 14 dBm, and the sum of continuous transmitter off-times of at least two milliseconds shall equal at least 25.5 milliseconds within any contiguous interval of 33 milliseconds, except as specific in paragraph (c)(2)(iii)(B) of this section;"
+    note: "工作频率限制在 57.0–64.0 GHz 之内的雷达（(B) 的室外固定 / 车载情形除外，见 fcc15255.radar_57_64_outdoor）：峰值 EIRP ≤ 14 dBm，**并且必须**满足关断时间（这一档没有'不满足关断时可用较低功率'的分支）。关断时间按原文是：任意连续 33 ms 的窗口里，每段至少连续 2 ms 的关断加起来不少于下限；短于 2 ms 的空闲（例如 chirp 之间的回扫）不计入。这一档关断合计 ≥ 25.5 ms，即发射占比 ≤ 7.5 / 33 = 22.7 %。这一档原文明写不受发射机传导功率限制（(c)(2) 首句），所以没有传导功率字段。可在 (c)(2) 的几档之间切换，但同一时刻只能在一档，每档至少停 33 ms（fcc15255.radar_mode_switch）。"
+
+  fcc15255.radar_57_64_outdoor:
+    value: {band_low_hz: 57.0e+9, band_high_hz: 64.0e+9, peak_eirp_dbm: 20.0, off_time_sum_min_s: 0.0165, off_time_window_s: 0.033, off_time_min_run_s: 0.002}
+    unit: "Hz, Hz, dBm, s, s, s"
+    source: spec
+    cite: "47 CFR §15.255 'Operation within the band 57-71 GHz'，eCFR（www.ecfr.gov，美国政府公开文本）2026-11-16 版的现行条文（该节最近一次修订 2023-08-23，与本库 2026-11-16 读的 2026-11-12 版逐字节相同）；2026-11-18 读原文"
+    section: "§15.255(c)(2)(iii)(B)"
+    quote: "(c) Radiated power limits. Within the 57-71 GHz band, emission levels shall not exceed the following equivalent isotropically radiated power (EIRP): [...] (2) Field disturbance sensors/radars shall not exceed −10 dBm peak conducted output power and 10 dBm peak EIRP except that field disturbance sensors/radars that limit their operation to all or part of the specified frequency band may operate without being subject to a transmitter conducted output power limit if they operate in compliance with paragraph (b)(3) of this section or with one or more of the provisions below: [...] (iii) 57.0-64.0 GHz: [...] (B) The peak EIRP shall not exceed 20 dBm, and the sum of continuous transmitter off-times of at least two milliseconds shall equal at least 16.5 milliseconds within any contiguous interval of 33 milliseconds when operated outdoors: (1) As part of a temporary or permanently fixed application; or (2) When being used in vehicular applications to perform specific tasks of moving something or someone, except for in-cabin applications;"
+    note: "工作频率限制在 57.0–64.0 GHz 之内、**在室外**使用、且属于下列之一的雷达：(1) 临时或永久固定的应用；(2) 车载应用中'执行移动某物或某人的特定任务'，车厢内的应用除外。峰值 EIRP ≤ 20 dBm，关断合计 ≥ 16.5 ms。关断时间按原文是：任意连续 33 ms 的窗口里，每段至少连续 2 ms 的关断加起来不少于下限；短于 2 ms 的空闲（例如 chirp 之间的回扫）不计入。'室外'、'固定'、'车载'在 §15.255 与 §15.3 里都没有进一步定义，原文没有。这一档原文明写不受发射机传导功率限制（(c)(2) 首句），所以没有传导功率字段。可在 (c)(2) 的几档之间切换，但同一时刻只能在一档，每档至少停 33 ms（fcc15255.radar_mode_switch）。"
+
+  fcc15255.radar_61_61p5:
+    value: {band_low_hz: 61.0e+9, band_high_hz: 61.5e+9, max_bandwidth_hz: 500.0e+6, avg_eirp_dbm: 40.0, peak_eirp_dbm: 43.0, outside_avg_eirp_dbm: 10.0, outside_peak_eirp_dbm: 13.0}
+    unit: "Hz, Hz, Hz, dBm, dBm, dBm, dBm"
+    source: spec
+    cite: "47 CFR §15.255 'Operation within the band 57-71 GHz'，eCFR（www.ecfr.gov，美国政府公开文本）2026-11-16 版的现行条文（该节最近一次修订 2023-08-23，与本库 2026-11-16 读的 2026-11-12 版逐字节相同）；2026-11-18 读原文"
+    section: "§15.255(c)(2)(v)"
+    quote: "(c) Radiated power limits. Within the 57-71 GHz band, emission levels shall not exceed the following equivalent isotropically radiated power (EIRP): [...] (2) Field disturbance sensors/radars shall not exceed −10 dBm peak conducted output power and 10 dBm peak EIRP except that field disturbance sensors/radars that limit their operation to all or part of the specified frequency band may operate without being subject to a transmitter conducted output power limit if they operate in compliance with paragraph (b)(3) of this section or with one or more of the provisions below: [...] (v) 61.0-61.5 GHz: For field disturbance sensors/radars that occupy 500 MHz bandwidth or less that are contained wholly within the frequency band 61.0-61.5 GHz, the average power of any emission, measured during the transmit interval, shall not exceed 40 dBm, and the peak power of any emission shall not exceed 43 dBm. In addition, the average power of any emission outside of the 61.0-61.5 GHz band, measured during the transmit interval, but still within the 57-71 GHz band, shall not exceed 10 dBm, and the peak power of any emission shall not exceed 13 dBm."
+    note: "占用带宽 ≤ 500 MHz 且整个落在 61.0–61.5 GHz 之内的雷达：带内平均 EIRP ≤ 40 dBm、峰值 ≤ 43 dBm（发射期间测量）；同时 61.0–61.5 GHz 之外、57–71 GHz 之内的发射平均 ≤ 10 dBm、峰值 ≤ 13 dBm（outside_*）。这是 (c)(2) 里唯一同时给平均与峰值的一档，也没有关断时间要求。'占用带宽'怎么量，这一款没有写，原文没有。这一档原文明写不受发射机传导功率限制（(c)(2) 首句），所以没有传导功率字段。可在 (c)(2) 的几档之间切换，但同一时刻只能在一档，每档至少停 33 ms（fcc15255.radar_mode_switch）。"
+
+  fcc15255.radar_uav_60_64:
+    value: {band_low_hz: 60.0e+9, band_high_hz: 64.0e+9, peak_eirp_dbm: 20.0, off_time_sum_min_s: 0.0165, off_time_window_s: 0.033, off_time_min_run_s: 0.002, max_height_agl_m: 121.92}
+    unit: "Hz, Hz, dBm, s, s, s, m"
+    source: spec
+    cite: "47 CFR §15.255 'Operation within the band 57-71 GHz'，eCFR（www.ecfr.gov，美国政府公开文本）2026-11-16 版的现行条文（该节最近一次修订 2023-08-23，与本库 2026-11-16 读的 2026-11-12 版逐字节相同）；2026-11-18 读原文"
+    section: "§15.255(b)(3)；(c)(2) 首句"
+    quote: "(3) Field disturbance sensors/radar devices deployed on unmanned aircraft may operate within the frequency band 60-64 GHz, provided that the transmitter not exceed 20 dBm peak EIRP. The sum of continuous transmitter off-times of at least two milliseconds shall equal at least 16.5 milliseconds within any contiguous interval of 33 milliseconds. Operation shall be limited to a maximum of 121.92 meters (400 feet) above ground level. [...] (c) Radiated power limits. Within the 57-71 GHz band, emission levels shall not exceed the following equivalent isotropically radiated power (EIRP): [...] (2) Field disturbance sensors/radars shall not exceed −10 dBm peak conducted output power and 10 dBm peak EIRP except that field disturbance sensors/radars that limit their operation to all or part of the specified frequency band may operate without being subject to a transmitter conducted output power limit if they operate in compliance with paragraph (b)(3) of this section or with one or more of the provisions below:"
+    note: "装在无人机上的雷达：工作频率限制在 60–64 GHz 之内，峰值 EIRP ≤ 20 dBm，关断合计 ≥ 16.5 ms，离地不超过 121.92 m（400 ft）。(c)(2) 首句把它列为可选的一档。关断时间按原文是：任意连续 33 ms 的窗口里，每段至少连续 2 ms 的关断加起来不少于下限；短于 2 ms 的空闲（例如 chirp 之间的回扫）不计入。这一档原文明写不受发射机传导功率限制（(c)(2) 首句），所以没有传导功率字段。相关的还有 (b)(2)(iii)：飞行中的飞机上，雷达只能装在乘客的便携电子设备里、只用 59.3–71.0 GHz（本库没有为它建条目）。"
+
+  fcc15255.radar_mode_switch:
+    value: {modes_at_once: 1, min_dwell_s: 0.033}
+    unit: "-, s"
+    source: spec
+    cite: "47 CFR §15.255 'Operation within the band 57-71 GHz'，eCFR（www.ecfr.gov，美国政府公开文本）2026-11-16 版的现行条文（该节最近一次修订 2023-08-23，与本库 2026-11-16 读的 2026-11-12 版逐字节相同）；2026-11-18 读原文"
+    section: "§15.255(c)(2)(iv)"
+    quote: "(c) Radiated power limits. Within the 57-71 GHz band, emission levels shall not exceed the following equivalent isotropically radiated power (EIRP): [...] (2) Field disturbance sensors/radars shall not exceed −10 dBm peak conducted output power and 10 dBm peak EIRP except that field disturbance sensors/radars that limit their operation to all or part of the specified frequency band may operate without being subject to a transmitter conducted output power limit if they operate in compliance with paragraph (b)(3) of this section or with one or more of the provisions below: [...] (iv) A field disturbance sensor may operate in any of the modes in the above sub-sections so long as the device operates in only one mode at any time and does so for at least 33 milliseconds before switching to another mode."
+    note: "一部雷达同时满足几档时：可以用其中任意一档，原文没有优先顺序；但同一时刻只能在一档，换档前在当前档至少停 33 ms。"

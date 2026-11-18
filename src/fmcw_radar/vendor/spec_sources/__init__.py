@@ -3,15 +3,16 @@
 spec_sources is the siblings' shared table of numbers about the outside
 world (specification clauses, datasheet and paper figures, and what is
 derived from them alone), each with its provenance.  Vendored here at
-``a9af2614c47f66eb602738e7ae19e84d164199de`` (its main, fmcw_radar#21, spec_sources 0.6.0):
-``reader.py`` and the five domain tables fmcw_radar reads --
+``18241cd698facbc745ff73c7e7b267d915436acc`` (its main, spec_sources#50):
+``reader.py`` and the six domain tables fmcw_radar reads --
 ``data/frontend60.yaml`` (the 60 GHz radar chip's figures, its Figure 7-2,
 the TX-RX isolation and its derived no-EBG figure), ``data/atmosphere.yaml``
 (ITU-R P.676-13's oxygen lines and method, and the derived sea-level
 attenuation), ``data/radar_targets.yaml`` (the pedestrian RCS, ISO 19206-3's
 passenger-car bands, the trihedral formulas), ``data/adpll60.yaml`` (a 60 GHz
-FMCW ADPLL's TDC resolution, Wu et al. 2014) and ``data/windows.yaml``
-(Harris 1978 Table I).  The
+FMCW ADPLL's TDC resolution, Wu et al. 2014), ``data/windows.yaml``
+(Harris 1978 Table I) and ``data/regulatory.yaml`` (47 CFR 15.255: the 57-71 GHz
+band and the radar limits of its paragraph (c)(2)).  The
 reader loads whatever ``data/*.yaml`` sits next to it, so the other domain
 tables are simply not copied.
 

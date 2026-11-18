@@ -49,8 +49,8 @@ Pins
   ``configs/radar_60g_x10lo.yaml`` (a YAML file carries the same attribution
   header in its ``#`` comments and is compared byte for byte like a module).
 
-* ``spec_sources/`` -- spec_sources @ ``a9af2614c47f66eb602738e7ae19e84d164199de``
-  (its ``main``, fmcw_radar#21, spec_sources 0.6.0), the siblings' shared table of outside numbers:
+* ``spec_sources/`` -- spec_sources @ ``18241cd698facbc745ff73c7e7b267d915436acc``
+  (its ``main``, spec_sources#50), the siblings' shared table of outside numbers:
 
   - ``reader.py`` (``ref()`` / ``value()`` / ``survey()``, lookup only),
   - ``data/frontend60.yaml`` (the 60 GHz radar chip's figures and Figure 7-2,
@@ -60,7 +60,9 @@ Pins
   - ``data/radar_targets.yaml`` (the pedestrian RCS, ISO 19206-3's passenger-car
     RCS bands, the trihedral corner-reflector formulas),
   - ``data/adpll60.yaml`` (the 60 GHz FMCW ADPLL's TDC resolution, 12.2 ps),
-  - ``data/windows.yaml`` (Harris 1978 Table I, the windows' figures of merit).
+  - ``data/windows.yaml`` (Harris 1978 Table I, the windows' figures of merit),
+  - ``data/regulatory.yaml`` (47 CFR 15.255: the 57-71 GHz band and the radar
+    limits of its paragraph (c)(2); vendored since 0.2.18, read from 0.2.19).
 
   ``fmcw_radar.sources`` reads the five 60 GHz front-end figures, the two
   oxygen attenuations, the human and car RCS, the 60 GHz TDC resolution and
