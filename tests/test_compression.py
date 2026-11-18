@@ -48,8 +48,11 @@ def test_small_signal_closed_form_is_the_limiter_on_synthesised_samples(blocker_
 
 
 def _leak(**ov):
+    """The transmitter at its full 12 dBm (no backoff): the level the stages
+    were sized against.  The default's 8 dB of backoff (0.2.20) is one of
+    the cases below."""
     return apply_overrides(RadarConfig(), {"leakage.enabled": True, "leakage.reflector_range_m": 0.02, "chirp.n_chirps": 16,
-                                           "rx.hpf_corner_hz": 200e3, "rx.hpf_order": 2, **ov})
+                                           "rx.hpf_corner_hz": 200e3, "rx.hpf_order": 2, "frontend.tx_backoff_db": 0.0, **ov})
 
 
 def _cell_and_floor(tm, cfg):
@@ -62,11 +65,14 @@ def _cell_and_floor(tm, cfg):
 
 
 @pytest.mark.parametrize("ov, echo, noise", [({}, -10.65, -8.35), ({"frontend.rx_rapp_p": 1.0}, -5.89, -5.39),
-                                             ({"frontend.tx_power_dbm": 10.0, "leakage.isolation_db": 25.0}, -2.18, -2.06)])
+                                             ({"frontend.tx_power_dbm": 10.0, "leakage.isolation_db": 25.0}, -2.18, -2.06),
+                                             ({"frontend.tx_backoff_db": 8.0}, -1.49, -1.44)])
 def test_budget_and_time_engine_agree_on_what_the_leakage_does_to_the_echo(ov, echo, noise):
-    """The sourced leakage (-8 dBm at the receiver, 4 dB over the out-of-band
-    point) through the default receiver: the echo loses 10.7 dB and the
-    thermal noise 8.4 dB of power, so the SNR 2.3 dB.  The time engine, the
+    """The sourced leakage at full power (-8 dBm at the receiver, 4 dB over
+    the out-of-band point) through the default receiver: the echo loses
+    10.7 dB and the thermal noise 8.4 dB of power, so the SNR 2.3 dB.  Backed
+    off 8 dB as the default now is (-16 dBm, 4 dB under the point): 1.5 and
+    1.4 dB, the SNR 0.05 dB.  The time engine, the
     same frame with the stages on and off: the target's cell and the floor
     6.5-12 m out move by as much (the floor a little less: the ADC's
     quantisation comes after the stages)."""

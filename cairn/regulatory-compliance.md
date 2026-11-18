@@ -1,7 +1,7 @@
 ---
 type: project_topic
 status: active
-summary: "发射端的规管检查(0.2.19,`link/compliance.py`):47 CFR §15.255(c)(2) 的雷达限值经 spec_sources 读原文,每个数一条 `fcc15255.*`。默认 58–62 GHz、22 dBm EIRP 适用 57–64 GHz 那档(14 dBm、任意 33 ms 里关断 ≥ 25.5 ms):超 8 dB,帧率上限 31.3 帧/秒。几档可任选,检查列出每一档并给出'治理档'(能用的里面上限最高的)。原文没说的五件事(室内外的定义、占用带宽怎么量、关断被窗口截断怎么计、多发射通道、测量带宽)各有本库的读法并打在报表里。链路预算多一列'按合规上限';EIRP 被上限钉住后发射天线增益不再影响 SNR。默认配置这一轮不改。"
+summary: "发射端的规管检查(0.2.19,`link/compliance.py`):47 CFR §15.255(c)(2) 的雷达限值经 spec_sources 读原文,每个数一条 `fcc15255.*`。58–62 GHz 的扫频适用 57–64 GHz 那档(14 dBm、任意 33 ms 里关断 ≥ 25.5 ms)。0.2.20 起默认配置合规:发射机从 12 dBm 回退 8 dB(`frontend.tx_backoff_db`,EIRP 14 dBm,余量 0.0 dB),帧周期 1/30 s(关断 26.6 ms);之前满功率 22 dBm 超 8 dB、帧周期没声明。几档可任选,检查列出每一档并给出'治理档'(能用的里面上限最高的)。原文没说的五件事(室内外的定义、占用带宽怎么量、关断被窗口截断怎么计、多发射通道、测量带宽)各有本库的读法并打在报表里。链路预算多一列'按合规上限';EIRP 被上限钉住后发射天线增益不再影响 SNR。"
 tags: [regulatory, eirp, fcc, spec_sources, link-budget, frame-rate]
 contains: [decision, lesson, experience]
 created: "2026-11-18"
@@ -39,12 +39,23 @@ authoring_mode: ai_generated
 
 ## 当前结论(`tests/test_compliance.py`、示例 09)
 
-- **默认配置超 8 dB,帧率有上限。** 扫 58–62 GHz 同时跨过 59.4 与 61.56 GHz,频段包得住它的只有默认档、`radar_57_64`、`radar_57_64_outdoor`。
+- **默认配置合规,余量 +0.0 dB(0.2.20,contains:decision)。** 用户看了下面的取舍表选了"降 EIRP、不换频段":58–62 GHz 不动,发射机从手册的 12 dBm 回退 8 dB 到 4 dBm,
+  经 10 dBi 的占位天线 EIRP 14 dBm = `radar_57_64` 的上限;帧周期声明为 1/30 s,最坏的 33 ms 里关断 33 − 6.4 = 26.6 ms(要求 25.5)。判定:"EIRP within the limit (margin +0.0 dB); off-time met"。
+  - 回退量是一个新的配置量 `frontend.tx_backoff_db`(≥ 0;空 = 频段的占位)。60 GHz 档的占位 8 dB 标 `assumed`:它不是外部的数,是设计取舍 = `tx_power_dbm + tx_gain_dbi − fcc15255.radar_57_64.peak_eirp_dbm`
+    = 12 + 10 − 14,测试守着这个等式,也守着它不超过手册写的回退范围 26 dB。77 GHz 档 0 dB。**没有去动 12 dBm(spec)和 10 dBi(assumed)**:能发多少、天线多大是器件的事,
+    实际发多少是设计的事,分成两个数以后"为了过合规改天线占位"这条路就不存在了。
+  - 回退的是发射机,所以不只是合规那一列:链路预算(EIRP、P_r、所有 SNR 低 8 dB:5 m 人体 51.34 → 43.34 dB,IF 带限的 15 m 处 24.0 dB,图上 Pd 0.9 要 12.24 dB)、
+    泄漏预算(接收端 −8 → −16 dBm,对带外压缩点从高 4 dB 到低 4 dB,回波被压掉 10.65 → 1.49 dB)、鬼目标的检出(每帧 2.75 → 0.18 个;电平 −37.3 dBc 不变)都跟着动。
+    分辨率、相噪、chirp 的数不动。"按合规上限"那一列现在与"按配置"那一列相同。
+  - 帧周期只进检查。每秒多一帧就不合规了:1/32 s(31.25 ms < 31.9 ms)时 `radar_57_64` 不能用,退到默认档(10 dBm、传导 −10 dBm),EIRP 超 4 dB、传导超 14 dB。
+  - 余量是 0.0 dB:按手册典型值算的,没有留器件离散、温度 / 电压、天线公差(ROADMAP P1 #6(f))。
+  - 帧比 1/30 s 长的配置(1 ms × 64 chirp 这类)加载时报错,要自己给帧周期或设成空(不声明)。
+- **满功率的发射机超 8 dB,帧率有上限(0.2.19 的结论;0.2.19 及以前的默认配置就是它,现在是 `frontend.tx_backoff_db: 0` 加 `chirp.frame_period_s` 置空)。** 扫 58–62 GHz 同时跨过 59.4 与 61.56 GHz,频段包得住它的只有默认档、`radar_57_64`、`radar_57_64_outdoor`。
   没声明场景时治理档是 `radar_57_64`:上限 14 dBm,22 dBm 超 8.0 dB;按上限 EIRP 14 dBm,5 m 人体的格点 SNR 51.34 → 43.34 dB。
   关断:6.4 ms 的帧要求帧周期 ≥ 33 − (7.5 − 6.4) = **31.90 ms,即 ≤ 31.3 帧/秒**;帧周期没声明,报表写"未声明,无法判断"并给出这个数。
   帧周期 33 ms 时最坏的 33 ms 里关断 26.6 ms(够);31.8 ms 时不够,`radar_57_64` 整档不能用,退到默认档:传导 −10 dBm,经 10 dBi 天线 EIRP 只有 0 dBm。
   一帧长过 7.5 ms(比如 128 个 chirp,12.8 ms)时 14 dBm 档无论帧率多低都不满足("cannot be met")。
-- **频段取舍(示例 09,同一个 5 m 人体、同样 64 chirp,EIRP 取上限)**:
+- **频段取舍(示例 09,同一个 5 m 人体、同样 64 chirp,发射机满功率、不声明帧周期,EIRP 取上限)**:
 
   | 扫频 | 治理档 | 上限 | B | 分辨率(Hann) | 上限下的 SNR | 关断 | 最高帧率 |
   |---|---|---|---|---|---|---|---|
@@ -55,12 +66,15 @@ authoring_mode: ai_generated
   | 57–64 GHz 室外固定 | 57–64 室外 | 20 dBm | 7.00 GHz | 3.08 cm | 49.27 dB | ≥ 16.5 ms | 68.3 /s |
 
   把上沿从 62 收到 61.56 GHz、下沿放到 57 GHz(57–61.56):带宽反而多 0.56 GHz,上限高 6 dB,帧率上限翻倍多。默认的 58–62 GHz 在这张表里是最吃亏的一行。
+  用户仍选了留在 58–62 GHz(0.2.20):换频段要动中心频率、DCO 的 FCW(不再是整数 150)、斜率、最大距离与全部 chirp / 相噪的数,贴边的扫频在实物上还要保护带;
+  降 EIRP 只动跟功率走的数,5 m 人体还有 43 dB。57–61.56 GHz 那一行(SNR 高 6 dB、鬼目标每帧 0.009 个)留在表里作对照。
   表里的"探测距离"(SNR 落到图上 CA-CFAR Pd 0.9 所需)28.7–40.5 m,都在 IF 带限的最大距离(8.6–25 m)之外:真正卡距离的是 IF 带宽,不是 EIRP。
-- **发射天线增益在上限下不起作用(contains:lesson)**:默认档 12 dBm 加任何 ≥ 2 dBi 的发射天线都 ≥ 14 dBm,按上限后 EIRP 一律 14 dBm:
-  `tx_gain_dbi` = 2 / 6 / 10 dBi 时"按合规上限"的 SNR 逐位相同(43.34 dB),而按配置的 SNR 是 43.34 / 47.34 / 51.34。`rx_gain_dbi` 仍 1 dB 对 1 dB(8 / 10 / 12 dBi → 41.34 / 43.34 / 45.34)。
+- **发射天线增益在上限下不起作用(contains:lesson)**:满功率的 12 dBm 加任何 ≥ 2 dBi 的发射天线都 ≥ 14 dBm,按上限后 EIRP 一律 14 dBm:
+  `tx_gain_dbi` = 2 / 6 / 10 dBi 时"按合规上限"的 SNR 逐位相同(43.34 dB),而满功率的 SNR 是 43.34 / 47.34 / 51.34。
+  (0.2.20 的默认配置里这件事的形式是:发射天线的占位变了,回退量跟着变——2 / 6 / 10 dBi 对应 0 / 4 / 8 dB——EIRP 与 SNR 不动。只覆盖 `tx_gain_dbi` 而不动回退量,EIRP 会跟着天线走。)`rx_gain_dbi` 仍 1 dB 对 1 dB(8 / 10 / 12 dBi → 41.34 / 43.34 / 45.34)。
   预期先写进测试再跑,一次通过。20 dBm 的档要 ≥ 8 dBi 才被钉住(2 / 6 dBi 时比 10 dBi 低 6 / 2 dB)。所以 ROADMAP"等上游"#1 里天线增益的不确定,在合规的雷达上只剩接收侧。
-- **其它配置**:`radar_60g_mimo`(2 个发射通道 TDM 轮流发,同一时刻只有一个,EIRP 按单通道 22 dBm,帧仍是 6.4 ms)、`radar_60g_x10lo`、`radar_60g_dither` 与默认相同;
-  `radar_77g_automotive`(76.5–78.5 GHz,24 dBm)不适用。
+- **其它配置**:`radar_60g_mimo`(2 个发射通道 TDM 轮流发,同一时刻只有一个,EIRP 按单通道 14 dBm,帧仍是 6.4 ms)、`radar_60g_x10lo`、`radar_60g_dither` 与默认相同(回退 8 dB、1/30 s,合规);
+  `radar_77g_automotive`(76.5–78.5 GHz,24 dBm,回退 0 dB)不适用——76–81 GHz 的规管限值本库没有读,未核实。
 
 ## 原文没说的,和本库的读法(contains:decision;都打在报表里)
 
@@ -72,7 +86,7 @@ authoring_mode: ai_generated
    另一种读法(窗口里截下来的片段也得 ≥ 2 ms)会多扣最多 4 ms:6.4 ms 的帧在 14 dBm 档 33 − 6.4 − 4 = 22.6 < 25.5,任何帧率都不合规。本库取前一种,因为后一种下连很低占空比的器件也过不了。
 4. **多个发射通道的 EIRP 怎么合计没说**((h) 只禁止带外部锁相输入做波束成形阵)。本库的 MIMO 是 TDM,同一时刻一个通道,按单通道。
 5. **峰值 EIRP 的测量带宽没说**(测量方法指向 §2.947;(i)(2) 要求测量时扫频开着;(c)(4) 说 §15.35(b)(c) 的 100 ms 平均与"峰值不超平均 20 dB"不适用)。
-   本库把配置的 `tx_power_dbm + tx_gain_dbi` 当峰值 EIRP,`tx_power_dbm` 当峰值传导。
+   本库把配置的 `tx_power_dbm − tx_backoff_db + tx_gain_dbi` 当峰值 EIRP,`tx_power_dbm − tx_backoff_db` 当峰值传导(0.2.19 没有回退量这一项)。
 
 ## 实现
 
@@ -82,13 +96,16 @@ authoring_mode: ai_generated
 - 治理档 = 能用的档里上限最高的;上限相同取不要求关断的。"能用" = 频段包得住、带宽条件满足、场景满足或不依赖场景、关断满足或还能满足(帧周期没声明)。
 - 关断:`on_bursts`(把短于 2 ms 的间隙并进发射段)、`min_off_sum`(滑动窗口里计入的关断的最小值:它对窗口起点分段线性,只在窗口边沿对上发射段边沿时取极值,测试对照细网格暴力搜索)、
   `min_frame_period`(二分)。
-- `link_budget(cfg, eirp_cap_dbm=...)`:EIRP 取 `min(pt + gt, 上限)`,其余不变(泄漏和它造成的压缩仍按配置的发射机);治理档有传导上限时(默认档)先把 `pt` 压到传导上限。
+- `link_budget(cfg, eirp_cap_dbm=...)`:EIRP 取 `min(pt − 回退 + gt, 上限)`,其余不变(泄漏和它造成的压缩仍按配置的发射机);治理档有传导上限时(默认档)先把 `pt` 压到传导上限。
   `StatResult.compliance` / `budget_capped`;报表的链路预算多一列,另有"Regulatory check"一节。
-- 新配置量只进检查、不进信号处理:`chirp.frame_period_s`、`regulatory.scenario`(测试守着:声明与否,统计引擎的其它结果逐项相同)。
+- 只进检查、不进信号处理的配置量:`chirp.frame_period_s`(0.2.20 起默认 1/30 s)、`regulatory.scenario`(测试守着:声明与否,统计引擎的其它结果逐项相同)。
+  `frontend.tx_backoff_db`(0.2.20)相反,是发射机的量:`RadarConfig.tx_conducted_dbm()` = `tx_power_dbm − tx_backoff_db`,链路预算、泄漏预算、检查都读它。
+- 机制类测试(泄漏、压缩、鬼目标进虚警账、dither、检查本身的各档逻辑)固定在满功率上跑(`frontend.tx_backoff_db: 0`,`tests/test_compliance.py::FULL` 等),阈值保持原义;
+  默认配置的新结论另有断言(`test_default_config_is_compliant_at_the_limit`、`test_backed_off_default_keeps_the_leakage_under_the_out_of_band_point` 等)。
 - 指纹:原有 2153 个值逐位不变,新增 247 个 `compliance.*` 键。break-check(手工改坏再恢复):去掉关断判据 → 10 条红;上限不作用到预算 → 3 条红;57–64 档读成室外档的上限 → 红。
 
 ## 没做的(ROADMAP)
 
-- 默认配置怎么改(降 EIRP / 换频段 / 不动并标明超限)由用户看了取舍表定,单独一个 numbers-move 的 PR。
+- (0.2.20 了结:默认配置怎么改,用户选了降 EIRP。)合规余量 0.0 dB、回退后的 NF / 线性度、长帧的帧周期:ROADMAP P1 #6(f)。
 - 61.0–61.5 GHz 档的档外限值(平均 10 / 峰值 13 dBm)、无人机档的高度、换档的 33 ms 停留都没建模;脉冲雷达 (c)(3) 与机上使用 (b)(2)(iii) spec_sources 没建条目,FMCW 用不上。
 - 只有美国的 §15.255;ETSI EN 305 550 / 302 264 等没有读。

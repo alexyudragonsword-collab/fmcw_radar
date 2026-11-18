@@ -125,7 +125,7 @@ def leakage_budget(cfg: RadarConfig, budget: LinkBudget | None = None) -> Leakag
         return None
     b = link_budget(cfg) if budget is None else budget
     iso, iso_src = cfg.leakage_value("isolation_db")
-    pt, _ = cfg.frontend_value("tx_power_dbm")
+    pt = cfg.tx_conducted_dbm()                 # the transmitter as it runs: its power less the backoff
     g_rx, _ = cfg.frontend_value("rx_gain_db")
     p1_oob, _ = cfg.frontend_value("p1db_oob_dbm")
     p1_in, _ = cfg.p1db_inband()

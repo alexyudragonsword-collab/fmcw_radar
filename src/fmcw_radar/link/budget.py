@@ -93,10 +93,11 @@ class LinkBudget:
 
 def link_budget(cfg: RadarConfig, range_m: float | None = None, eirp_cap_dbm: float | None = None) -> LinkBudget:
     """``eirp_cap_dbm``: the same budget with the EIRP held to a regulatory
-    limit, ``min(tx_power + tx_gain, cap)``, and nothing else changed (the
+    limit, ``min(tx_power - tx_backoff + tx_gain, cap)``, and nothing else changed (the
     column link/compliance.py's check asks for).  None: the configured EIRP."""
     r = cfg.target.range_m if range_m is None else float(range_m)
     pt, s_pt = cfg.frontend_value("tx_power_dbm")
+    bo, s_bo = cfg.frontend_value("tx_backoff_db")
     gt, s_gt = cfg.frontend_value("tx_gain_dbi")
     gr, s_gr = cfg.frontend_value("rx_gain_dbi")
     g_rx, s_grx = cfg.frontend_value("rx_gain_db")
@@ -105,7 +106,7 @@ def link_budget(cfg: RadarConfig, range_m: float | None = None, eirp_cap_dbm: fl
     alpha, s_alpha = cfg.oxygen_db_per_km()
     rcs, s_rcs = cfg.rcs_dbsm()
     lam = cfg.band.wavelength_m
-    eirp = pt + gt
+    eirp = pt - bo + gt
     if eirp_cap_dbm is not None:
         eirp = min(eirp, float(eirp_cap_dbm))
     path = 3.0 * db(4.0 * math.pi) + 4.0 * db(r) - 2.0 * db(lam)     # (4 pi)^3 R^4 / lambda^2 in dB
@@ -127,7 +128,7 @@ def link_budget(cfg: RadarConfig, range_m: float | None = None, eirp_cap_dbm: fl
     snr_cell = snr_chirp + coherent_gain_db(wd)
     snr_rect = cn0 + db(cfg.chirp.duration_s) + db(cfg.chirp.n_chirps)
     return LinkBudget(
-        inputs={"tx_power_dbm": (pt, s_pt), "tx_gain_dbi": (gt, s_gt), "rx_gain_dbi": (gr, s_gr),
+        inputs={"tx_power_dbm": (pt, s_pt), "tx_backoff_db": (bo, s_bo), "tx_gain_dbi": (gt, s_gt), "rx_gain_dbi": (gr, s_gr),
                 "rx_gain_db": (g_rx, s_grx), "nf_db": (nf, s_nf), "p1db_inband_dbm": (p1, s_p1),
                 "oxygen_db_per_km": (alpha, s_alpha), "rcs_dbsm": (rcs, s_rcs), "range_m": (r, "config"),
                 "wavelength_m": (lam, "config"), **({} if eirp_cap_dbm is None else {"eirp_cap_dbm": (float(eirp_cap_dbm), "spec")})},

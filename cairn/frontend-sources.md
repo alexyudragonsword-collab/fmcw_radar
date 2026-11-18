@@ -1,11 +1,11 @@
 ---
 type: project_topic
 status: active
-summary: "60 GHz 前端的数从哪来,以及接收机的两级压缩(0.2.9:两个引擎里的 Rapp 限幅,泄漏让回波掉 10.7 dB、SNR 掉 2.3 dB;推翻了 0.2.8 的'1 阶高通不够'):发射功率 / NF / 两个接收压缩点 / 收发隔离读 mmw60_trx 来源表里读过原文的条目(一颗雷达芯片的手册、一篇板上阵的文章),天线增益与增益档仍是占位;为什么只 vendor 来源表不 vendor Frontend60;压缩点为什么是两个量;换数之后哪些结论变了(泄漏强 7 dB,1 阶高通不够,带外裕量 −4 dB)。"
+summary: "60 GHz 前端的数从哪来,以及接收机的两级压缩(0.2.9:两个引擎里的 Rapp 限幅,满功率时泄漏让回波掉 10.7 dB、SNR 掉 2.3 dB;推翻了 0.2.8 的'1 阶高通不够';0.2.20 默认回退 8 dB 后泄漏在带外压缩点之下 4 dB,回波只掉 1.5 dB):发射功率 / NF / 两个接收压缩点 / 收发隔离读 mmw60_trx 来源表里读过原文的条目(一颗雷达芯片的手册、一篇板上阵的文章),天线增益与增益档仍是占位;为什么只 vendor 来源表不 vendor Frontend60;压缩点为什么是两个量;换数之后哪些结论变了(泄漏强 7 dB,1 阶高通不够,带外裕量 −4 dB)。"
 tags: [frontend, sources, mmw60_trx, compression, leakage, vendor]
 contains: [decision, lesson, experience]
 created: "2026-11-12"
-updated: "2026-11-14"
+updated: "2026-11-18"
 related: [architecture-invariants, mimo-angle]
 authoring_mode: ai_generated
 ---
@@ -42,6 +42,12 @@ authoring_mode: ai_generated
 - **压缩点是两个量(contains:lesson)。** 雷达芯片的手册把接收压缩点分成带外(用远低于最低高通截止的 10 kHz 连续波测:高通之前的那几级)和带内(随增益每 dB 降 1 dB:输出端的固定电平)。
   0.2.7 及以前只有一个 `p1db_dbm`(−20 dBm),泄漏预算和回波裕量共用。现在:回波对带内点(`cfg.p1db_inband()`,config 改增益时沿图 7-2 的直线折算);
   泄漏的每一项按拍频在高通截止的哪一侧选点(`link/leakage.py`,`p1db_kind`)。77 GHz 一档两个点都沿用原来的 −20 dBm(没有出处)。
+
+> **0.2.20:默认发射机回退 8 dB**(`frontend.tx_backoff_db`,60 GHz 档的占位 8 dB = 12 + 10 − 14,`assumed`;EIRP 到 §15.255(c)(2) 的 14 dBm,`cairn/regulatory-compliance.md`)。
+> 12 dBm(spec)没有动:它是器件能发多少;实际按 `tx_power_dbm − tx_backoff_db` = 4 dBm 算。**本文下面两节的数都是满功率(回退 0 dB)的**,机制测试也固定在满功率上;
+> 默认配置上对应的数:5 m 人体格点 SNR 43.34 dB(P_r −93.11 dBm,C/N0 68.80 dBHz);泄漏在接收端 −16 dBm,对带外压缩点 **+4 dB**(满功率 −4 dB);
+> 泄漏自己 −0.50 dB、回波 −1.49 dB、热噪声 −1.44 dB、SNR −0.05 dB(`radar_60g_mimo` 43.34 → 43.27 dB);回波的镜像 −18.5 dBc;2 阶 200 kHz 后 ADC 裕量 +36.4 dB、阶跃 6.04 V、推荐 blanking 4.34 µs。
+> "隔离不够的代价是灵敏度"这条结论在满功率上成立;合规的功率恰好把泄漏带到压缩点以下,代价基本消失——换成 20 dBm 的档(回退 2 dB,泄漏 −10 dBm)又回到压缩点以上 2 dB(没有量)。
 
 ## 换数之后变了什么(numbers-move)
 

@@ -1,5 +1,10 @@
 # 60 GHz sensing radar: 58-62 GHz (B = 4 GHz) sawtooth, 100 us chirps x 64,
 # a 15 GHz ADPLL x4 as the one LO, a human at 5 m receding at 2 m/s.
+# Regulatory (47 CFR 15.255(c)(2), link/compliance.py): the 58-62 GHz sweep is
+# held to the 57-64 GHz tier, 14 dBm peak EIRP and 25.5 ms of off-time in any
+# 33 ms.  The transmitter runs 8 dB backed off from its 12 dBm (the band's
+# tx_backoff_db in sources.yaml: 12 + 10 - 14) and a frame goes out every
+# 1/30 s, which leaves 26.6 ms off.
 # Every front-end number is left empty: the band's placeholder from
 # src/fmcw_radar/data/sources.yaml (source: assumed) is used until mmw60_trx's
 # front end exists.  The band / chirp / ADC numbers are the design's own.
@@ -13,6 +18,7 @@ chirp:
   duration_s: 100.0e-6
   idle_s: 0.0
   n_chirps: 64
+  frame_period_s: 0.03333333333333333   # 30 frames a second; only the regulatory check reads it (47 CFR 15.255: at least 31.9 ms)
 lo:
   fref_hz: 100.0e6
   loop_bw_hz: 1.0e6

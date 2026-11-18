@@ -3,7 +3,11 @@
 The transmitter's own signal reaches the receiver through the isolation of
 a board array without an isolation structure (the band's sourced figure,
 printed with its tag) and a near reflector at 2 cm adds another 10 dB
-lower; both beat at a few kHz, a hundred dB above the target.  The
+lower; both beat at a few kHz, almost 80 dB above the target.  Since 0.2.20
+the transmitter runs 8 dB backed off (to the regulatory EIRP limit,
+example 09): the leakage is -16 dBm at the receiver, 4 dB under the
+out-of-band compression point where the full-power one was 4 dB over, and
+the echo loses 1.5 dB to the receiver's stages instead of 10.7.  The
 statistical budget: levels at the receiver and the ADC, the margin to the
 compression point the leakage meets (the one ahead of the high-pass when
 there is a high-pass), the ADC headroom with and without the high-pass, the
@@ -27,7 +31,7 @@ base = {"mimo.n_tx": 1, "mimo.n_rx": 1, "mimo.coupling.source": "none", "extra_t
 cfg = load_config(MIMO, base)
 st = run_statistical(cfg)
 lb = st.leakage
-print(f"leakage budget (TX {cfg.frontend_value('tx_power_dbm')[0]:g} dBm, isolation {lb.isolation_db:g} dB (source: {lb.isolation_source}), "
+print(f"leakage budget (TX {cfg.frontend_value('tx_power_dbm')[0]:g} dBm backed off {cfg.frontend_value('tx_backoff_db')[0]:g} dB, isolation {lb.isolation_db:g} dB (source: {lb.isolation_source}), "
       f"reflector at {cfg.leakage.reflector_range_m:g} m {cfg.leakage.reflector_level_db:+g} dB; high-pass order {cfg.rx.hpf_order} "
       f"at {cfg.rx.hpf_corner_hz / 1e3:g} kHz):")
 for lab, v, u in lb.as_rows():

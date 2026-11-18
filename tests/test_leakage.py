@@ -13,7 +13,25 @@ from fmcw_radar.processing.windows import coherent_gain_db, mainlobe_width_bins,
 
 
 def _leak(**ov):
-    return apply_overrides(RadarConfig(), {"leakage.enabled": True, "leakage.reflector_range_m": 0.02, "chirp.n_chirps": 4, **ov})
+    """The transmitter at its full power (no backoff): the levels these tests
+    were built on.  The default's 8 dB of backoff (0.2.20) is
+    test_backed_off_default_keeps_the_leakage_under_the_out_of_band_point's."""
+    return apply_overrides(RadarConfig(), {"leakage.enabled": True, "leakage.reflector_range_m": 0.02, "chirp.n_chirps": 4,
+                                           "frontend.tx_backoff_db": 0.0, **ov})
+
+
+def test_backed_off_default_keeps_the_leakage_under_the_out_of_band_point():
+    """0.2.20: the default transmitter runs 8 dB backed off (4 dBm, the
+    regulatory limit through a 10 dBi antenna).  The direct leakage is then
+    -16 dBm at the receiver, 4 dB under the -12 dBm out-of-band point where
+    the full-power one is 4 dB over; behind the second-order high-pass the
+    echo loses 1.5 dB to the stages instead of 10.7."""
+    hp = {"rx.hpf_corner_hz": 200e3, "rx.hpf_order": 2}
+    full, backed = leakage_budget(_leak(**hp)), leakage_budget(_leak(**hp, **{"frontend.tx_backoff_db": None}))
+    assert backed.terms[0].level_rx_dbm == pytest.approx(-16.0) and full.terms[0].level_rx_dbm == pytest.approx(-8.0)
+    assert backed.p1db_kind == "out of band" and backed.p1db_margin_db == pytest.approx(+4.0) and full.p1db_margin_db == pytest.approx(-4.0)
+    assert backed.compression_signal_db == pytest.approx(-1.49, abs=0.02) and full.compression_signal_db == pytest.approx(-10.65, abs=0.02)
+    assert backed.adc_headroom_db > full.adc_headroom_db > 20.0
 
 
 def test_leakage_budget_levels_and_flags():

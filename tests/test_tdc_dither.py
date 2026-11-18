@@ -49,16 +49,23 @@ def test_dither_is_off_by_default_and_reaches_the_loop_when_set():
 
 
 def test_one_lsb_of_dither_takes_the_ghost_targets_out_of_the_default_frame():
-    """The default radar (12.2 ps TDC, 1 ps of jitter, 64 chirps, a human at
-    5 m): 2.75 ghost detections a frame, the strongest at -37.3 dBc.  With
-    1 LSB of subtractive dither 0.002, the strongest -50.9 dBc; with 3 LSB
-    none over the search limit.  The undithered pattern the report quotes
-    is still the loop's with the dither off (-34.1 dBc at -10.3 m), and the
-    phase-noise level does not move: L(1 MHz) -75.89 dBc/Hz either way."""
-    off = run_statistical(RadarConfig())
+    """The radar at full power (12.2 ps TDC, 1 ps of jitter, 64 chirps, a
+    human at 5 m): 2.75 ghost detections a frame, the strongest at -37.3
+    dBc; backed off 8 dB as the default is since 0.2.20, 0.18 (the spurs
+    keep their level under the target, the target is 8 dB closer to the
+    noise).  With 1 LSB of subtractive dither 0.002 at full power, the
+    strongest -50.9 dBc; with 3 LSB none over the search limit.  The
+    undithered pattern the report quotes is still the loop's with the dither
+    off (-34.1 dBc at -10.3 m), and the phase-noise level does not move:
+    L(1 MHz) -75.89 dBc/Hz either way."""
+    full = {"frontend.tx_backoff_db": 0.0}
+    off = run_statistical(apply_overrides(RadarConfig(), full))
     assert off.cfar["ghost_detections_per_frame"] == pytest.approx(2.75, abs=0.02)
     assert "tdc_dither_lsb" not in off.nonlinearity
-    one = run_statistical(apply_overrides(RadarConfig(), {"lo.tdc_dither_lsb": 1.0}))
+    backed = run_statistical(RadarConfig())
+    assert backed.cfar["ghost_detections_per_frame"] == pytest.approx(0.184, abs=0.01)
+    assert backed.nonlinearity["ghosts"] == off.nonlinearity["ghosts"]                       # the same spurs, 8 dB less target
+    one = run_statistical(apply_overrides(RadarConfig(), {"lo.tdc_dither_lsb": 1.0, **full}))
     assert one.cfar["ghost_detections_per_frame"] < 0.02
     assert all(level < -48.0 for _, level in one.nonlinearity["ghosts"])
     assert one.nonlinearity["tdc_dither_lsb"] == 1.0 and one.nonlinearity["ghost_noise_on"]
@@ -159,14 +166,15 @@ def test_parked_lo_wants_three_lsb():
 def test_dither_works_under_a_noise_file_too():
     """ROADMAP P1 #1(b): with another LO's noise file the chirp generator
     runs with its own noise off, and nothing dithered its TDC -- the ghosts
-    were the undithered pattern (-34.1 dBc, 2.96 detections a frame under
-    the x10 file).  The subtractive dither is on with the noise off: the
+    were the undithered pattern (-34.1 dBc; 2.96 detections a frame under
+    the x10 file at full power, 0.52 backed off 8 dB as the config now
+    is).  The subtractive dither is on with the noise off: the
     frame's coherent spurs are then read off the dithered ramps, 0.002 a
     frame, and the profile gains the dither's term beside the generator's
     quantisation."""
     x10 = load_config(REPO / "configs" / "radar_60g_x10lo.yaml")
     bare = run_statistical(x10)
-    assert "ghost_chirps" not in bare.nonlinearity and bare.cfar["ghost_detections_per_frame"] > 2.5
+    assert "ghost_chirps" not in bare.nonlinearity and bare.cfar["ghost_detections_per_frame"] == pytest.approx(0.52, abs=0.03)
     c = apply_overrides(x10, {"lo.tdc_dither_lsb": 1.0})
     st = run_statistical(c)
     assert st.nonlinearity["ghost_chirps"] == 63 and st.nonlinearity["ghost_noise_on"] is False

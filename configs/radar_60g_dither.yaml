@@ -2,8 +2,9 @@
 # its chirp generator's TDC dithered by 1 LSB (a known pseudo-random offset injected at the TDC -- a DTC
 # on the reference path -- and taken out again digitally; pll_simulator#80).  The sensing config leaves
 # it off because no source says the 60 GHz ADPLL whose TDC resolution it reads has one; there the TDC's
-# quantisation repeats ramp after ramp and a frame integrates it into ghost targets (2.75 detections a
-# frame).  With 1 LSB the ghosts are gone and the phase-noise level is the same.  The LO parked between
+# quantisation repeats ramp after ramp and a frame integrates it into ghost targets (-37 dBc: 0.18
+# detections a frame under the human at 5 m with the transmitter backed off to the regulatory limit,
+# 2.75 at its full power).  With 1 LSB the ghosts are gone and the phase-noise level is the same.  The LO parked between
 # ramps wants 3 LSB before the linear profile holds for it too (cairn/chirp-engine.md).
 schema_version: 1
 band:
@@ -15,6 +16,7 @@ chirp:
   duration_s: 100.0e-6
   idle_s: 0.0
   n_chirps: 64
+  frame_period_s: 0.03333333333333333   # 30 frames a second; only the regulatory check reads it (47 CFR 15.255: at least 31.9 ms)
 lo:
   fref_hz: 100.0e6
   loop_bw_hz: 1.0e6

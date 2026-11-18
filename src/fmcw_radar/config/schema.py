@@ -98,9 +98,10 @@ class ChirpConfig:
     duration_s: float = 100.0e-6        # T_c, the ramp [s]
     idle_s: float = 0.0                 # flyback / idle between ramps [s]
     n_chirps: int = 64                  # chirps per frame (the Doppler FFT length)
-    frame_period_s: Optional[float] = None   # one frame every this long [s]; None = not declared.  Nothing in the signal
-                                             # processing reads it: only the regulatory check does (the transmitter's
-                                             # off-time between frames, link/compliance.py)
+    frame_period_s: Optional[float] = 1.0 / 30.0   # one frame every this long [s] (30 frames a second); None = not
+                                                   # declared.  Nothing in the signal processing reads it: only the
+                                                   # regulatory check does (the transmitter's off-time between frames,
+                                                   # link/compliance.py -- the 57-64 GHz tier wants at least 31.9 ms here)
 
     def __post_init__(self):
         _require_in(self.shape, {"sawtooth"}, "chirp.shape")
@@ -110,7 +111,8 @@ class ChirpConfig:
         if self.frame_period_s is not None:
             _finite_pos(self.frame_period_s, "chirp.frame_period_s")
             _require(self.frame_period_s >= self.frame_on_s * (1.0 - 1e-12),
-                     f"chirp.frame_period_s ({self.frame_period_s:g} s) is shorter than the frame's own {self.frame_on_s:g} s")
+                     f"chirp.frame_period_s ({self.frame_period_s:g} s) is shorter than the frame's own {self.frame_on_s:g} s: "
+                     f"give the longer frame its period, or null for 'not declared'")
 
     @property
     def pri_s(self) -> float:
@@ -230,7 +232,10 @@ class FrontEndConfig:
     are Rapp limiters of smoothness ``rx_rapp_p`` in the statistical and the
     time engine (``link/compression.py``)."""
 
-    tx_power_dbm: Optional[float] = None
+    tx_power_dbm: Optional[float] = None    # what the transmitter can put out, conducted [dBm]
+    tx_backoff_db: Optional[float] = None   # how far it is backed off from that [dB]; None -> the band's value (60 GHz: down
+                                            # to the regulatory limit, link/compliance.py).  Everything is computed at
+                                            # tx_power_dbm - tx_backoff_db (RadarConfig.tx_conducted_dbm)
     tx_gain_dbi: Optional[float] = None
     rx_gain_dbi: Optional[float] = None
     rx_gain_db: Optional[float] = None      # LNA + mixer + IF gain to the ADC [dB]
@@ -241,11 +246,13 @@ class FrontEndConfig:
     compression: bool = True                # model the two stages (False: a linear receiver, the 0.2.8 behaviour)
 
     def __post_init__(self):
-        for name in ("tx_power_dbm", "tx_gain_dbi", "rx_gain_dbi", "rx_gain_db", "nf_db", "p1db_oob_dbm", "p1db_inband_dbm",
-                     "rx_rapp_p"):
+        for name in ("tx_power_dbm", "tx_backoff_db", "tx_gain_dbi", "rx_gain_dbi", "rx_gain_db", "nf_db", "p1db_oob_dbm",
+                     "p1db_inband_dbm", "rx_rapp_p"):
             v = getattr(self, name)
             if v is not None:
                 _finite(v, f"frontend.{name}")
+        if self.tx_backoff_db is not None:
+            _require(self.tx_backoff_db >= 0.0, "frontend.tx_backoff_db is a reduction, >= 0 dB")
         if self.rx_rapp_p is not None:
             _require(self.rx_rapp_p > 0.0, "frontend.rx_rapp_p must be > 0")
 
@@ -525,6 +532,11 @@ class RadarConfig:
         from ..sources import frontend_placeholder
 
         return int(self.lo.mult if self.lo.mult is not None else frontend_placeholder(self.band.kind, "lo_mult").value)
+
+    def tx_conducted_dbm(self) -> float:
+        """The conducted transmit power everything is computed at: what the
+        transmitter can put out less its backoff."""
+        return self.frontend_value("tx_power_dbm")[0] - self.frontend_value("tx_backoff_db")[0]
 
     def frontend_value(self, name: str) -> tuple[float, str]:
         """``(value, source)`` of a front-end number: the config's own

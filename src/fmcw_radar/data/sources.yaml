@@ -26,6 +26,12 @@ entries:
     section: "7.9 RF Specification, p. 32"
     quote: "Transmitter: Output power, TYP 12 dBm; Power backoff range 26 dB"
     note: "一颗雷达芯片的典型值,在芯片端口,不含天线。0.2.7 及以前是 10 dBm 的占位。mmw60_trx 自己的 PA(Psat 15 dBm)是它的假设,雷达不读。"
+  60g_sensing.tx_backoff_db:
+    value: 8.0
+    unit: dB
+    source: assumed
+    cite: "this library's design choice (0.2.20): the transmitter backed off from its 12 dBm to the 14 dBm peak EIRP of 47 CFR 15.255(c)(2)(iii)(A), the only tier above the default one whose band holds the 58-62 GHz sweep; the datasheet the 12 dBm is read from gives a power backoff range of 26 dB"
+    note: "占位(设计取舍,不是外部的数):= tx_power_dbm + tx_gain_dbi − fcc15255.radar_57_64.peak_eirp_dbm = 12 + 10 − 14,tests/test_compliance.py 守着这个等式。发射天线增益的占位(10 dBi)变了,它要跟着变:合规的雷达 EIRP 钉在上限,变的是回退量。0.2.19 及以前没有回退,EIRP 22 dBm,超限 8 dB(用户选的选项 (a):降 EIRP,不换频段)。"
   60g_sensing.tx_gain_dbi:
     value: 10.0
     unit: dBi
@@ -134,6 +140,12 @@ entries:
     source: assumed
     cite: "placeholder: 77 GHz automotive transmitter per channel"
     note: "占位。"
+  77g_automotive.tx_backoff_db:
+    value: 0.0
+    unit: dB
+    source: assumed
+    cite: "placeholder: no backoff"
+    note: "占位。47 CFR §15.255 只管 57–71 GHz,对 76–81 GHz 不适用(link/compliance.py 回答'不适用');这一档的规管限值本库没有读,未核实。"
   77g_automotive.tx_gain_dbi:
     value: 12.0
     unit: dBi

@@ -15,6 +15,7 @@ chirp:
   duration_s: 100.0e-6
   idle_s: 0.0
   n_chirps: 64
+  frame_period_s: 0.03333333333333333   # 30 frames a second; only the regulatory check reads it (47 CFR 15.255: at least 31.9 ms)
 lo:
   fref_hz: 100.0e6
   loop_bw_hz: 1.0e6
