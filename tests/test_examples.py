@@ -12,7 +12,7 @@ EXAMPLES = sorted((REPO / "examples").glob("[0-9][0-9]_*.py"))
 
 
 def test_milestone_examples_exist():
-    assert [p.name[:2] for p in EXAMPLES] == ["00", "01", "02", "03", "04", "05", "06", "07", "08"]
+    assert [p.name[:2] for p in EXAMPLES] == ["00", "01", "02", "03", "04", "05", "06", "07", "08", "09"]
 
 
 @pytest.mark.parametrize("path", EXAMPLES, ids=lambda p: p.name)

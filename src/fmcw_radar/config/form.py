@@ -39,6 +39,7 @@ SECTIONS: list[tuple[str, str, list[dict]]] = [
         _f("chirp.duration_s", "Ramp duration [us]", "float", scale=1e-6),
         _f("chirp.idle_s", "Idle between ramps [us]", "float", scale=1e-6),
         _f("chirp.n_chirps", "Chirps per frame", "int"),
+        _f("chirp.frame_period_s", "Frame period [ms] (empty = not declared; only the regulatory check reads it)", "opt_float", scale=1e-3),
     ]),
     ("lo", "LO (ADPLL x N)", [
         _f("lo.mult", "Multiplier N (empty = placeholder, source: assumed)", "opt_int"),
@@ -132,6 +133,10 @@ SECTIONS: list[tuple[str, str, list[dict]]] = [
         _f("processing.cfar_guard", "CFAR guard cells", "int"),
         _f("processing.cfar_train", "CFAR training cells", "int"),
         _f("processing.cfar_pfa", "CFAR false-alarm probability", "float"),
+    ]),
+    ("regulatory", "Regulatory (47 CFR 15.255)", [
+        _f("regulatory.scenario", "Where it is used (empty = not declared)", "opt_enum",
+           options=["indoor", "outdoor", "outdoor_fixed", "vehicular", "uav"]),
     ]),
     ("sim", "Simulation", [
         _f("sim.seed", "Seed", "int"),

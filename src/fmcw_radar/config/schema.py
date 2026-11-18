@@ -98,17 +98,29 @@ class ChirpConfig:
     duration_s: float = 100.0e-6        # T_c, the ramp [s]
     idle_s: float = 0.0                 # flyback / idle between ramps [s]
     n_chirps: int = 64                  # chirps per frame (the Doppler FFT length)
+    frame_period_s: Optional[float] = None   # one frame every this long [s]; None = not declared.  Nothing in the signal
+                                             # processing reads it: only the regulatory check does (the transmitter's
+                                             # off-time between frames, link/compliance.py)
 
     def __post_init__(self):
         _require_in(self.shape, {"sawtooth"}, "chirp.shape")
         _finite_pos(self.duration_s, "chirp.duration_s")
         _finite_nonneg(self.idle_s, "chirp.idle_s")
         _require(self.n_chirps >= 1, f"chirp.n_chirps must be >= 1, got {self.n_chirps}")
+        if self.frame_period_s is not None:
+            _finite_pos(self.frame_period_s, "chirp.frame_period_s")
+            _require(self.frame_period_s >= self.frame_on_s * (1.0 - 1e-12),
+                     f"chirp.frame_period_s ({self.frame_period_s:g} s) is shorter than the frame's own {self.frame_on_s:g} s")
 
     @property
     def pri_s(self) -> float:
         """Pulse repetition interval: ramp plus idle."""
         return self.duration_s + self.idle_s
+
+    @property
+    def frame_on_s(self) -> float:
+        """First ramp's start to the last ramp's end: the frame's transmit burst."""
+        return self.n_chirps * self.duration_s + (self.n_chirps - 1) * self.idle_s
 
 
 # ---------------------------------------------------------------------------
@@ -412,6 +424,27 @@ class LeakageConfig:
         _finite(self.reflector_level_db, "leakage.reflector_level_db")
 
 
+#: where the radar is used, as far as the regulatory check needs to know (47 CFR 15.255(c)(2) ties some of its
+#: limits to it; the rule does not define the words, the reading is this library's: link/compliance.py)
+SCENARIOS = ("indoor", "outdoor", "outdoor_fixed", "vehicular", "uav")
+
+
+@dataclass(frozen=True)
+class RegulatoryConfig:
+    """What the regulatory check is told about the deployment.  ``scenario``
+    None = not declared: the limits that depend on it are reported as such
+    and not used.  ``indoor``; ``outdoor`` (outdoors, neither of the next
+    two); ``outdoor_fixed`` (outdoors, a temporary or permanently fixed
+    application); ``vehicular`` (outdoors, a vehicle's task of moving
+    something or someone, not in-cabin); ``uav`` (on an unmanned aircraft)."""
+
+    scenario: Optional[str] = None
+
+    def __post_init__(self):
+        if self.scenario is not None:
+            _require_in(self.scenario, set(SCENARIOS), "regulatory.scenario")
+
+
 @dataclass(frozen=True)
 class ProcessingConfig:
     """Window + range FFT + Doppler FFT + a cell-averaging CFAR."""
@@ -466,6 +499,7 @@ class RadarConfig:
     leakage: LeakageConfig = field(default_factory=LeakageConfig)
     rx: RxConfig = field(default_factory=RxConfig)
     processing: ProcessingConfig = field(default_factory=ProcessingConfig)
+    regulatory: RegulatoryConfig = field(default_factory=RegulatoryConfig)
     sim: SimConfig = field(default_factory=SimConfig)
 
     def __post_init__(self):
@@ -651,4 +685,4 @@ class RadarConfig:
 
 __all__ = ["SCHEMA_VERSION", "C0", "K_BOLTZMANN", "T0_K", "BANDS", "WINDOWS", "BandConfig", "ChirpConfig",
            "LOConfig", "FrontEndConfig", "ChannelConfig", "TargetConfig", "RxConfig", "ProcessingConfig",
-           "SimConfig", "RadarConfig", "MimoConfig", "CouplingConfig", "LeakageConfig"]
+           "SimConfig", "RadarConfig", "MimoConfig", "CouplingConfig", "LeakageConfig", "RegulatoryConfig", "SCENARIOS"]
