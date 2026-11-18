@@ -3,6 +3,15 @@
 本文件按倒序记录实质性进展 —— 最新条目在本行正下方。每条保持简短(数字原值、被推翻的判断、下一步),
 结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-11-18 · 0.2.18:spec_sources 重新 pin 到 18241cd,§15.255(c)(2) 雷达限值进副本(spec_sources#50,feat/spec-sources-regulatory)
+
+- 起因:默认配置 EIRP 22 dBm(12 dBm + 10 dBi)没有上限检查;spec_sources ROADMAP 里 (c)(2) 的限值只是转述。本库提了 #50,它建了 10 条(PR #52)。
+- 原文对本库的要点(它的答复,每条 quote 对过原文):扫 58–62 GHz 只能用频段包得住的三档——`radar_default`(峰值 EIRP 10、传导 −10 dBm)、
+  `radar_57_64`(14 dBm,任意连续 33 ms 里每段 ≥ 2 ms 的关断累计 ≥ 25.5 ms,**必须满足,没有降功率的分支**)、`radar_57_64_outdoor`(20 dBm,≥ 16.5 ms,室外且固定或车载作业,车厢内除外);
+  57–59.4 与 57–61.56 两档要求工作频率限制在档内,用不了。chirp 间几微秒的回扫不算关断。除默认档外不受传导功率限制。几档都满足时任选((c)(2)(iv),换档前停 33 ms)。
+- 原文没有的:室内 / 室外、固定 / 车载的定义;测量带宽;占用带宽怎么量;多发射通道的 EIRP 怎么合计((h) 只禁止外部锁相输入做波束成形)。
+- 核对:`a9af261..18241cd` 在本库拷的 6 个文件上零改动;`regulatory.yaml` +93 行。指纹 2153 / 2153 逐位相同。下一步:合规检查与频段取舍表(PR 1)。
+
 ## 2026-11-18 · 0.2.17:扣除式 TDC dither 接进配置,默认关(pll_simulator#80,feat/tdc-dither-config)
 
 - 用户定:dither 默认关。加 `lo.tdc_dither_lsb` / `lo.tdc_dither_gain_error` → `TDCConfig`;`configs/radar_60g_dither.yaml`(1 LSB)。

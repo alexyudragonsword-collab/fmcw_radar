@@ -4,6 +4,14 @@
 
 ---
 
+## [0.2.18] — 2026-11-18 — spec_sources 重新 pin:§15.255(c)(2) 的雷达限值进了副本(还没读,数不动)
+
+- spec_sources#50(本库发起):重新 pin 到 `18241cd`,多 vendor `data/regulatory.yaml`(14 条:原有 `fcc15255.*` 4 条 + 新建的雷达限值 10 条);
+  其余 6 个文件正文没变,只换出处头里的 SHA。按它的要求先单独换 pin:指纹 2153 个值逐位不变;`vendor_check --strict` 38 个文件,37 verbatim / 1 adapted。
+- 本库还没有引用这些条目(合规检查在下一个 PR)。
+
+---
+
 ## [0.2.17] — 2026-11-18 — 扣除式 TDC dither 接进配置(默认关):开了鬼目标消失,相噪电平不变
 
 - **新配置字段** `lo.tdc_dither_lsb`(均匀 dither 的宽度,LSB,默认 0 = 关)与 `lo.tdc_dither_gain_error`(DTC 增益误差)。pll_simulator#80 的扣除式 dither:

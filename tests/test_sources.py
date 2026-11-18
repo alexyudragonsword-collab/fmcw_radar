@@ -176,7 +176,8 @@ def test_vendored_shared_table_counts_its_tags():
     from fmcw_radar.vendor import spec_sources as ss
 
     files = ss.data_files()
-    assert [f.name for f in files] == ["adpll60.yaml", "atmosphere.yaml", "frontend60.yaml", "radar_targets.yaml", "windows.yaml"]
+    assert [f.name for f in files] == ["adpll60.yaml", "atmosphere.yaml", "frontend60.yaml", "radar_targets.yaml", "regulatory.yaml",
+                                       "windows.yaml"]
     for f in files:
         assert ss.audit_tags(f) == []
 
