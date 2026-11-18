@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from ..chirp import ChirpEngine, ChirpResult, noisy_chirp
+from ..config.loader import apply_overrides
 from ..config.schema import C0, RadarConfig
 from ..link.budget import LinkBudget, link_budget, with_compression
 from ..link.leakage import LeakageBudget, leakage_budget
@@ -458,7 +459,7 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
         res.chirp = {**chirp.metrics(k), "engine": chirp.engine, "dp_gain_used": chirp.dp_gain_used,
                      "ui_per_ref_cycle_p99": chirp.ui_per_ref_cycle_p99, "dco_dev_frac_p99": chirp.dco_dev_frac_p99,
                      "vouches_for_spurs": chirp.vouches_for_spurs,
-                     "dp_cal_passes": [p["eps_hat"] for p in chirp.dp_cal_passes]}
+                     "dp_cal_passes": [p["eps_hat"] for p in chirp.dp_cal_passes], "notes": list(chirp.notes)}
         nl = nonlinearity_profile(cfg, chirp, k)
         res.nonlinearity = {key: nl[key] for key in ("width_3db_m", "width_rayleigh_m", "peak_sidelobe_db", "islr_db",
                                                       "phase_rms_rad", "phase_peak_rad", "ramp", "ghosts")}
@@ -467,13 +468,26 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
         # the single quiet ramp's list is the undithered pattern; what a frame sees is what stays coherent
         # over its ramps with the loop's noise on (the TDC's jitter dithers the quantisation)
         res.nonlinearity["ghosts_quiet"] = res.nonlinearity["ghosts"]
+        dithered = chirp.engine == "event" and cfg.lo.tdc_dither_lsb > 0.0
+        if dithered:
+            # the subtractive TDC dither is the loop's, on with the noise off too: a noise-off ramp is then one
+            # draw of noise, not a pattern.  The undithered pattern -- what the dither is there to break up --
+            # is the same loop's with the dither off
+            bare = ChirpEngine(apply_overrides(cfg, {"lo.tdc_dither_lsb": 0.0, "lo.tdc_dither_gain_error": 0.0})).run(
+                noise=False, n_chirps=min(3, cfg.chirp.n_chirps))
+            res.nonlinearity["ghosts_quiet"] = nonlinearity_profile(cfg, bare, bare.n_chirps - 1)["ghosts"]
         # ... when the LO is the loop itself.  Under a noise file the chirp generator runs with its own noise off
-        # (the noise is the file's), nothing is known to dither its TDC, and the undithered list stands
-        if chirp.engine == "event" and (chirp.noise or cfg.lo.profile is None):
-            live = chirp if chirp.noise else noisy_chirp(cfg, n_chirps=min(max(cfg.time_chirps(), 5), 64))
+        # (the noise is the file's): without the subtractive dither nothing is known to dither its TDC and the
+        # undithered list stands; with it the frame's coherent spurs are read off the noise-off, dithered ramps
+        if chirp.engine == "event" and (chirp.noise or cfg.lo.profile is None or dithered):
+            n_live = min(max(cfg.time_chirps(), 5), 64)
+            live = (chirp if chirp.noise else noisy_chirp(cfg, n_chirps=n_live) if cfg.lo.profile is None
+                    else ChirpEngine(cfg).run(noise=False, n_chirps=n_live))
             cs = coherent_spurs(cfg, live)
             res.nonlinearity.update({"ghosts": cs["ghosts"], "ghost_chirps": cs["chirps"], "ghost_limit_dbc": cs["limit_dbc"],
                                      "tdc_jitter_s": cfg.lo_value("tdc_jitter_s")[0], "tdc_res_s": cfg.lo_value("tdc_res_s")[0]})
+            if dithered:
+                res.nonlinearity.update({"tdc_dither_lsb": cfg.lo.tdc_dither_lsb, "ghost_noise_on": bool(live.noise)})
         res.extras["nonlinearity_profile"] = (nl["axis_m"], nl["profile_db"])
     res.cfar.update(cfar_detection(cfg, res))
     return res

@@ -5,7 +5,7 @@ summary: "chirp 发生器 = vendored polar_tx 两点 ADPLL 喂斜坡:event 引�
 tags: [adpll, chirp, two-point, dp_cal, polar_tx]
 contains: [decision, lesson, experience]
 created: "2026-11-06"
-updated: "2026-11-14"
+updated: "2026-11-18"
 related: [architecture-invariants]
 authoring_mode: ai_generated
 ---
@@ -16,6 +16,39 @@ authoring_mode: ai_generated
 铁律 4:频率误差曲线由 vendored ADPLL 在斜坡下的真实响应给出。polar_tx 的 `ADPLLTwoPoint` 有两个引擎:`response`(z 域线性化)和
 `event`(逐参考周期,`ADPLL.simulate(mod_freq=...)`),后者的有效域声明为"每参考周期相位推进 ≪ 1 UI"(BLE 0.8 %、EDR 4.2 % 可以,
 LTE-20 的 29 % 不行,polar_tx ROADMAP B1)。任务要求先量一次这个指标再决定 event 引擎能不能用。
+
+## 0.2.17:扣除式 TDC dither(pll_simulator#80,`lo.tdc_dither_lsb`,默认关)
+
+- **是什么**:在 TDC 采样时刻注入一个已知的伪随机时间偏移(宽度 `tdc_dither_lsb` 个 LSB 的均匀分布,物理上是参考路径上的 DTC),数字域减掉同一个值。
+  量化误差不再是斜坡每次都一样扫出来的图样,变成随机噪声;电平还是 `tdc_quant` 的 q²/12。上游 pll_simulator `3d8611f`(#81 / #82),经 polar_tx `48b7f41` 到本库(0.2.16)。
+- **默认关(contains:decision)**:用户定的。"这颗 60 GHz ADPLL 有扣除式 dither"没有出处,默认配置不靠一个假设把鬼目标盖掉;开的例子是 `configs/radar_60g_dither.yaml`(1 LSB)。
+  关闭时一切逐位不变(指纹原有 2035 个值相同)。
+- **数(默认 config,64 chirp,5 m 人体;`tests/test_tdc_dither.py`)**:
+
+  | dither [LSB] | 每帧鬼目标 | 最强相干杂散 | `tdc_dither_rms_s()` / t_res | 停泊死区标记 | CW `simulate − analyze`(30 / 100 / 300 kHz) |
+  |---|---|---|---|---|---|
+  | 0 | 2.7506 | −37.3 dBc @ +2.81 m | 0.089 | 是 | +15.5 / +19.2 / +9.8(均 +14.9) |
+  | 1 | 0.0021 | −50.9 dBc @ −14.06 m | 0.302 | 是 | +3.6 / +1.7 / +3.2(均 +2.8) |
+  | 2 | 0.0089 | −51.8 dBc @ ±4.68 m | 0.584 | 否 | 没量(上游 −1.2 … −1.55) |
+  | 3 | 0.0000 | 检出限(−55.6)以上没有 | 0.871 | 否 | +0.8 / +0.5 / +0.6(均 +0.65) |
+
+  L(1 MHz) 四档 −75.89 … −75.88 dBc/Hz,5 m 残余 83.97 … 84.07 mrad:电平不动。pin 之前临时叠加试跑的数与此逐位一致。
+- **斜坡上的验收**(16 chirp、seed 7、14 个斜坡,1 LSB):相干分量 100 kHz … 10 MHz 开噪声 −16.2 / −10.8 / −12.3 / −10.5 / −10.6 dB,不开噪声 −10.4 / −14.5 / −10.3 / −10.1 / −9.9
+  (纯随机 −11.5;不开 dither 时 300 kHz −1.3)。电平对剖面 +0.15 / +0.56 / +0.10 / −0.25 / +0.03 dB;一帧 1–5 m 的底对闭式 +0.5 / 0.0 / +0.1 / +0.1。
+- **dither 是环路的功能,不是噪声源**:`noise=False` 时也生效(同一个 seed 可复现)。后果:(1) 文件剖面配置(P1 #1(b))有了解法——×10 文件开 1 LSB,每帧 2.96 → 0.002 个,
+  鬼目标从 63 个不开噪声、但抖动的 ramp 上搜;(2) `ghosts_quiet`("不抖动的图样")在 dither 开着时改由同一个环路关掉 dither 跑,仍是 −34.1 dBc @ −10.31 m——它是 dither 要打散的东西,
+  不是一次随机实现的极大值;(3) 时域引擎的分工里,不开噪声的曲线带的是 `lo.CURVE_TERMS` 四项(两项量化 + dither 留下的两项)。
+- **剖面多两项**:`tdc_dither_mod`——TDC 按标称 DCO 周期归一化、斜坡把 DCO 带离标称(就是 ROADMAP P1 #2 那个效应),不开 dither 时是每个斜坡重复的图样,开了是噪声:
+  (dev / f_dco)²·(1 + 1 / (t_res·f_dco)²) 倍的 `tdc_quant`,不加权的锯齿 −19.4 dB;本库传的是**距离窗加权**的频偏 RMS(`lo.dither_freq_dev_rms_hz`,Hann 下 141 MHz 而不是 289 MHz:
+  窗把权重压在斜坡中间,锯齿在那里过零),所以是 −25.6 dB,对总量约 0.01 dB。`analyze()` 看不到 chirp,这一项由上游的 `ADPLL.tdc_dither_mod_residual` 给。
+  `tdc_dither_gain`——DTC 增益误差 ε 留下的,ε² 倍的 dither 自身功率(1 LSB 时等于 `tdc_quant` 的 ε² 倍)。
+- **坑(contains:1 LSB 不够停泊段用)**:扣除式 dither 的白化结论要求量化步长全相等。12.2 ps 在 15 GHz 下每个 DCO 周期 5.46 个码,DCO 边沿那一格只有 0.46 LSB 宽,
+  整数 N 锁定时相位正好停在那里:1 LSB 时 CW 仍差 +2.8 dB,3 LSB 才 +0.65。上游因此没有按"整数个 LSB 就不提示"做,而是把 dither 的 RMS(每 LSB 0.29 格)计入原来 0.5 格的判据:
+  1 LSB 两个提示(死区、斜坡)都还在,2 LSB 以上都不在。提示是保守的:1 LSB 对 chirp 已经够(相干分量已回到随机水平)。
+- **环路自己的话进了报表**:`simulate()` 的 notes(`ChirpResult.notes`、`StatResult.chirp["notes"]`)打在报表的 chirp 一节下——默认配置现在会看到
+  "TDC quantization follows the modulation: 0.09 TDC bins of RMS dither, under 0.5 …"。
+- **被推翻的判断**:本库在 #80 里要"宽度是整数个 LSB 时两个提示都不触发"(经典结论);上游实测 1 LSB 在 CW 下不成立(码数不是整数),本库同意改用 RMS 判据。
+  上游估的调制失配 −34 dB(本库核过算术)漏了 T²/12 那一半,实为 −19.5 dB;本库按新公式复算 −19.4。
 
 ## 0.2.12:TDC 换成原文的 12.2 ps(fmcw_radar#17)
 

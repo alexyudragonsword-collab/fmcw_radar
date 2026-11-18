@@ -91,6 +91,9 @@ class ChirpResult:
     noise: bool = False                 # the loop's noise sources were on
     osc_phase_dco_rad: np.ndarray | None = None   # the DCO's own phase noise along the train [rad at the DCO]: what
                                                   # ``f_err_dco_hz`` (the tuning word's frequency) does not carry
+    notes: tuple = ()                   # the loop's own caveats about this run (pllsim's ``SimResult.notes``): e.g. that
+                                        # the TDC's quantisation follows the ramp when it is not dithered enough
+    tdc_dither_lsb: float = 0.0         # the subtractive TDC dither the loop ran with [LSB]; it is on with the noise off too
 
     # ---------------------------------------------------------------- views
     @property
@@ -130,7 +133,9 @@ class ChirpResult:
         loop does up to fref / 2 (cycle-accurate engine, noise on),
         ``quantisation`` (cycle-accurate engine, noise off: the TDC's and
         the DCO's quantisation as the deterministic pattern they are on a
-        ramp), ``none`` (ideal, or the linearised engine without noise), or
+        ramp -- or, with the subtractive TDC dither on, as the noise the
+        dither makes of them, with what its subtraction leaves:
+        ``lo.CURVE_TERMS``), ``none`` (ideal, or the linearised engine without noise), or
         ``unverified`` (the linearised engine with its noise on)."""
         if self.engine == "event":
             return "all" if self.noise else "quantisation"
@@ -300,7 +305,8 @@ class ChirpEngine:
         return ChirpResult("event", cfg.lo.fref_hz, nc, n_ramp, n_idle, cfg.lo_mult, f_cmd, f_err, dp_gain,
                            dp_cal_trace=trace, dp_cal_passes=passes, ui_per_ref_cycle_p99=ui99,
                            vouches_for_spurs=True, note="cycle-accurate engine (loop, TDC, DCO quantisation)",
-                           noise=bool(noise), osc_phase_dco_rad=self._osc_phase(sim, f_cmd, f_err) if noise else None)
+                           noise=bool(noise), osc_phase_dco_rad=self._osc_phase(sim, f_cmd, f_err) if noise else None,
+                           notes=tuple(str(x) for x in getattr(sim, "notes", ())), tdc_dither_lsb=cfg.lo.tdc_dither_lsb)
 
 
 _NOISY_CACHE: dict = {}

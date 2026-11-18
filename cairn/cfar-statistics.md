@@ -5,7 +5,7 @@ summary: "距离–多普勒图上的 CA-CFAR 不是教科书那个:窗与零填
 tags: [cfar, pfa, window, zero-padding, correlation, detection]
 contains: [decision, lesson, experience]
 created: "2026-11-10"
-updated: "2026-11-14"
+updated: "2026-11-18"
 related: [mimo-angle, architecture-invariants]
 authoring_mode: ai_generated
 ---
@@ -72,6 +72,8 @@ authoring_mode: ai_generated
   鬼目标 −37.3 … −39.7 dBc(+2.81、−10.31、−2.81、+8.43 m …),SNR +11.2 … +13.6 dB,视野内三个 Pd 0.98 / 0.98 / 0.79,**每帧 2.75 个**;
   示例 00 主瓣外 35 格(10.5 个噪声虚警格 + 鬼目标,成团);示例 05 的四目标帧里 +10 dBsm 的车让超门限格从 70 到 284。
   上面"占位的 1 ps 下 −55 … −57、0.00 个"是 5 ps TDC 时的。抖动 1.8 / 2.44 / 3 ps 时每帧 2.08 / 0.92 / 0.16 个(ROADMAP P1 #1(a))。
+- **0.2.17,扣除式 TDC dither(`lo.tdc_dither_lsb`,默认关)**:开 1 / 2 / 3 LSB 时每帧 0.0021 / 0.0089 / 0.0000 个(最强 −50.9 / −51.8 dBc / 无),相噪电平不变;
+  文件剖面配置(×10 LO)开 1 LSB 从 2.96 到 0.0023 个。默认仍关,所以默认配置的 2.75 个照旧(`cairn/chirp-engine.md` 的 0.2.17 一节)。
 - 更正记录:0.2.4 的数(人体 0.03、0 dBsm 2.78 对时域 2.00、车 5 对 5)用的是 noise=False 单 ramp 的不抖动图样(−45 dBc);2026-11-11 那条更正里写的"1 ps 时约 −61 dBc"
   读的是那一行噪声的极大值,不是杂散——相干搜索给的是 −55 dBc,换了位置。
 - **坑(contains:示例 00 主瓣外的 12 个格不是量化杂散)**:0.1.x 起示例 00 把主瓣外的过阈格标成"逐周期引擎的量化杂散"。64 chirp 帧期望 10.5 个噪声虚警格

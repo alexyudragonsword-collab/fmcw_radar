@@ -38,7 +38,7 @@ from ..config.schema import RadarConfig
 from ..link.budget import adc_amplitudes, link_budget
 from ..link.compression import rapp
 from ..link.leakage import leakage_tones
-from ..lo import LOProfile
+from ..lo import CURVE_TERMS, LOProfile
 from ..mimo import VirtualArray
 from ..phase_noise import RangeCorrelation
 from ..processing.cfar import ca_cfar_2d
@@ -124,7 +124,7 @@ def beat_frame(cfg: RadarConfig, chirp: ChirpResult | None, *, noise: bool = Tru
             prof = prof.above(0.5 * cfg.lo.fref_hz)
             split = "curve: the loop to fref/2 (cycle-accurate, noise on); profile: above fref/2"
         elif content == "quantisation" and prof.components:
-            prof = prof.without("tdc_quant", "dco_quant")
+            prof = prof.without(*CURVE_TERMS)
             split = "curve: TDC and DCO quantisation (cycle-accurate); profile: everything else"
         elif content == "quantisation":
             split = "curve: TDC and DCO quantisation; profile: no breakdown to take them out of, synthesised whole"

@@ -147,6 +147,10 @@ class LOConfig:
     tdc_res_s: Optional[float] = None   # TDC resolution [s]; None -> placeholder
     tdc_jitter_s: Optional[float] = None   # TDC input-referred jitter [s RMS]; None -> placeholder.  It is noise, and it is
                                            # what dithers the TDC's quantisation (0: an undithered quantiser, ghost targets)
+    tdc_dither_lsb: float = 0.0         # subtractive TDC dither (pll_simulator#80): a known pseudo-random offset, uniform
+                                        # over this many TDC LSB, injected at the TDC (a DTC on the reference path) and
+                                        # taken out again digitally.  0 = off, the default: no source says the chip has it
+    tdc_dither_gain_error: float = 0.0  # relative gain error of that DTC: what the subtraction leaves behind
     dp_gain: float = 1.0                # direct-path gain as built: 1 + eps is a two-point mismatch of eps
     dp_cal: Literal["none", "offline", "online"] = "offline"   # two-point gain calibration (chirp linearity)
     dp_cal_iterations: int = 2          # offline: least-squares passes, one chirp each
@@ -177,6 +181,11 @@ class LOConfig:
             _finite_pos(self.tdc_res_s, "lo.tdc_res_s")
         if self.tdc_jitter_s is not None:
             _finite_nonneg(self.tdc_jitter_s, "lo.tdc_jitter_s")
+        _finite_nonneg(self.tdc_dither_lsb, "lo.tdc_dither_lsb")
+        _finite(self.tdc_dither_gain_error, "lo.tdc_dither_gain_error")
+        _require(abs(self.tdc_dither_gain_error) < 1.0, "lo.tdc_dither_gain_error is a relative error, |eps| < 1")
+        _require(self.tdc_dither_gain_error == 0.0 or self.tdc_dither_lsb > 0.0,
+                 "lo.tdc_dither_gain_error needs lo.tdc_dither_lsb > 0 (there is no dither for it to act on)")
         _finite_pos(self.dp_gain, "lo.dp_gain")
         _require_in(self.dp_cal, {"none", "offline", "online"}, "lo.dp_cal")
         _require(self.dp_cal_iterations >= 1, "lo.dp_cal_iterations must be >= 1")

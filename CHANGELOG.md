@@ -4,6 +4,24 @@
 
 ---
 
+## [0.2.17] — 2026-11-18 — 扣除式 TDC dither 接进配置(默认关):开了鬼目标消失,相噪电平不变
+
+- **新配置字段** `lo.tdc_dither_lsb`(均匀 dither 的宽度,LSB,默认 0 = 关)与 `lo.tdc_dither_gain_error`(DTC 增益误差)。pll_simulator#80 的扣除式 dither:
+  TDC 处注入已知伪随机偏移、数字域减掉。**默认关**(用户定):这颗 60 GHz ADPLL 有没有它没有出处,默认配置的鬼目标(每帧 2.75 个)照旧报。
+  `configs/radar_60g_dither.yaml` 是开 1 LSB 的同一个雷达。
+- **开了以后**(默认 64 chirp、5 m 人体):dither 1 / 2 / 3 LSB → 每帧鬼目标 0.0021 / 0.0089 / 0.0000 个(关 2.7506),最强 −50.9 / −51.8 dBc / 检出限以上没有(关 −37.3);
+  L(1 MHz) −75.89 dBc/Hz 不动。14 个斜坡的相干分量 300 kHz 以上回到 −10 … −16 dB(纯随机 −11.5;关时 300 kHz −1.3),电平对剖面 0.6 dB 内。
+- **dither 在 `noise=False` 下也生效**:文件剖面配置(×10 LO,ROADMAP P1 #1(b))开 1 LSB 后每帧 2.96 → 0.0023 个,鬼目标从不开噪声但抖动的 ramp 上搜;
+  `ghosts_quiet` 在 dither 开着时改由关掉 dither 的同一环路给(仍是 −34.1 dBc 的那个图样)。
+- **LO 剖面多两项**:`tdc_dither_mod`(TDC 按标称周期归一化 × 斜坡的频偏,dither 把这个图样变成噪声;距离窗加权后比 `tdc_quant` 低 25.6 dB)、
+  `tdc_dither_gain`(ε² 倍)。时域引擎不开噪声的曲线带 `lo.CURVE_TERMS` 四项,不重复合成。
+- **停泊段**:CW `simulate − analyze` 关 / 1 LSB / 3 LSB = +14.9 / +2.8 / +0.65 dB;1 LSB 不够(每 DCO 周期 5.46 个码,不是整数),死区标记 1 LSB 仍在、3 LSB 不在。
+- **报表**:环路 `simulate()` 自己的 notes 打在 chirp 一节下(默认配置会看到"TDC quantization follows the modulation");鬼目标一段写明 dither 的宽度和噪声开没开。
+- 示例 02 末尾多一张 dither 表。测试 `tests/test_tdc_dither.py` 8 条。
+- 指纹(numbers-move):只多了新配置 `radar_60g_dither` 的 118 个值;原有 2035 个值逐位不变。
+
+---
+
 ## [0.2.16] — 2026-11-18 — polar_tx 重新 pin:扣除式 TDC dither 进了副本(默认关,数不动)
 
 - polar_tx#26(本库发起)了结:`vendor/polartx/` 重新 pin 到 polar_tx `48b7f41`,它的 pllsim 子树在 pll_simulator `3d8611f`(pll_simulator#80 的 #81 / #82)。

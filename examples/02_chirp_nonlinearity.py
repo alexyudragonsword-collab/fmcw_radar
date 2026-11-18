@@ -9,7 +9,9 @@ estimator, one chirp per pass) takes a built-in mismatch out; and the
 error curve is fed into one range FFT to read the width and the sidelobes
 of a point target.  An analytic quadratic of the same RMS is the reference
 group: it shows what an assumed term misses (the flyback transient is a
-step, not a parabola).
+step, not a parabola).  The last two tables are the TDC's quantisation as a
+frame sees it -- what of it stays coherent over the ramps -- against the
+TDC's own jitter and against the subtractive TDC dither.
 """
 
 import numpy as np
@@ -85,6 +87,17 @@ for jit in (0.0, 0.5e-12, 1e-12, 2e-12):
     top = ", ".join(f"{dr:+.2f} / {lvl:.1f}" for dr, lvl in cs["ghosts"][:3]) or "none above the limit"
     mark = "  <- the placeholder" if jit == base.lo_value("tdc_jitter_s")[0] else ""
     print(f"  {jit * 1e12:19.1f} | {top:52s} | {cs['limit_dbc']:18.1f} | {float(LOProfile.from_config(c_j).l_dbc(1e6)):20.1f}{mark}")
+
+# the subtractive TDC dither (lo.tdc_dither_lsb, off by default): a known offset injected at the TDC and taken out again
+print("\nthe same frame with the subtractive TDC dither on (the jitter at its placeholder; the dither adds no noise of its "
+      "own to speak of, it makes the quantisation's pattern random):")
+print("  TDC dither [LSB]    | strongest coherent spurs (offset m / dBc)             | search limit [dBc] | LO L(1 MHz) [dBc/Hz]")
+for lsb in (0.0, 1.0, 2.0, 3.0):
+    c_d = load_config(CONFIG, {"lo.dp_cal": "none", "lo.tdc_dither_lsb": lsb, "chirp.n_chirps": n_frame})
+    cs = coherent_spurs(c_d, ChirpEngine(c_d).run(noise=True, seed=c_d.sim.seed, n_chirps=n_frame + 1))
+    top = ", ".join(f"{dr:+.2f} / {lvl:.1f}" for dr, lvl in cs["ghosts"][:3]) or "none above the limit"
+    mark = "  <- the default: off" if lsb == base.lo.tdc_dither_lsb else ""
+    print(f"  {lsb:19.1f} | {top:52s} | {cs['limit_dbc']:18.1f} | {float(LOProfile.from_config(c_d).l_dbc(1e6)):20.1f}{mark}")
 
 plt = plt_or_none()
 if plt is not None:

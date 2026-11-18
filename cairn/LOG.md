@@ -3,6 +3,18 @@
 本文件按倒序记录实质性进展 —— 最新条目在本行正下方。每条保持简短(数字原值、被推翻的判断、下一步),
 结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-11-18 · 0.2.17:扣除式 TDC dither 接进配置,默认关(pll_simulator#80,feat/tdc-dither-config)
+
+- 用户定:dither 默认关。加 `lo.tdc_dither_lsb` / `lo.tdc_dither_gain_error` → `TDCConfig`;`configs/radar_60g_dither.yaml`(1 LSB)。
+- 正式数(与 pin 前的临时叠加逐位一致):dither 0 / 1 / 2 / 3 LSB → 每帧 2.7506 / 0.0021 / 0.0089 / 0.0000,最强 −37.3 / −50.9 / −51.8 / 无,L(1 MHz) −75.893 / −75.885 / −75.885 / −75.883,
+  残余 83.97 / 84.05 / 84.06 / 84.07 mrad,`dither_bins` 0.089 / 0.302 / 0.584 / 0.871,死区 是 / 是 / 否 / 否。
+- 斜坡(16 chirp,seed 7,14 斜坡,1 LSB):相干分量 开噪声 −16.2 / −10.8 / −12.3 / −10.5 / −10.6,不开 −10.4 / −14.5 / −10.3 / −10.1 / −9.9(随机 −11.5);
+  电平 − 剖面 +0.15 / +0.56 / +0.10 / −0.25 / +0.03;帧底 − 闭式 +0.50 / −0.01 / +0.11 / +0.11。3 LSB:电平 −1.93(100 kHz)/ +0.36 / −0.51 / +0.02 / 0.00。
+- CW(FCW 150,200k 周期,seed 3;30 / 100 / 300 kHz):0 LSB +15.5 / +19.2 / +9.8,1 LSB +3.6 / +1.7 / +3.2,3 LSB +0.8 / +0.5 / +0.6。上游 1 LSB +2.4 … +2.9,一致。
+- ×10 文件档:0 LSB 每帧 2.9596(不抖动图样),1 LSB 0.0023(63 个 ramp,noise off,最强 −49.1 @ −14.05 m)。`tdc_dither_mod / tdc_quant` = −25.6 dB(窗加权频偏 141.4 MHz)。
+- 设计上的取舍:`ghosts_quiet` 在 dither 开时 = 关 dither 的图样(否则是一次随机实现的极大值,−42 dBc,会误读);notes 进 `StatResult.chirp`,不进指纹。
+- 指纹:原有 2035 个值逐位相同,新配置 +118。下一步:合并后把正式数回报 pll_simulator#80 并关闭。
+
 ## 2026-11-18 · 0.2.16:polar_tx 重新 pin 到 48b7f41,扣除式 TDC dither 进副本(polar_tx#26,feat/repin-polartx-tdc-dither)
 
 - pll_simulator 合并了 #81(改"斜坡会打散 TDC"的说法、`simulate()` 斜坡提示、锁定检测修复)与 #82(扣除式 dither),main `3d8611f`;polar_tx#27 三方合并进它的扩展内核,main `48b7f41`。
