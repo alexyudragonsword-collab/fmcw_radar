@@ -34,6 +34,10 @@ def report(cfg: RadarConfig, st: StatResult) -> dict:
                    "in_if_band": st.extras["in_if_band"]},
         "inputs": placeholders,
         "budget": [{"term": lab, "value": v, "unit": u} for lab, v, u in b.as_rows()],
+        # the same rows with the EIRP held to the governing regulatory tier's limit (None where no rule applies)
+        "budget_capped": (None if st.budget_capped is None
+                          else [{"term": lab, "value": v, "unit": u} for lab, v, u in st.budget_capped.as_rows()]),
+        "compliance": st.compliance,
         "detection": {"snr_cell_db": st.snr_cell_db, "snr_chirp_db": st.snr_chirp_db, "pfa": cfg.processing.cfar_pfa,
                       "pd": st.pd, "quant_share_db": b.quant_share_db},
         "phase_noise": {"lo_rms_rad": st.lo_rms_rad, "residual_rms_rad": st.pn_rms_rad,
@@ -50,6 +54,45 @@ def report(cfg: RadarConfig, st: StatResult) -> dict:
                                                      "blank_s": st.leakage.blank_s},
     }
     return out
+
+
+def _compliance_lines(K: dict) -> list:
+    """The transmitter against 47 CFR 15.255(c)(2): which tier governs, the
+    limit, by how much it is met or missed, the off-time -- every number
+    with its source tag, and what the rule leaves open."""
+    if not K:
+        return []
+    lines = ["", f"## Regulatory check ({K['rule']})", ""]
+    if not K["applies"]:
+        return lines + [f"Not applicable: {K['why']} (band: source: {K['sources']['band']})."]
+    src = K["sources"]
+    period = "not declared" if K["frame_period_s"] is None else f"{K['frame_period_s'] * 1e3:g} ms"
+    lines += [f"Applies: {K['why']} (source: {src['band']}). Transmitter as configured: peak EIRP {K['eirp_dbm']:.1f} dBm = "
+              f"conducted {K['conducted_dbm']:.1f} dBm (source: {src['tx_power_dbm']}) + antenna (source: {src['tx_gain_dbi']})"
+              + (f", {K['n_tx']} transmitters in turn (TDM): one on at a time" if K["n_tx"] > 1 else "")
+              + f"; one frame is a {K['frame_on_s'] * 1e3:.2f} ms burst, frame period {period}; scenario "
+              f"{K['scenario'] or 'not declared'}.", ""]
+    if K["governing"] is None:
+        return lines + ["No tier of the rule fits this configuration."]
+    g = next(t for t in K["tiers"] if t["tier"] == K["governing"])
+    lines += [f"Governing tier (the highest limit among those this configuration can use): **{g['label']}**, peak EIRP "
+              f"{g['peak_eirp_limit_dbm']:g} dBm (source: {g['sources']['peak_eirp_dbm']})"
+              + (f", peak conducted {g['conducted_limit_dbm']:g} dBm (source: {g['sources']['peak_conducted_dbm']})"
+                 if g["conducted_limit_dbm"] is not None else "") + ".", "",
+              f"**{K['verdict']}.**" + (f" Held to the limit the EIRP is {K['eirp_cap_dbm']:.1f} dBm and the cell SNR "
+                                        f"{K['snr_cell_capped_db']:.2f} dB (configured: {K['snr_cell_configured_db']:.2f} dB)."
+                                        if "snr_cell_capped_db" in K else ""), "",
+              "| tier | band [GHz] | peak EIRP limit [dBm] | sweep inside | scenario | off-time | margin [dB] | min frame period [ms] | usable |",
+              "|---|---|---:|---|---|---|---:|---:|---|"]
+    for t in K["tiers"]:
+        need = "" if t["off_time_required_s"] is None else f" (>= {t['off_time_required_s'] * 1e3:g} ms)"
+        tmin = "" if t["min_frame_period_s"] is None else f"{t['min_frame_period_s'] * 1e3:.2f}"
+        lines.append(f"| {t['label']} | {t['band_ghz'][0]:g}-{t['band_ghz'][1]:g} | {t['peak_eirp_limit_dbm']:g} | "
+                     f"{'yes' if t['in_band'] else 'no'} | {t['scenario']} | {t['off_time']}{need} | {t['eirp_margin_db']:+.1f} | "
+                     f"{tmin} | {'yes' if t['usable'] else 'no'} |")
+    lines += ["", "Every limit, band edge and off-time figure above is `source: spec` (the rule's current text, through "
+              "spec_sources). What the rule leaves open, and how it is read here:", ""]
+    return lines + [f"- {r}" for r in K["readings"]]
 
 
 def _parked_lines(K: dict | None, notes: list) -> list:
@@ -93,14 +136,24 @@ def to_markdown(rep: dict) -> str:
              f"(source: {T['rcs_source']}); beat {T['beat_khz']:.1f} kHz (bin {T['range_bin']:.1f}"
              f"{'' if T['in_if_band'] else ', OUTSIDE the IF band'}), Doppler {T['doppler_hz']:+.1f} Hz "
              f"(bin {T['doppler_bin']:+.2f}).", "",
-             "## Link budget (radar equation)", "", "| term | value | unit |", "|---|---:|---|"]
-    for row in rep["budget"]:
-        lines.append(f"| {row['term']} | {row['value']:.2f} | {row['unit']} |")
+             "## Link budget (radar equation)", ""]
+    capped = rep.get("budget_capped")
+    if capped:
+        lines += ["| term | as configured | at the regulatory limit | unit |", "|---|---:|---:|---|"]
+        for row, cap in zip(rep["budget"], capped):
+            lines.append(f"| {row['term']} | {row['value']:.2f} | {cap['value']:.2f} | {row['unit']} |")
+        lines += ["", "\"At the regulatory limit\": the EIRP is min(configured, the governing tier's limit below) and nothing else is "
+                  "changed."]
+    else:
+        lines += ["| term | value | unit |", "|---|---:|---|"]
+        for row in rep["budget"]:
+            lines.append(f"| {row['term']} | {row['value']:.2f} | {row['unit']} |")
     lines += ["", f"Detection: cell SNR {D['snr_cell_db']:.1f} dB -> Pd {D['pd']:.4f} at Pfa {D['pfa']:g} "
               f"(Swerling 0, known noise level; the ADC adds {D['quant_share_db']:.2f} dB to the thermal floor).", "",
               "## Inputs and their sources", "", "| input | value | source |", "|---|---:|---|"]
     for k, v in rep["inputs"].items():
         lines.append(f"| {k} | {v['value']:.4g} | {v['source']} |")
+    lines += _compliance_lines(rep.get("compliance") or {})
     P = rep["phase_noise"]
     lines += ["", "## LO phase noise after range correlation", "",
               f"LO {P['lo_rms_rad'] * 1e3:.1f} mrad RMS over [1/T_c, IF]; what the beat sees after the round trip "

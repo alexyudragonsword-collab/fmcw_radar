@@ -4,6 +4,26 @@
 
 ---
 
+## [0.2.19] — 2026-11-18 — 规管合规检查(47 CFR §15.255(c)(2))与频段取舍表:默认配置超限 8 dB(现有数字不动)
+
+- **合规检查** `link/compliance.py`:输入扫频范围、EIRP、传导功率、一帧的发射段、帧周期、使用场景;输出每一档(频段包不包得住扫频、场景、关断、余量、最短帧周期)、
+  治理档(能用的里面上限最高的)、超没超、差多少 dB、关断够不够。限值 44 个数全在 `data/sources.yaml`(`fcc15255.*`,`source: spec`,`upstream:` 指向 spec_sources 的条目,加载时核对);
+  模块里没有一个限值。57–71 GHz 之外回答"不适用"。
+- **默认配置**(58–62 GHz、22 dBm EIRP、6.4 ms 的帧):治理档 57–64 GHz,上限 14 dBm,**超 8.0 dB**;关断要求 ≥ 25.5 ms / 33 ms → 帧周期 ≥ 31.90 ms(≤ 31.3 帧/秒),
+  帧周期没声明时写"无法判断"。帧周期 31.8 ms 时这一档不能用,只剩默认档(传导 −10 dBm → 0 dBm EIRP)。**这一轮不改默认配置**(ROADMAP P0)。
+- **新配置量**(只进检查,不进信号处理):`chirp.frame_period_s`(空 = 不声明)、`regulatory.scenario`(`indoor` / `outdoor` / `outdoor_fixed` / `vehicular` / `uav`,空 = 不声明)。
+- **链路预算多一列"按合规上限"**:`link_budget(cfg, eirp_cap_dbm=...)`,EIRP 取 `min(pt + gt, 上限)`,其余不变;默认 5 m 人体 51.34 → 43.34 dB。原来那一列逐位不变。
+  报表(JSON 与 Markdown)多"Regulatory check"一节,每个数带出处标签,并列出条文没说的五件事各按什么读。
+- **示例 09 频段取舍表**(同一目标、同样的帧,EIRP 取上限):58–62 GHz 14 dBm / 5.39 cm / 43.34 dB / ≤ 31.3 帧/秒;57–59.4 GHz 室内 20 dBm / 8.98 cm / 49.60 dB / 不限;
+  57–61.56 GHz 20 dBm / 4.73 cm / 49.44 dB / ≤ 68.3;57–64 GHz 14 dBm / 3.08 cm / 43.27 dB / ≤ 31.3;57–64 GHz 室外固定 20 dBm / 49.27 dB / ≤ 68.3。
+- **发射天线增益在上限下不起作用**:`tx_gain_dbi` 2 / 6 / 10 dBi 按上限的 SNR 逐位相同(43.34 dB);`rx_gain_dbi` 8 / 10 / 12 dBi → 41.34 / 43.34 / 45.34。预期先写进测试再跑,一次通过。
+  ROADMAP"等上游"#1 改写:不确定只剩接收侧。
+- 其它配置:mimo(TDM,同一时刻一个发射通道,按单通道 22 dBm)、x10lo、dither 同默认;77 GHz 档(76.5–78.5 GHz)不适用,不套 60 GHz 的限值。
+- 测试 `tests/test_compliance.py` 22 条;break-check(改坏再恢复):去掉关断判据 10 条红、上限不作用到预算 3 条红、读错档的上限也红;另有一条 monkeypatch 改表、判定跟着变。
+- 指纹(numbers-move):只新增 247 个 `compliance.*` 键;原有 2153 个值逐位不变。新专题文档 `cairn/regulatory-compliance.md`。
+
+---
+
 ## [0.2.18] — 2026-11-18 — spec_sources 重新 pin:§15.255(c)(2) 的雷达限值进了副本(还没读,数不动)
 
 - spec_sources#50(本库发起):重新 pin 到 `18241cd`,多 vendor `data/regulatory.yaml`(14 条:原有 `fcc15255.*` 4 条 + 新建的雷达限值 10 条);

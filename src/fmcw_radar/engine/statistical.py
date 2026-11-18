@@ -25,6 +25,7 @@ from ..chirp import ChirpEngine, ChirpResult, noisy_chirp
 from ..config.loader import apply_overrides
 from ..config.schema import C0, RadarConfig
 from ..link.budget import LinkBudget, link_budget, with_compression
+from ..link.compliance import check as compliance_check
 from ..link.leakage import LeakageBudget, leakage_budget
 from ..lo import LOProfile, parked_lo
 from ..mimo import VirtualArray
@@ -66,6 +67,8 @@ class StatResult:
     angle: dict = field(default_factory=dict)         # milestone 2: the virtual array's angle metrics
     leakage: LeakageBudget | None = None              # milestone 2: TX-RX leakage budget (None when off)
     cfar: dict = field(default_factory=dict)          # what the windows and padding make of the CA-CFAR's Pfa
+    compliance: dict = field(default_factory=dict)    # the transmitter against 47 CFR 15.255(c)(2) (link/compliance.py)
+    budget_capped: LinkBudget | None = None           # the budget with the EIRP held to the governing tier's limit
     extras: dict = field(default_factory=dict)
 
 
@@ -490,6 +493,14 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
                 res.nonlinearity.update({"tdc_dither_lsb": cfg.lo.tdc_dither_lsb, "ghost_noise_on": bool(live.noise)})
         res.extras["nonlinearity_profile"] = (nl["axis_m"], nl["profile_db"])
     res.cfar.update(cfar_detection(cfg, res))
+    comp = compliance_check(cfg)
+    res.compliance = comp.as_dict()
+    if comp.eirp_cap_dbm is not None:
+        # the same budget at the governing tier's limit: EIRP = min(configured, limit), nothing else changed
+        # (the leakage and the compression it causes are the configured transmitter's)
+        res.budget_capped = with_compression(link_budget(cfg, eirp_cap_dbm=comp.eirp_cap_dbm), *squeeze)
+        res.compliance["snr_cell_capped_db"] = res.budget_capped.snr_cell_db
+        res.compliance["snr_cell_configured_db"] = budget.snr_cell_db
     return res
 
 

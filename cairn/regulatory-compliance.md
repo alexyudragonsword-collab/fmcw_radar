@@ -1,0 +1,94 @@
+---
+type: project_topic
+status: active
+summary: "发射端的规管检查(0.2.19,`link/compliance.py`):47 CFR §15.255(c)(2) 的雷达限值经 spec_sources 读原文,每个数一条 `fcc15255.*`。默认 58–62 GHz、22 dBm EIRP 适用 57–64 GHz 那档(14 dBm、任意 33 ms 里关断 ≥ 25.5 ms):超 8 dB,帧率上限 31.3 帧/秒。几档可任选,检查列出每一档并给出'治理档'(能用的里面上限最高的)。原文没说的五件事(室内外的定义、占用带宽怎么量、关断被窗口截断怎么计、多发射通道、测量带宽)各有本库的读法并打在报表里。链路预算多一列'按合规上限';EIRP 被上限钉住后发射天线增益不再影响 SNR。默认配置这一轮不改。"
+tags: [regulatory, eirp, fcc, spec_sources, link-budget, frame-rate]
+contains: [decision, lesson, experience]
+created: "2026-11-18"
+updated: "2026-11-18"
+related: [frontend-sources, architecture-invariants]
+authoring_mode: ai_generated
+---
+# 规管合规检查(47 CFR §15.255(c)(2))
+
+## 背景
+
+0.2.18 及以前 `link/budget.py` 里 `eirp = pt + gt`,没有上限:默认配置 12 dBm(spec,一颗 60 GHz 雷达芯片的手册)+ 10 dBi(assumed)= 22 dBm,扫 58–62 GHz,
+一帧 64 个 100 µs 的 chirp 连着发 6.4 ms,没有帧周期。spec_sources 2026-11-16 读 eCFR 时在 ROADMAP 里记了 §15.255(c)(2) 的雷达限值,是转述。
+本库提了 spec_sources#50,它建了 10 条(PR #52,PIN `18241cd`,每条 quote 用脚本对过原文),并回答了六个问题。0.2.18 重新 pin,0.2.19 接入。
+
+## 条文说了什么(都在 spec_sources 的 `fcc15255.radar_*`,本库 `data/sources.yaml` 一个数一条)
+
+- 57–71 GHz 里的雷达类器件(原文 field disturbance sensors/radars;§15.3(l) 的定义把雷达列为例子,没有点名 FMCW,但 (i)(2) 专门规定带扫频功能的怎么测)
+  默认:峰值传导 −10 dBm **且** 峰值 EIRP 10 dBm。
+- 把工作频率限制在某一档频段之内(all or part of the specified frequency band)并满足那一档的条件,就改按那一档,且**不再受传导功率限制**:
+
+  | 档 | 频段 | 峰值 EIRP | 条件 |
+  |---|---|---|---|
+  | `radar_57_59p4_indoor` / `_outdoor` | 57.0–59.4 GHz | 20 / 30 dBm | 室内 / 室外 |
+  | `radar_57_61p56` | 57.0–61.56 GHz | 3 dBm | — |
+  | `radar_57_61p56_off_time` | 57.0–61.56 GHz | 20 dBm | 关断 ≥ 16.5 ms |
+  | `radar_57_64` | 57.0–64.0 GHz | 14 dBm | 关断 ≥ 25.5 ms,**必须满足,没有降功率的分支** |
+  | `radar_57_64_outdoor` | 57.0–64.0 GHz | 20 dBm | 关断 ≥ 16.5 ms;室外,且是固定应用或车载作业(车厢内除外) |
+  | `radar_61_61p5` | 61.0–61.5 GHz | 平均 40 / 峰值 43 dBm | 占用 ≤ 500 MHz 且整个落在档内 |
+  | `radar_uav_60_64` | 60–64 GHz | 20 dBm | 关断 ≥ 16.5 ms;装在无人机上,离地 ≤ 121.92 m |
+
+- 关断时间:任意连续 33 ms 的窗口里,每段**连续至少 2 ms** 的关断加起来不少于下限。chirp 之间几微秒的回扫不算关断,所以一帧就是一整段发射。
+- 几档都满足时任选一档((c)(2)(iv)),没有优先顺序;同一时刻只能在一档,换档前至少停 33 ms。
+- 76–81 GHz 不在本节(57–71 GHz)里:77 GHz 档的检查回答"不适用",不套 60 GHz 的限值。
+
+## 当前结论(`tests/test_compliance.py`、示例 09)
+
+- **默认配置超 8 dB,帧率有上限。** 扫 58–62 GHz 同时跨过 59.4 与 61.56 GHz,频段包得住它的只有默认档、`radar_57_64`、`radar_57_64_outdoor`。
+  没声明场景时治理档是 `radar_57_64`:上限 14 dBm,22 dBm 超 8.0 dB;按上限 EIRP 14 dBm,5 m 人体的格点 SNR 51.34 → 43.34 dB。
+  关断:6.4 ms 的帧要求帧周期 ≥ 33 − (7.5 − 6.4) = **31.90 ms,即 ≤ 31.3 帧/秒**;帧周期没声明,报表写"未声明,无法判断"并给出这个数。
+  帧周期 33 ms 时最坏的 33 ms 里关断 26.6 ms(够);31.8 ms 时不够,`radar_57_64` 整档不能用,退到默认档:传导 −10 dBm,经 10 dBi 天线 EIRP 只有 0 dBm。
+  一帧长过 7.5 ms(比如 128 个 chirp,12.8 ms)时 14 dBm 档无论帧率多低都不满足("cannot be met")。
+- **频段取舍(示例 09,同一个 5 m 人体、同样 64 chirp,EIRP 取上限)**:
+
+  | 扫频 | 治理档 | 上限 | B | 分辨率(Hann) | 上限下的 SNR | 关断 | 最高帧率 |
+  |---|---|---|---|---|---|---|---|
+  | 58–62 GHz(默认) | 57–64,带关断 | 14 dBm | 4.00 GHz | 5.39 cm | 43.34 dB | ≥ 25.5 ms | 31.3 /s |
+  | 57–59.4 GHz 室内 | 57–59.4 室内 | 20 dBm | 2.40 GHz | 8.98 cm | 49.60 dB | 无 | 不限 |
+  | 57–61.56 GHz | 57–61.56,带关断 | 20 dBm | 4.56 GHz | 4.73 cm | 49.44 dB | ≥ 16.5 ms | 68.3 /s |
+  | 57–64 GHz 全带 | 57–64,带关断 | 14 dBm | 7.00 GHz | 3.08 cm | 43.27 dB | ≥ 25.5 ms | 31.3 /s |
+  | 57–64 GHz 室外固定 | 57–64 室外 | 20 dBm | 7.00 GHz | 3.08 cm | 49.27 dB | ≥ 16.5 ms | 68.3 /s |
+
+  把上沿从 62 收到 61.56 GHz、下沿放到 57 GHz(57–61.56):带宽反而多 0.56 GHz,上限高 6 dB,帧率上限翻倍多。默认的 58–62 GHz 在这张表里是最吃亏的一行。
+  表里的"探测距离"(SNR 落到图上 CA-CFAR Pd 0.9 所需)28.7–40.5 m,都在 IF 带限的最大距离(8.6–25 m)之外:真正卡距离的是 IF 带宽,不是 EIRP。
+- **发射天线增益在上限下不起作用(contains:lesson)**:默认档 12 dBm 加任何 ≥ 2 dBi 的发射天线都 ≥ 14 dBm,按上限后 EIRP 一律 14 dBm:
+  `tx_gain_dbi` = 2 / 6 / 10 dBi 时"按合规上限"的 SNR 逐位相同(43.34 dB),而按配置的 SNR 是 43.34 / 47.34 / 51.34。`rx_gain_dbi` 仍 1 dB 对 1 dB(8 / 10 / 12 dBi → 41.34 / 43.34 / 45.34)。
+  预期先写进测试再跑,一次通过。20 dBm 的档要 ≥ 8 dBi 才被钉住(2 / 6 dBi 时比 10 dBi 低 6 / 2 dB)。所以 ROADMAP"等上游"#1 里天线增益的不确定,在合规的雷达上只剩接收侧。
+- **其它配置**:`radar_60g_mimo`(2 个发射通道 TDM 轮流发,同一时刻只有一个,EIRP 按单通道 22 dBm,帧仍是 6.4 ms)、`radar_60g_x10lo`、`radar_60g_dither` 与默认相同;
+  `radar_77g_automotive`(76.5–78.5 GHz,24 dBm)不适用。
+
+## 原文没说的,和本库的读法(contains:decision;都打在报表里)
+
+1. **室内 / 室外、固定 / 车载没有定义。** 本库不猜:`regulatory.scenario`(`indoor` / `outdoor` / `outdoor_fixed` / `vehicular` / `uav`,默认不声明)。
+   不声明时,依赖场景的档标"scenario not declared",不参与治理档的选择。`outdoor` 单独不算"固定或车载"。
+2. **占用带宽怎么量没说。** 取指令的扫频范围 `center ± sweep / 2`。(f) 要求在 −20…+50 °C、电压 85–115 % 下基波都落在带内,本库不留余量;飞回的过冲也没算。
+   所以"57–61.56 GHz"这种贴边的行在实物上要留保护带。
+3. **关断被 33 ms 窗口截断时怎么计没说。** 本库:一段关断自身连续 ≥ 2 ms 就算数,落在窗口里的部分计入(即"窗口内发射时间 ≤ 33 − 下限",短于 2 ms 的间隙算发射)。
+   另一种读法(窗口里截下来的片段也得 ≥ 2 ms)会多扣最多 4 ms:6.4 ms 的帧在 14 dBm 档 33 − 6.4 − 4 = 22.6 < 25.5,任何帧率都不合规。本库取前一种,因为后一种下连很低占空比的器件也过不了。
+4. **多个发射通道的 EIRP 怎么合计没说**((h) 只禁止带外部锁相输入做波束成形阵)。本库的 MIMO 是 TDM,同一时刻一个通道,按单通道。
+5. **峰值 EIRP 的测量带宽没说**(测量方法指向 §2.947;(i)(2) 要求测量时扫频开着;(c)(4) 说 §15.35(b)(c) 的 100 ms 平均与"峰值不超平均 20 dB"不适用)。
+   本库把配置的 `tx_power_dbm + tx_gain_dbi` 当峰值 EIRP,`tx_power_dbm` 当峰值传导。
+
+## 实现
+
+- `link/compliance.py`:`check(cfg)` → `ComplianceResult`(每档一个 `TierResult`:频段包不包得住扫频、场景、关断、余量、最短帧周期、能不能用;`governing`、`eirp_cap_dbm`、`verdict`)。
+  模块只有条文的结构(哪一档有哪些条件),**没有一个限值**:全从 `sources.number("fcc15255.<档>.<字段>")` 读(44 条,`source: spec`,加载时与 spec_sources 逐值核对)。
+  测试用 monkeypatch 改表里的一个上限,判定跟着变。
+- 治理档 = 能用的档里上限最高的;上限相同取不要求关断的。"能用" = 频段包得住、带宽条件满足、场景满足或不依赖场景、关断满足或还能满足(帧周期没声明)。
+- 关断:`on_bursts`(把短于 2 ms 的间隙并进发射段)、`min_off_sum`(滑动窗口里计入的关断的最小值:它对窗口起点分段线性,只在窗口边沿对上发射段边沿时取极值,测试对照细网格暴力搜索)、
+  `min_frame_period`(二分)。
+- `link_budget(cfg, eirp_cap_dbm=...)`:EIRP 取 `min(pt + gt, 上限)`,其余不变(泄漏和它造成的压缩仍按配置的发射机);治理档有传导上限时(默认档)先把 `pt` 压到传导上限。
+  `StatResult.compliance` / `budget_capped`;报表的链路预算多一列,另有"Regulatory check"一节。
+- 新配置量只进检查、不进信号处理:`chirp.frame_period_s`、`regulatory.scenario`(测试守着:声明与否,统计引擎的其它结果逐项相同)。
+- 指纹:原有 2153 个值逐位不变,新增 247 个 `compliance.*` 键。break-check(手工改坏再恢复):去掉关断判据 → 10 条红;上限不作用到预算 → 3 条红;57–64 档读成室外档的上限 → 红。
+
+## 没做的(ROADMAP)
+
+- 默认配置怎么改(降 EIRP / 换频段 / 不动并标明超限)由用户看了取舍表定,单独一个 numbers-move 的 PR。
+- 61.0–61.5 GHz 档的档外限值(平均 10 / 峰值 13 dBm)、无人机档的高度、换档的 33 ms 停留都没建模;脉冲雷达 (c)(3) 与机上使用 (b)(2)(iii) spec_sources 没建条目,FMCW 用不上。
+- 只有美国的 §15.255;ETSI EN 305 550 / 302 264 等没有读。

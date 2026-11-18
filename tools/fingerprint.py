@@ -95,6 +95,13 @@ def stat_values(s) -> dict:
     for k, v in getattr(s, "cfar", {}).items():
         if isinstance(v, (int, float)) and not isinstance(v, bool):
             out["cfar." + k] = _scalar(v)
+    # 0.2.19: the regulatory check (link/compliance.py) -- new keys, nothing existing moves
+    for k, v in (getattr(s, "compliance", None) or {}).items():
+        if isinstance(v, bool) or v is None or isinstance(v, str):
+            if k in ("applies", "governing", "compliant"):
+                out["compliance." + k] = repr(v)
+        elif isinstance(v, (int, float)):
+            out["compliance." + k] = _scalar(v)
     return out
 
 

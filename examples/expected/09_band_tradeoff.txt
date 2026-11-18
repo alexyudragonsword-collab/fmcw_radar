@@ -1,0 +1,39 @@
+47 CFR 15.255(c)(2); the transmitter as configured: 12 dBm conducted (source: spec) + 10 dBi (source: assumed) = 22 dBm EIRP; one frame is a 6.4 ms burst; target: human at 5 m
+
+band by band (EIRP held to the governing tier's limit; SNR: one range-Doppler cell, the link budget's):
+  sweep                        | governing tier                                             | limit [dBm] | configured is  | B [GHz] | resolution [cm] | SNR at the limit [dB] | detection range [m] | IF-band range [m] | off-time needed         | max frame rate [1/s]
+  58-62 GHz (the default)      | 57.0-64.0 GHz, with off-time                               |          14 | 8.0 dB over    |    4.00 |            5.39 |                 43.34 |                28.8 |             14.99 | >= 25.5 ms in any 33 ms | 31.3
+  57-59.4 GHz, indoor          | 57.0-59.4 GHz, indoor                                      |          20 | 2.0 dB over    |    2.40 |            8.98 |                 49.60 |                40.5 |             24.98 | none                    | no limit
+  57-61.56 GHz                 | 57.0-61.56 GHz, with off-time                              |          20 | 2.0 dB over    |    4.56 |            4.73 |                 49.44 |                40.1 |             13.15 | >= 16.5 ms in any 33 ms | 68.3
+  57-64 GHz, the whole band    | 57.0-64.0 GHz, with off-time                               |          14 | 8.0 dB over    |    7.00 |            3.08 |                 43.27 |                28.7 |              8.57 | >= 25.5 ms in any 33 ms | 31.3
+  57-64 GHz, outdoors, fixed   | 57.0-64.0 GHz, outdoors fixed or vehicular, with off-time  |          20 | 2.0 dB over    |    7.00 |            3.08 |                 49.27 |                39.7 |              8.57 | >= 16.5 ms in any 33 ms | 68.3
+  (detection range: where the SNR at the limit meets what the map's CA-CFAR needs for Pd 0.9; the IF band cuts the radar off before that, and the oxygen figure is the band's one value, not the sweep centre's)
+
+why 58-62 GHz gets 14 dBm: the tiers and whether the sweep lies inside their band
+  tier                                                       | band [GHz]  | limit [dBm] | 58-62 inside | scenario     | usable
+  default: any field disturbance sensor / radar in the band  | 57-71      |          10 | yes          | any          | yes
+  57.0-59.4 GHz, indoor                                      | 57-59.4    |          20 | no           | not declared | no
+  57.0-59.4 GHz, outdoor                                     | 57-59.4    |          30 | no           | not declared | no
+  57.0-61.56 GHz, no off-time                                | 57-61.56   |           3 | no           | any          | no
+  57.0-61.56 GHz, with off-time                              | 57-61.56   |          20 | no           | any          | no
+  57.0-64.0 GHz, with off-time                               | 57-64      |          14 | yes          | any          | yes
+  57.0-64.0 GHz, outdoors fixed or vehicular, with off-time  | 57-64      |          20 | yes          | not declared | no
+  61.0-61.5 GHz, 500 MHz or less                             | 61-61.5    |          43 | no           | any          | no
+  60-64 GHz on an unmanned aircraft, with off-time           | 60-64      |          20 | no           | not declared | no
+  governing: 57.0-64.0 GHz, with off-time; EIRP over the limit by 8.0 dB; off-time: frame period not declared, cannot be judged (it needs a frame period of at least 31.90 ms, at most 31.3 frames a second)
+
+the transmit antenna's gain under a limit (58-62 GHz; SNR of one cell [dB], configured / at the limit):
+  tx_gain_dbi | rx_gain_dbi | configured EIRP [dBm] | EIRP at the limit [dBm] | SNR configured | SNR at the limit
+            2 |          10 |                    14 |                      14 |          43.34 |            43.34
+            6 |          10 |                    18 |                      14 |          47.34 |            43.34
+           10 |          10 |                    22 |                      14 |          51.34 |            43.34
+           10 |           8 |                    22 |                      14 |          49.34 |            41.34
+           10 |          12 |                    22 |                      14 |          53.34 |            45.34
+  (2, 6 and 10 dBi all come down to the tier's 14 dBm: the same SNR; the receive antenna moves it dB for dB)
+
+the other bundled configs:
+  radar_60g_sensing      | 1 TX | EIRP 22 dBm | 57.0-64.0 GHz, with off-time, 14 dBm | EIRP over the limit by 8.0 dB; off-time: frame period not declared, cannot be judged (it needs a frame period of at least 31.90 ms, at most 31.3 frames a second)
+  radar_60g_mimo         | 2 TX in turn (TDM), one on at a time | EIRP 22 dBm | 57.0-64.0 GHz, with off-time, 14 dBm | EIRP over the limit by 8.0 dB; off-time: frame period not declared, cannot be judged (it needs a frame period of at least 31.90 ms, at most 31.3 frames a second)
+  radar_60g_x10lo        | 1 TX | EIRP 22 dBm | 57.0-64.0 GHz, with off-time, 14 dBm | EIRP over the limit by 8.0 dB; off-time: frame period not declared, cannot be judged (it needs a frame period of at least 31.90 ms, at most 31.3 frames a second)
+  radar_60g_dither       | 1 TX | EIRP 22 dBm | 57.0-64.0 GHz, with off-time, 14 dBm | EIRP over the limit by 8.0 dB; off-time: frame period not declared, cannot be judged (it needs a frame period of at least 31.90 ms, at most 31.3 frames a second)
+  radar_77g_automotive   | 1 TX | EIRP 24 dBm | not applicable: the sweep 76.5-78.5 GHz lies outside the 57-71 GHz band this section governs; its limits are not applied to it
