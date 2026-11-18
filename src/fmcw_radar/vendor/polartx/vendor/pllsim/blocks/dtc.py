@@ -1,6 +1,6 @@
-# Vendored from polar_tx@b007e60477bac68806138db733cbafd0c0761282: src/polartx/vendor/pllsim/blocks/dtc.py
+# Vendored from polar_tx@48b7f41be483591cab219a66e62554a51a875b87: src/polartx/vendor/pllsim/blocks/dtc.py
 # Adapted-copy policy: see src/fmcw_radar/vendor/__init__.py
-# Vendored from pll_simulator@5564c64: src/pllsim/blocks/dtc.py
+# Vendored from pll_simulator@3d8611f: src/pllsim/blocks/dtc.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Digital-to-time converter with gain error, INL and jitter.
 

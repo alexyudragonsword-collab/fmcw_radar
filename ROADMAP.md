@@ -32,9 +32,14 @@
        ±15 % 频带、seed 7–9 是 −0.7 … −3.3 dB;电平随读法变,稳的是相干分量。
        `tests/test_lo_noise_split.py::test_the_default_tdc_is_not_dithered_enough_for_the_profile`。12.2 ps 下扫抖动(默认 64 chirp,`run_statistical`):1 / 1.8 / 2.44 / 3 ps(0.08 / 0.15 / 0.20 / 0.25 格)→ 最强 −37.3 / −39.5 / −42.0 / −44.7 dBc,
        每帧 2.75 / 2.08 / 0.92 / 0.16 个,L(1 MHz) −75.9 / −75.4 / −74.8 / −74.3 dBc/Hz。
-       要做:等 pll_simulator#80 的**扣除式 TDC dither**(参考路径 DTC 注入已知伪随机偏移、数字域减掉;默认关,幅度按 LSB 计,DTC 增益误差单独一个参数,
-       `analyze()` 补扣除失配一项)。它合并后经 polar_tx 重新 pin,本库接进 `lo.*`,验收:相干分量回到随机水平、默认配置每帧鬼目标接近 0。
-       它不做 FCW 的 Σ-Δ 与周期性偏移;`dtc_bbpd` 接 `mod_freq` 本库说了暂不需要。TDC 自身抖动的出处两边都没有,1 ps 仍是占位。
+       **扣除式 TDC dither 已到本库的副本里**(0.2.16:pll_simulator `3d8611f` 经 polar_tx `48b7f41`,`TDCConfig.dither_lsb` / `dither_gain_error`,默认关,关闭时逐位不变),还没接进配置。
+       临时叠加试跑(pin 之前,默认配置 64 chirp):dither 0 / 1 / 2 / 3 LSB → 每帧 2.7506 / 0.0021 / 0.0089 / 0.0000 个,最强 −37.3 / −50.9 / −51.8 dBc / 无,L(1 MHz) 都是 −75.89。
+       要做:(1) `lo.tdc_dither_lsb`、`lo.tdc_dither_gain_error` 接进 `build_adpll`,默认开还是关由用户定(芯片有没有这个 dither 没有出处);
+       (2) LO 剖面加两项:`tdc_dither_gain`(`analyze()` 自带)与调制失配 `ADPLL.tdc_dither_mod_residual(f, freq_dev_rms_hz)`(比 `tdc_quant` 低 19.5 dB;`freq_dev_rms_hz` 传距离窗加权后的值);
+       (3) `simulate()` 的斜坡提示("TDC quantization follows the modulation",dither 不到 0.5 格 RMS 时给;1 LSB 是 0.30 格,仍给)接进报表;
+       (4) 停泊段:pll_simulator 量到 CW 下 1 LSB 仍差 +2.4 … +2.9 dB(每周期 5.46 个码不是整数),3 LSB 才在 1 dB 内,所以 (c) 的结论要按 dither 宽度分开写;
+       (5) `ghosts_quiet`(noise=False 单 ramp 的图样)在 dither 开着时是一次随机实现,不再是确定性图样,语义要改;(b) 的文件剖面配置可以靠 `noise=False` 下也生效的 dither 解决;
+       (6) 正式验收后把数回报 pll_simulator#80 并关闭。它不做 FCW 的 Σ-Δ 与周期性偏移;`dtc_bbpd` 接 `mod_freq` 本库说了暂不需要。TDC 自身抖动的出处两边都没有,1 ps 仍是占位。
        在此之前,报表把默认配置的鬼目标当作结论的一部分报出(现在就是)。
        0.2.7 重新 pin 后鬼目标的位置随 seed 与抖动的实现变;12.2 ps 下 −10.31 / ±2.81 / ±8.43 / −14.05 m 在 0 … 2 ps 间稳定。
    (b) 带 `lo.profile` 文件的配置:0.2.9 起量化只算一次(导出的文件带分项;外来文件在 event 引擎下由剖面加上发生器的两项量化,`cairn/chirp-engine.md`)。
