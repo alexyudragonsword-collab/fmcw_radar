@@ -11,8 +11,10 @@ the whole profile, which is what the time engine did before.
 
 Since 0.2.12 the 60 GHz TDC is the sourced 12.2 ps, and the 1 ps of jitter
 placeholder is 0.08 of its bin: too little to break the quantisation up, so
-on a ramp the cycle-accurate loop leaves the linear profile by up to 3.5 dB
-(``test_the_default_tdc_is_not_dithered_enough_for_the_profile``).  The
+on a ramp much of the loop's in-band error repeats ramp after ramp: it is
+not the profile's random noise, and its level read in a band moves by up to
+3.5 dB with the band and the seed, as a line's does (``test_the_default_tdc_is_not_dithered_enough_for_the_profile``;
+0.2.15 corrects 0.2.12's "3.5 dB off the profile", pll_simulator#80).  The
 bookkeeping is checked where the linear model holds: the sourced TDC with
 half a bin of jitter (6.5 ps).  Two checks of the quantisation's own shape
 need a TDC fine enough for its pattern to look like noise and run on the
@@ -231,25 +233,54 @@ def test_time_engine_says_who_carries_what(cfg, noisy):
     assert np.array_equal(a.frame, b.frame)
 
 
+def _coherent_fraction_db(chirp, psi, skip=300, first=2):
+    """Per band of OFFSETS (+-25 %): the power of the ramps' mean over the mean
+    of the ramps' powers, in dB -- what of the error repeats on every ramp.
+    Random noise over M ramps reads 1 / M; a pattern every ramp shares, 0 dB."""
+    segs = []
+    for k in range(first, chirp.n_chirps):
+        x = psi[k * chirp.pri_cycles + skip:k * chirp.pri_cycles + chirp.n_ramp]
+        t = np.arange(x.size)
+        segs.append(x - np.polyval(np.polyfit(t, x, 1), t))
+    segs = np.array(segs)
+    w = np.hanning(segs.shape[1])
+    per = np.mean(np.abs(np.fft.rfft(segs * w, axis=1)) ** 2, axis=0)
+    coh = np.abs(np.fft.rfft(segs.mean(axis=0) * w)) ** 2
+    f = np.fft.rfftfreq(segs.shape[1], d=1.0 / chirp.fref_hz)
+    bands = [(f > q / 1.25) & (f < q * 1.25) for q in OFFSETS]
+    return np.array([10.0 * np.log10(np.sum(coh[b]) / np.sum(per[b])) for b in bands]), segs.shape[0]
+
+
 def test_the_default_tdc_is_not_dithered_enough_for_the_profile(cfg, dith):
     """0.2.12 (ROADMAP P1 #1(a)): on the sourced 12.2 ps TDC the 1 ps jitter
-    placeholder is 0.08 of a bin.  On a ramp the cycle-accurate loop then
-    leaves the linear profile by 3.5 dB at 100 and 300 kHz (with half a bin
-    of jitter: within 1.2 dB), and the frame's LO floor 1-5 m out reads up to
-    1.5 dB over the closed form where the coherent ghosts fall (with half a
-    bin: within 0.8 dB).  The profile is the dithered loop's answer; the
-    default is not dithered."""
+    placeholder is 0.08 of a bin.  On a ramp the loop's error then repeats
+    ramp after ramp: over 14 ramps (random noise: -11.5 dB) the coherent
+    fraction is -1.3 dB at 300 kHz and -3.6 to -4.8 dB from 1 to 10 MHz;
+    with half a bin of jitter, -10 to -11 dB.  That repetition is what a
+    frame integrates into ghost targets, and the frame's LO floor 1-5 m out
+    reads up to 1.5 dB over the closed form where they fall (half a bin:
+    within 0.8 dB).  The level read in a band is not a measure of it: 0.7
+    to 3.5 dB off the profile at 100 / 300 kHz depending on the band and the
+    seed (+-25 % bands, seed 7: -3.5 / +3.4, the 300 kHz band taking in a line
+    every ramp repeats; +-15 % bands, seeds 7-9: -0.7 to -3.3).
+    **Correction (0.2.15, pll_simulator#80)**: 0.2.12 read this test's -3.5 /
+    +3.4 as the level being off the profile; the robust statement is the
+    coherent fraction."""
     offs = (1.0, 2.0, 3.0, 5.0)
 
     def departures(c):
         prof = LOProfile.from_config(c)
         n = ChirpEngine(c).run(noise=True, seed=7)
-        curve = _ramp_psd(n, n.phase_err_carrier_rad()) - prof.l_dbc(OFFSETS)
+        level = _ramp_psd(n, n.phase_err_carrier_rad()) - prof.l_dbc(OFFSETS)
+        coherent, ramps = _coherent_fraction_db(n, n.phase_err_carrier_rad())
         m = measured_pn_sidelobes(apply_overrides(c, {"processing.window_range": "blackman"}), offs, n_chirps=16, seed=3,
                                   half_bins=12, chirp=n)
-        return curve, np.array([m[o]["measured_dbc"] - m[o]["closed_form_dbc"] for o in offs])
+        return level, coherent, ramps, np.array([m[o]["measured_dbc"] - m[o]["closed_form_dbc"] for o in offs])
 
-    curve, floor = departures(cfg)
-    assert np.max(np.abs(curve[:2])) > 3.0 and np.max(floor) > 1.2, (curve, floor)
-    curve, floor = departures(dith)
-    assert np.max(np.abs(curve)) < 1.5 and np.max(np.abs(floor)) < 1.0, (curve, floor)
+    level, coherent, ramps, floor = departures(cfg)
+    assert ramps == 14
+    assert coherent[1] > -3.0 and np.all(coherent[1:] > -6.0) and np.max(floor) > 1.2, (coherent, floor)
+    assert np.all(np.abs(level) < 4.0), level
+    level, coherent, ramps, floor = departures(dith)
+    assert np.all(coherent[1:] < -9.0) and np.max(np.abs(floor)) < 1.0, (coherent, floor)
+    assert np.max(np.abs(level)) < 1.5, level
