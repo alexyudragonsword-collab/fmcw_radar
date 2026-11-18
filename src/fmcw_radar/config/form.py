@@ -68,6 +68,7 @@ SECTIONS: list[tuple[str, str, list[dict]]] = [
     ]),
     ("frontend", "Front end (empty = the band's sourced figure or placeholder)", [
         _f("frontend.tx_power_dbm", "TX power [dBm] (empty = placeholder)", "opt_float"),
+        _f("frontend.tx_backoff_db", "TX power backoff [dB] (empty = the band's: 60 GHz, down to the regulatory limit)", "opt_float"),
         _f("frontend.tx_gain_dbi", "TX antenna gain [dBi]", "opt_float"),
         _f("frontend.rx_gain_dbi", "RX antenna gain [dBi]", "opt_float"),
         _f("frontend.rx_gain_db", "RX chain gain to the ADC [dB]", "opt_float"),

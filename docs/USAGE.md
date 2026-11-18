@@ -40,7 +40,10 @@ blanking 的时长,0.2.1:距离窗按剩下的样本重配,`cfg.n_blank` 是样�
   `threshold_factor(n, pfa, n_looks)` / `ca_cfar_2d(..., n_looks)` / `cfar_window(shape, guard, train)`、`hpf_attenuation_db` / `apply_hpf`;`range_window(name, n, n_blank)` 是 blanking 后的距离窗(所有距离 FFT 与窗统计都走它)。
 - `compliance_check(cfg)`(`fmcw_radar.link`)→ `ComplianceResult`:发射端对 47 CFR §15.255(c)(2)。`applies` / `why`、`tiers`(每档:`in_band`、`scenario`、`off_time`、
   `eirp_margin_db`、`min_frame_period_s` / `max_frame_rate_hz`、`usable`、`compliant`)、`governing`(能用的档里上限最高的)、`eirp_cap_dbm`、`verdict`、`readings`(条文没说的、本库怎么读的)。
-  它读 `chirp.frame_period_s`(帧周期,空 = 不声明;只有这个检查读它)和 `regulatory.scenario`(`indoor` / `outdoor` / `outdoor_fixed` / `vehicular` / `uav`,空 = 不声明)。
+  它读 `chirp.frame_period_s`(帧周期,默认 1/30 s,空 = 不声明;只有这个检查读它)和 `regulatory.scenario`(`indoor` / `outdoor` / `outdoor_fixed` / `vehicular` / `uav`,空 = 不声明)。
+  帧比帧周期长的配置(`n_chirps` × PRI > 1/30 s)加载时报错:给它自己的帧周期,或写 `frame_period_s: null`。
+  `frontend.tx_backoff_db`(0.2.20):发射机从 `tx_power_dbm` 回退多少 dB,≥ 0;留空取频段的占位(60 GHz 档 8 dB:回退到这一节 14 dBm 的上限;77 GHz 档 0)。
+  链路预算、泄漏预算和这个检查都按 `tx_power_dbm − tx_backoff_db` 算(`cfg.tx_conducted_dbm()`);要满功率的雷达写 `tx_backoff_db: 0`。只改 `tx_power_dbm` 或 `tx_gain_dbi` 而不改回退量,回退仍是 8 dB,EIRP 跟着变。
   `link_budget(cfg, eirp_cap_dbm=...)` 是 EIRP 取 `min(配置, 上限)` 的同一份预算;`run_statistical` 的结果带 `compliance`(字典)和 `budget_capped`,报表多一列与一节。
   57–71 GHz 之外(77 GHz 档)回答"不适用"。
 - `ChirpEngine(cfg).run(noise=False, n_chirps=None)` → `ChirpResult`:`f_err_dco_hz` 整帧曲线、`ramp(k)` / `ramp_carrier(k)`、`metrics(k)`

@@ -11,6 +11,7 @@ chirp:
   duration_s: 50.0e-6
   idle_s: 5.0e-6
   n_chirps: 128
+  frame_period_s: 0.03333333333333333   # 30 frames a second; read by the regulatory check only, which does not apply to this band
 lo:
   fref_hz: 100.0e6
   loop_bw_hz: 1.0e6

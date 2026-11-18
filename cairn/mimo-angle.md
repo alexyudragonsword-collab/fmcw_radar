@@ -5,7 +5,7 @@ summary: "里程碑 2 的知识:TDM-MIMO 虚拟阵列测角(位置之和、u 格
 tags: [mimo, tdm, dbf, coupling, array_tx, leakage, hpf, cfar, multi-target]
 contains: [decision, lesson, experience]
 created: "2026-11-07"
-updated: "2026-11-14"
+updated: "2026-11-18"
 related: [architecture-invariants, range-correlation]
 authoring_mode: ai_generated
 ---
@@ -30,6 +30,13 @@ authoring_mode: ai_generated
   留 **−1.48°** 的系统偏差(界 0.023°)。改为在目标距离格上取相邻同 TX chirp 的相位推进(`doppler_fine_hz`,TX × RX 平均,单音的 ML 估计),
   偏差降到 +0.014°,RMS 0.050°(6 个 seed × 8 chirp;界 0.023°)。
   **更正(0.2.2)**:当时写的"剩下的是 ADC 量化与多普勒估计本身的噪声"是错的,见下一节;6 个 seed 的 RMS 本身只准到 ±29 %。
+
+> **0.2.20:默认发射机回退 8 dB**(EIRP 到规管上限 14 dBm,`cairn/regulatory-compliance.md`)。**本文各节的数是满功率(`frontend.tx_backoff_db: 0`)下量的**,机制测试也在满功率上跑;
+> 默认配置上对应的数(示例 07 / 08):每元格点 SNR 39.3 → 31.3 dB,界 0.023° → 0.058°,期望散布 0.041° → 0.103°(四个因子不变),时域 32 个 seed:无耦合补偿后 +0.022° / 0.110°、
+> 校准后 +0.019° / 0.109°、未校准 −0.273°、不补偿 +2.736°;真多普勒 0.108°(期望 0.102°)、真多普勒 + 均匀权 0.062°(0.067°);多普勒估计 3.5 Hz RMS(满功率 1.4)。384 个 seed 的对照没有在新功率上重跑(未核实)。
+> 泄漏(§4):接收端 −8 → −16 dBm,对带外压缩点 −4 → **+4 dB**;前级压泄漏 0.50 dB(满功率 5.24),回波 −1.49 dB(−10.65),SNR −0.05 dB(−2.30);2 阶 200 kHz 后 −32.4 dBm、裕量 +36.4 dB、削波 3.3 %、
+> 阶跃 6.04 V、推荐 blanking 4.34 µs、blank 后 0.1 %;1 阶 200 kHz 削波 2.5 %、blank 3.5 µs 后 0;2 阶 50 kHz 推荐 18.7 µs。目标对图峰 −24.1 dB;无噪声的 2–4 m 底相对目标 blank 后 −43.3 dB(无泄漏参照 −48.6),
+> 有噪声 −28.0 对参照 −28.5(目标弱了 8 dB,"相对目标"的热噪声底高 8 dB)。
 
 ## 2b. 时域测角不在 CRLB 上:估计器自己的代价(0.2.2 归因)
 

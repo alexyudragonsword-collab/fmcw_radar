@@ -23,7 +23,8 @@ b = st.budget
 
 print(f"60 GHz sensing radar: {cfg.band.sweep_hz / 1e9:g} GHz sweep, {cfg.chirp.duration_s * 1e6:g} us chirps x "
       f"{cfg.chirp.n_chirps}, {cfg.rx.adc_fs_hz / 1e6:g} MS/s, {cfg.processing.window_range} windows")
-print(f"  TX {tag(cfg, 'tx_power_dbm')} dBm + {tag(cfg, 'tx_gain_dbi')} dBi; RX {tag(cfg, 'rx_gain_dbi')} dBi, "
+print(f"  TX {tag(cfg, 'tx_power_dbm')} dBm backed off {tag(cfg, 'tx_backoff_db')} dB + {tag(cfg, 'tx_gain_dbi')} dBi; "
+      f"RX {tag(cfg, 'rx_gain_dbi')} dBi, "
       f"NF {tag(cfg, 'nf_db')} dB")
 print(f"  target: {cfg.target.kind} at {cfg.target.range_m:g} m, {cfg.target.velocity_mps:+g} m/s, "
       f"RCS {b.rcs_dbsm:g} dBsm (source: {b.inputs['rcs_dbsm'][1]})")

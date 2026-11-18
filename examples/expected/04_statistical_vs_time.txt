@@ -2,9 +2,9 @@ cell SNR, 32 chirps, three ranges (statistical 'expected': the radar equation le
 scalloping at the target's fractional bins, over the thermal floor plus the LO's residual noise averaged
 over the band -- what the time engine's map-wide noise estimate sees):
   range [m] | radar equation [dB] | on the grid [dB] | expected [dB] | time engine [dB] | difference [dB]
-          2 |               64.33 |            63.16 |         62.28 |            62.45 |           +0.18
-          5 |               48.33 |            47.21 |         46.94 |            46.92 |           -0.01
-         10 |               36.14 |            34.99 |         34.71 |            34.67 |           -0.04
+          2 |               56.33 |            55.16 |         54.96 |            55.05 |           +0.09
+          5 |               40.33 |            39.21 |         39.06 |            39.03 |           -0.03
+         10 |               28.14 |            26.99 |         26.74 |            26.66 |           -0.08
 
 phase-noise floor around the target at 5 m, Blackman window, 64 chirps averaged, +-5 bins:
   offset [m] | closed form [dBc/bin] | measured [dBc/bin] | difference [dB]

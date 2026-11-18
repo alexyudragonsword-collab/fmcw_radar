@@ -38,8 +38,8 @@ with the result, so nobody takes the reading for the rule):
 * How several transmit channels add: nothing.  This library's MIMO is TDM,
   one transmitter on at a time, so the EIRP is one transmitter's.
 * The measurement bandwidth of "peak EIRP": nothing.  The configured
-  ``tx_power_dbm + tx_gain_dbi`` is taken as the peak EIRP, the configured
-  ``tx_power_dbm`` as the peak conducted power.
+  ``tx_power_dbm - tx_backoff_db + tx_gain_dbi`` is taken as the peak EIRP,
+  ``tx_power_dbm - tx_backoff_db`` as the peak conducted power.
 
 Outside 57-71 GHz the section does not apply and the check says so (the
 77 GHz band); it does not borrow the 60 GHz limits.
@@ -179,6 +179,8 @@ class ComplianceResult:
     frame_period_s: float | None
     scenario: str | None
     tiers: list[TierResult] = field(default_factory=list)
+    tx_power_dbm: float = 0.0           # what the transmitter can put out, and
+    tx_backoff_db: float = 0.0          # how far it is backed off: conducted_dbm = tx_power_dbm - tx_backoff_db
     governing: str | None = None        # the usable tier with the highest limit
     eirp_cap_dbm: float | None = None   # what the EIRP has to come down to under the governing tier (its conducted limit too)
     readings: tuple = ()                # what the rule leaves open and how it was read here
@@ -213,6 +215,7 @@ class ComplianceResult:
     def as_dict(self) -> dict:
         d = {"rule": self.rule, "applies": self.applies, "why": self.why, "verdict": self.verdict, "compliant": None if self.tier is None else self.tier.compliant,
              "sweep_ghz": list(self.sweep_ghz), "eirp_dbm": self.eirp_dbm, "conducted_dbm": self.conducted_dbm, "n_tx": self.n_tx,
+             "tx_power_dbm": self.tx_power_dbm, "tx_backoff_db": self.tx_backoff_db,
              "frame_on_s": self.frame_on_s, "frame_period_s": self.frame_period_s, "scenario": self.scenario,
              "governing": self.governing, "eirp_cap_dbm": self.eirp_cap_dbm, "readings": list(self.readings),
              "sources": dict(self.sources), "tiers": []}
@@ -238,7 +241,8 @@ READINGS = (
     "margin is kept for the temperature and supply range of paragraph (f).",
     "An off-time counts if it is continuous for at least 2 ms; of one the 33 ms interval cuts, the part inside the interval counts.",
     "The rule does not say how several transmit channels add.  TDM: one transmitter is on at a time, the EIRP is one transmitter's.",
-    "Peak EIRP is taken as tx_power_dbm + tx_gain_dbi, peak conducted power as tx_power_dbm; the rule gives no measurement bandwidth.",
+    "Peak EIRP is taken as tx_power_dbm - tx_backoff_db + tx_gain_dbi, peak conducted power as tx_power_dbm - tx_backoff_db; the "
+    "rule gives no measurement bandwidth.",
 )
 
 
@@ -248,13 +252,17 @@ def check(cfg: RadarConfig) -> ComplianceResult:
     and ``regulatory.scenario``; changes nothing."""
     f_lo = cfg.band.center_hz - 0.5 * cfg.band.sweep_hz
     f_hi = cfg.band.center_hz + 0.5 * cfg.band.sweep_hz
-    pt, s_pt = cfg.frontend_value("tx_power_dbm")
+    pt0, s_pt = cfg.frontend_value("tx_power_dbm")
+    bo, s_bo = cfg.frontend_value("tx_backoff_db")
+    pt = pt0 - bo                               # the transmitter as it runs
     gt, s_gt = cfg.frontend_value("tx_gain_dbi")
     lo, hi = float(number("fcc15255.band_low_hz").value), float(number("fcc15255.band_high_hz").value)
     res = ComplianceResult(rule=RULE, applies=False, why="", sweep_ghz=(f_lo / 1e9, f_hi / 1e9), eirp_dbm=pt + gt, conducted_dbm=pt,
                            n_tx=cfg.mimo.n_tx, frame_on_s=cfg.chirp.frame_on_s, frame_period_s=cfg.chirp.frame_period_s,
                            scenario=cfg.regulatory.scenario,
-                           sources={"tx_power_dbm": s_pt, "tx_gain_dbi": s_gt, "band": number("fcc15255.band_low_hz").source})
+                           tx_power_dbm=pt0, tx_backoff_db=bo,
+                           sources={"tx_power_dbm": s_pt, "tx_backoff_db": s_bo, "tx_gain_dbi": s_gt,
+                                    "band": number("fcc15255.band_low_hz").source})
     if f_hi <= lo or f_lo >= hi:
         res.why = (f"the sweep {f_lo / 1e9:g}-{f_hi / 1e9:g} GHz lies outside the {lo / 1e9:g}-{hi / 1e9:g} GHz band this section "
                    f"governs; its limits are not applied to it")

@@ -68,7 +68,8 @@ def _compliance_lines(K: dict) -> list:
     src = K["sources"]
     period = "not declared" if K["frame_period_s"] is None else f"{K['frame_period_s'] * 1e3:g} ms"
     lines += [f"Applies: {K['why']} (source: {src['band']}). Transmitter as configured: peak EIRP {K['eirp_dbm']:.1f} dBm = "
-              f"conducted {K['conducted_dbm']:.1f} dBm (source: {src['tx_power_dbm']}) + antenna (source: {src['tx_gain_dbi']})"
+              f"conducted {K['conducted_dbm']:.1f} dBm ({K['tx_power_dbm']:g} dBm, source: {src['tx_power_dbm']}, backed off "
+              f"{K['tx_backoff_db']:g} dB, source: {src['tx_backoff_db']}) + antenna (source: {src['tx_gain_dbi']})"
               + (f", {K['n_tx']} transmitters in turn (TDM): one on at a time" if K["n_tx"] > 1 else "")
               + f"; one frame is a {K['frame_on_s'] * 1e3:.2f} ms burst, frame period {period}; scenario "
               f"{K['scenario'] or 'not declared'}.", ""]

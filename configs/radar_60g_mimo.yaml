@@ -2,7 +2,10 @@
 # TDM-MIMO front end (an 8-element virtual line at lambda/2), the RX array's
 # mutual coupling from the survey-shaped matrix (source: assumed magnitude and
 # phase), the TX-RX leakage with a near reflector, an IF high-pass, and a
-# second target 30 cm behind the first.  Every front-end number is a placeholder.
+# second target 30 cm behind the first.  The transmitter runs 8 dB backed off like
+# the sensing config's (EIRP 14 dBm, the 47 CFR 15.255(c)(2) limit; TDM, one
+# transmitter on at a time): the leakage is 4 dB under the out-of-band compression
+# point instead of 4 dB over.
 schema_version: 1
 band:
   kind: 60g_sensing
@@ -13,6 +16,7 @@ chirp:
   duration_s: 100.0e-6
   idle_s: 0.0
   n_chirps: 64
+  frame_period_s: 0.03333333333333333   # 30 frames a second; only the regulatory check reads it (47 CFR 15.255: at least 31.9 ms)
 lo:
   fref_hz: 100.0e6
   loop_bw_hz: 1.0e6

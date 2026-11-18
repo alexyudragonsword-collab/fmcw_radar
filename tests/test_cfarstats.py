@@ -183,13 +183,20 @@ def test_ghost_targets_enter_the_false_alarm_account():
     """A coherent spur of the chirp is a steady target at SNR + level.  On
     the sourced 12.2 ps TDC (0.2.12) the placeholder's 1 ps of jitter is
     0.08 of a bin and does not break the quantisation up: the spurs sit
-    37 dB under the target, and under the default human at 5 m (32 chirps)
-    a frame holds 1.4 of them, two in view, on the time engine's map too.
-    On the 5 ps placeholder before it the same 1 ps (0.2 bin) put them 55
-    dB under and added nothing.  With the jitter set to zero, under a
-    corner reflector every one in view is detected."""
-    base = apply_overrides(RadarConfig(), {"chirp.n_chirps": 32})
+    37 dB under the target, and under the human at 5 m (32 chirps) with the
+    transmitter at full power a frame holds 1.4 of them, two in view, on the
+    time engine's map too.  Backed off 8 dB as the default is since 0.2.20
+    the spurs are where they were relative to the target and 8 dB closer to
+    the noise: 0.03 a frame.  On the 5 ps placeholder before it the same
+    1 ps (0.2 bin) put them 55 dB under and added nothing.  With the jitter
+    set to zero, under a corner reflector every one in view is detected."""
+    backed = run_statistical(apply_overrides(RadarConfig(), {"chirp.n_chirps": 32})).cfar
+    base = apply_overrides(RadarConfig(), {"chirp.n_chirps": 32, "frontend.tx_backoff_db": 0.0})
     human = run_statistical(base).cfar
+    assert backed["ghost_detections_per_frame"] == pytest.approx(0.026, abs=0.005) and backed["pd_target"] > 0.999
+    assert [g["level_dbc"] for g in backed["ghosts"]] == [g["level_dbc"] for g in human["ghosts"]]       # the same spurs
+    # 7.9 dB, not 8: the look SNR is the cell's expected one, with the target's own floor under it, and that floor follows the target
+    assert all(g["snr_db"] == pytest.approx(h["snr_db"] - 7.88, abs=0.02) for g, h in zip(backed["ghosts"], human["ghosts"]))
     assert human["ghosts_vouched"] and human["pd_target"] > 0.999
     assert human["ghost_detections_per_frame"] == pytest.approx(1.40, abs=0.05)
     assert all(-40.0 < g["level_dbc"] < -37.0 for g in human["ghosts"][:3])

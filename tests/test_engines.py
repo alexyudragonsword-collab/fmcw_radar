@@ -63,7 +63,7 @@ def test_phase_noise_sidelobes_match_the_closed_form_within_half_a_db(range_m, s
     chirp (1 kHz bins), far enough out for the band to hold the same
     hundred-odd bins as the others."""
     cfg = apply_overrides(RadarConfig(), {"target.range_m": range_m, "band.sweep_hz": sweep, "chirp.duration_s": duration,
-                                          "target.velocity_mps": 0.0})
+                                          "target.velocity_mps": 0.0, "chirp.frame_period_s": None})   # 64 chirps of 1 ms outlast 1/30 s
     assert cfg.beat_hz() < cfg.rx.if_bw_hz
     m = measured_pn_sidelobes(cfg, offs, n_chirps=64, seed=11, half_bins=10, window_name="blackman")
     closed = pn_floor_table(cfg, offs, window_name="blackman")
