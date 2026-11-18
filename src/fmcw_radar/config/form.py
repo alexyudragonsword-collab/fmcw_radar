@@ -53,6 +53,8 @@ SECTIONS: list[tuple[str, str, list[dict]]] = [
         _f("lo.ref_pn_dbchz", "Reference floor [dBc/Hz]", "float"),
         _f("lo.tdc_res_s", "TDC resolution [ps] (empty = placeholder)", "opt_float", scale=1e-12),
         _f("lo.tdc_jitter_s", "TDC jitter [ps RMS] (empty = placeholder)", "opt_float", scale=1e-12),
+        _f("lo.tdc_dither_lsb", "Subtractive TDC dither [LSB] (0 = off)", "float"),
+        _f("lo.tdc_dither_gain_error", "... its DTC's gain error (relative)", "float"),
         _f("lo.dp_gain", "Direct-path gain as built (1 + eps)", "float"),
         _f("lo.dp_cal", "Two-point gain calibration", "enum", options=["none", "offline", "online"]),
         _f("lo.dp_cal_iterations", "Offline passes", "int"),

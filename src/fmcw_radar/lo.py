@@ -65,7 +65,7 @@ def build_adpll(cfg: RadarConfig) -> ADPLL:
     tjit, _ = cfg.lo_value("tdc_jitter_s")
     osc = OscConfig(f0=fout, gain=lo.kdco_hz, pn_dbchz=pn, pn_foffset=lo.dco_pn_offset_hz,
                     pn_f1f3=lo.dco_pn_f1f3_hz, pn_floor_dbchz=floor)
-    tdc = TDCConfig(t_res=tres, jitter_rms_s=tjit)
+    tdc = TDCConfig(t_res=tres, jitter_rms_s=tjit, dither_lsb=lo.tdc_dither_lsb, dither_gain_error=lo.tdc_dither_gain_error)
     span = code_span(tdc, fout)                  # one DCO period over the TDC's range
     if span > 1.0:
         # polar_tx's finding behind its B1 (polar_tx#19): the counter reads whole DCO cycles and the TDC the
@@ -76,6 +76,38 @@ def build_adpll(cfg: RadarConfig) -> ADPLL:
     return ADPLL(ADPLLConfig(fref=lo.fref_hz, fout=fout, osc=osc, dlf=DLFConfig(alpha=alpha, rho=rho),
                              mode="tdc", tdc=tdc, ref_pn_dbchz=lo.ref_pn_dbchz,
                              int_band=(1e3, lo.fref_hz / 2.0)))
+
+
+#: the profile's terms a cycle-accurate chirp curve already is with the loop's noise off: the TDC's and the DCO's
+#: quantisation, and with the subtractive TDC dither on what its subtraction leaves (the DTC's gain error, and the
+#: TDC read against the nominal DCO period while the ramp holds the DCO off it)
+CURVE_TERMS = ("tdc_quant", "dco_quant", "tdc_dither_gain", "tdc_dither_mod")
+
+
+def dither_freq_dev_rms_hz(cfg: RadarConfig) -> float:
+    """The RMS deviation of the DCO from its centre over a ramp, weighted as
+    the range FFT weights the noise (the window squared): what
+    ``ADPLL.tdc_dither_mod_residual`` wants for a windowed ramp.  A centred
+    Hann holds most of its weight where the sawtooth crosses zero: 141 MHz
+    for a 1 GHz sweep at the DCO, against 289 MHz unweighted."""
+    from .processing.windows import range_window
+
+    n = cfg.n_samples
+    w2 = range_window(cfg.processing.window_range, n, cfg.n_blank) ** 2
+    dev = cfg.dco_sweep_hz * ((np.arange(n) + 0.5) / n - 0.5)
+    return float(np.sqrt(np.sum(w2 * dev * dev) / np.sum(w2)))
+
+
+def _dither_mod_psd(cfg: RadarConfig, pll: ADPLL, f: np.ndarray) -> np.ndarray | None:
+    """The subtractive dither's residual under the chirp [rad^2/Hz at the DCO]
+    on ``f`` (at or below fref / 2), or None with the dither off: the TDC
+    reads against the nominal DCO period while the ramp holds the DCO off
+    it, an error the dither turns from a pattern every ramp repeats into
+    noise (pll_simulator#80; 19.5 dB under the quantisation for a 12.2 ps
+    TDC and +-500 MHz on 15 GHz, before the window's weighting)."""
+    if cfg.lo.tdc_dither_lsb <= 0.0 or cfg.dco_sweep_hz <= 0.0:
+        return None
+    return np.asarray(pll.tdc_dither_mod_residual(f, dither_freq_dev_rms_hz(cfg)), dtype=float)
 
 
 def parked_lo(cfg: RadarConfig) -> dict:
@@ -93,12 +125,18 @@ def parked_lo(cfg: RadarConfig) -> dict:
     flagged); on the 5 ps placeholder before it, +15.8 dB at 30 kHz with no
     jitter, +5.5 dB at 1 ps (0.22 bin), +0.1 dB at 2 ps (0.41 bin).
     A frequency ramp sweeps the fraction of a cycle the TDC reads across
-    its bins every reference cycle, which is a dither: on the ramp the
-    engine and the profile agree within 0.6 dB (tests/test_lo_noise_split.py),
-    so the radar's own use of the LO is covered.  What is not: the LO
-    parked at the carrier (CW), and the ``chirp.idle_s`` it spends at the
-    ramp's start frequency between ramps.  Each is in the dead zone only if
-    *that* frequency is an integer multiple of the reference.
+    its bins every reference cycle: the level on the ramp is the profile's
+    (within 0.6 dB on the 5 ps TDC), but on the 12.2 ps TDC the sweep is no
+    dither -- the error repeats ramp after ramp (0.2.15, pll_simulator#80;
+    tests/test_lo_noise_split.py).  The parked LO is a separate matter: the
+    carrier (CW), and the ``chirp.idle_s`` it spends at the ramp's start
+    frequency between ramps.  Each is in the dead zone only if *that*
+    frequency is an integer multiple of the reference.
+
+    The subtractive TDC dither (``lo.tdc_dither_lsb``) counts in
+    ``dither_bins`` with its own RMS, 0.29 bin an LSB: 1 LSB (0.30 bin) is
+    still flagged and still reads +2.8 dB parked, 3 LSB (0.87) is not and
+    reads +0.65 dB (tests/test_tdc_dither.py).
 
     Returns ``known`` (False for a profile read from a file: its loop is
     not ours to analyse), ``dither_bins``, ``fcw_center`` / ``fcw_idle``,
@@ -129,7 +167,8 @@ class LOProfile:
 
     ``components`` is the same PSD by source on the same grid (the ADPLL's
     own breakdown: ``ref``, ``dco``, ``tdc_quant``, ``dco_quant``,
-    ``tdc_jitter``).  A profile read from a file has the file's own breakdown
+    ``tdc_jitter``; with the subtractive TDC dither on also
+    ``tdc_dither_mod`` and, for a DTC gain error, ``tdc_dither_gain``).  A profile read from a file has the file's own breakdown
     if it carries one; a file without one read under the event chirp engine
     is ``file`` plus the chirp generator's two quantisation terms, which the
     file does not know of and the chirp curve carries; otherwise None.  It is what lets the time engine split the
@@ -193,6 +232,11 @@ class LOProfile:
             s = np.concatenate([np.asarray(ana.pn_breakdown["total"], dtype=float)[keep], s_far]) * n * n
             comp = {k: np.concatenate([np.asarray(v, dtype=float)[keep], s_far if k == "dco" else np.zeros(far.size)]) * n * n
                     for k, v in ana.pn_breakdown.items() if k != "total"}
+            mod = _dither_mod_psd(cfg, pll, f[keep])
+            if mod is not None:
+                # analyze() does not see the chirp: the dither's residual under it is the loop's own method
+                comp["tdc_dither_mod"] = np.concatenate([mod, np.zeros(far.size)]) * n * n
+                s = s + comp["tdc_dither_mod"]
             return cls(np.concatenate([f[keep], far]), s, cfg.band.center_hz, n,
                        f"vendored ADPLL analyze() at {cfg.dco_center_hz / 1e9:.4g} GHz x{n}, the DCO alone above "
                        f"fref/2 (source: assumed)", components=comp, notes=tuple(str(x) for x in ana.notes))
@@ -236,11 +280,16 @@ class LOProfile:
             below = f <= 0.5 * cfg.lo.fref_hz
             bd = pll.analyze(f[below]).pn_breakdown
             comp = {"file": s}
-            for name in ("tdc_quant", "dco_quant"):
+            for name in ("tdc_quant", "dco_quant", "tdc_dither_gain"):
                 if name in bd:
                     q = np.zeros_like(s)
                     q[below] = np.asarray(bd[name], dtype=float) * n * n
                     comp[name] = q
+            mod = _dither_mod_psd(cfg, pll, f[below])
+            if mod is not None:
+                q = np.zeros_like(s)
+                q[below] = mod * n * n
+                comp["tdc_dither_mod"] = q
             s = sum(comp.values())
             source += "; plus the chirp generator's TDC and DCO quantisation (the vendored ADPLL's analyze())"
             notes = ("The noise is a file's, the chirp is this library's two-point ADPLL's: the generator's TDC and DCO "

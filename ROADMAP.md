@@ -32,26 +32,29 @@
        ±15 % 频带、seed 7–9 是 −0.7 … −3.3 dB;电平随读法变,稳的是相干分量。
        `tests/test_lo_noise_split.py::test_the_default_tdc_is_not_dithered_enough_for_the_profile`。12.2 ps 下扫抖动(默认 64 chirp,`run_statistical`):1 / 1.8 / 2.44 / 3 ps(0.08 / 0.15 / 0.20 / 0.25 格)→ 最强 −37.3 / −39.5 / −42.0 / −44.7 dBc,
        每帧 2.75 / 2.08 / 0.92 / 0.16 个,L(1 MHz) −75.9 / −75.4 / −74.8 / −74.3 dBc/Hz。
-       **扣除式 TDC dither 已到本库的副本里**(0.2.16:pll_simulator `3d8611f` 经 polar_tx `48b7f41`,`TDCConfig.dither_lsb` / `dither_gain_error`,默认关,关闭时逐位不变),还没接进配置。
-       临时叠加试跑(pin 之前,默认配置 64 chirp):dither 0 / 1 / 2 / 3 LSB → 每帧 2.7506 / 0.0021 / 0.0089 / 0.0000 个,最强 −37.3 / −50.9 / −51.8 dBc / 无,L(1 MHz) 都是 −75.89。
-       要做:(1) `lo.tdc_dither_lsb`、`lo.tdc_dither_gain_error` 接进 `build_adpll`,默认开还是关由用户定(芯片有没有这个 dither 没有出处);
-       (2) LO 剖面加两项:`tdc_dither_gain`(`analyze()` 自带)与调制失配 `ADPLL.tdc_dither_mod_residual(f, freq_dev_rms_hz)`(比 `tdc_quant` 低 19.5 dB;`freq_dev_rms_hz` 传距离窗加权后的值);
-       (3) `simulate()` 的斜坡提示("TDC quantization follows the modulation",dither 不到 0.5 格 RMS 时给;1 LSB 是 0.30 格,仍给)接进报表;
-       (4) 停泊段:pll_simulator 量到 CW 下 1 LSB 仍差 +2.4 … +2.9 dB(每周期 5.46 个码不是整数),3 LSB 才在 1 dB 内,所以 (c) 的结论要按 dither 宽度分开写;
-       (5) `ghosts_quiet`(noise=False 单 ramp 的图样)在 dither 开着时是一次随机实现,不再是确定性图样,语义要改;(b) 的文件剖面配置可以靠 `noise=False` 下也生效的 dither 解决;
-       (6) 正式验收后把数回报 pll_simulator#80 并关闭。它不做 FCW 的 Σ-Δ 与周期性偏移;`dtc_bbpd` 接 `mod_freq` 本库说了暂不需要。TDC 自身抖动的出处两边都没有,1 ps 仍是占位。
-       在此之前,报表把默认配置的鬼目标当作结论的一部分报出(现在就是)。
+       **0.2.17:扣除式 TDC dither 接进了配置**(`lo.tdc_dither_lsb`、`lo.tdc_dither_gain_error`;pll_simulator#80,`cairn/chirp-engine.md`),**默认关**:
+       默认配置的鬼目标仍是结论(每帧 2.75 个),因为"这颗 60 GHz ADPLL 有扣除式 dither"没有出处。开了以后(`configs/radar_60g_dither.yaml`,1 LSB):
+       每帧 0.002 个、最强 −50.9 dBc,3 LSB 时检出限以上没有;L(1 MHz) 不动;相干分量回到随机水平(`tests/test_tdc_dither.py`)。还没做的:
+       - 默认要不要开:要一份出处(这类 FMCW ADPLL 用不用参考路径 DTC 的扣除式 dither、几个 LSB)。TDC 自身抖动的出处两边都没有,1 ps 仍是占位。
+       - 1 LSB / 2 LSB 时还剩几条 −50 … −54 dBc 的相干杂散贴着检出限(2 LSB 是一对 ±4.68 m);对虚警无影响,来源没查(每周期 5.46 码不是整数,dither 的白化不严格)。
+       - DTC 自身的抖动与 INL 没有建模(上游写明的边界);`tdc_dither_gain_error` 只有增益误差一项。
+       - 上游不做 FCW 的 Σ-Δ 与周期性偏移;`dtc_bbpd` 接 `mod_freq`(换成 DTC + BBPD 架构)本库说了暂不需要。
        0.2.7 重新 pin 后鬼目标的位置随 seed 与抖动的实现变;12.2 ps 下 −10.31 / ±2.81 / ±8.43 / −14.05 m 在 0 … 2 ps 间稳定。
    (b) 带 `lo.profile` 文件的配置:0.2.9 起量化只算一次(导出的文件带分项;外来文件在 event 引擎下由剖面加上发生器的两项量化,`cairn/chirp-engine.md`)。
        剩下的:文件下逐周期曲线不开噪声,没有东西给 TDC dither,鬼目标是不抖动的 −34.1 dBc(−10.31 / ±2.81 m;5 ps 时 −45.3 dBc @ ±4.85 m),一帧里 1–5 m 的底比闭式高 −1.5 … +3.2 dB(均 +0.9)
-       (示例 04 末表,`configs/radar_60g_x10lo.yaml`)。要做:只开 TDC 抖动跑曲线(pllsim 的噪声开关是全开全关,需要它分开),或者在报表里把文件档的鬼目标标成"上限"。
+       (示例 04 末表,`configs/radar_60g_x10lo.yaml`)。**0.2.17 起有解法**:扣除式 dither 在 `noise=False` 下也生效,文件档开 1 LSB 后每帧 2.96 → 0.002 个,
+       鬼目标从 63 个不开噪声但抖动的 ramp 上搜(`test_dither_works_under_a_noise_file_too`)。剩下的:不开 dither 时仍是不抖动的图样(现状,如实报);
+       只开 TDC 抖动跑曲线仍做不到(pllsim 的噪声开关是全开全关)。
    (c) CW / `chirp.idle_s` 空闲段:TDC 抖动 1 ps 时带内相噪仍比线性剖面高(死区):12.2 ps TDC 上 `simulate − analyze` 在 30 / 100 / 300 kHz 是 +15.5 / +19.2 / +9.8 dB
        (0.08 格;抖动 0 / 3 / 5 / 6.5 ps 时均值 +18.8 / +4.2 / +0.9 / +1.1);要到约半个量化格(6.1 ps)才对得上。5 ps TDC 时是 +5.5 / +5.9 / +10.9 dB,
        半格 2.5 ps(0.2.7 重新 pin 之后经本库 vendored 的副本量的,与在 pll_simulator@5564c64 上量的一致;pin 之前 +9 … +15)。
        0.2.7 起报表在相噪一节下标出来(`lo.parked_lo` / "The LO while it is not ramping":载波处与斜坡起点各自的 FCW 是否整数、抖动几格、空闲占 PRI 多少,
        附上游 `analyze()` 的原话);默认 config 载波处 FCW 150 在死区,起点 FCW 145 也是。还没做的是**数**:停着时的相噪没有剖面(要用就得从逐周期引擎的 CW 段取),
        空闲段的 LO 误差也没有进帧。判据本身偏保守:0.41 格仍被标,而那里只差 +0.9 dB(12.2 ps 上的 5 ps;5 ps TDC 上的 2 ps:+0.1 … +1.6 dB)。
-   复现:`run_statistical(cfg).nonlinearity["ghosts"]` / `["ghosts_quiet"]` / `["ghost_limit_dbc"]`;`python examples/02_chirp_nonlinearity.py` 末尾的表。
+       **0.2.17,扣除式 dither 对停泊段**:1 LSB 把 +14.9 dB 降到 +2.8 dB(30 / 100 / 300 kHz +3.6 / +1.7 / +3.2),没到 1 dB——12.2 ps 每个 DCO 周期 5.46 个码,
+       边沿那一格只有 0.46 LSB 宽,白化的前提不成立(pll_simulator 量到 +2.4 … +2.9);3 LSB +0.65 dB(+0.8 / +0.5 / +0.6)。判据跟着走:1 LSB 是 0.30 格 RMS,仍被标;
+       2 LSB 以上不标。所以要让停泊段能用线性剖面,dither 取 3 LSB(`test_parked_lo_wants_three_lsb`)。
+   复现:`run_statistical(cfg).nonlinearity["ghosts"]` / `["ghosts_quiet"]` / `["ghost_limit_dbc"]`;`python examples/02_chirp_nonlinearity.py` 末尾的两张表(抖动、dither)。
 2. **TDC 按标称周期归一化,斜坡把 DCO 带离标称 ±3.3 %**(`ChirpResult.dco_dev_frac_p99`;polar_tx#19 的答复里点出的效应,它推断"在锯齿上被环路吃掉",
    在本库的配置上量了,不成立)。vendored 的 `_sim_tdc` 用 `code / cpp_nom` 把 TDC 码换成小数周期,读数差 `小数 × Δf/f`。以下是 5 ps TDC 时(0.2.11 及以前)量的,
    12.2 ps 下没重量(那里鬼目标已在检出限之上 15 dB 以上,这一项相对小)。默认 config、匹配增益、noise=False:
@@ -60,6 +63,8 @@
    开噪声(TDC 抖动 1 ps、32 个 ramp)时看不出差别:鬼目标本来就贴着检出限(−55.4 dBc 对检出限 −55.9;开 `TdcPeriodCal` −54.9 … 无)。
    所以它只影响"不抖动的图样"那一列和 P1 #1(b) 的文件剖面配置。真实 ADPLL 按固定周期归一化也有这一项,所以保持建模;
    要做(如果做):`lo.tdc_period_cal`(None / EMA 系数)接 vendored 的校准器,并说明带噪声时它自己的测量噪声(0.5 码 RMS)。
+   **0.2.17**:开了扣除式 dither 以后这一项不再是图样,是剖面里的一项噪声 `tdc_dither_mod`(比 `tdc_quant` 低 19.4 dB,Hann 距离窗加权后低 25.6 dB,
+   `test_profile_carries_what_the_subtraction_leaves`);不开 dither 时上面的描述不变。
 
 3. **CFAR 的 Pd 闭式在很短的帧上只准到 ±0.07**(`cfar_pd`:阈值按 Gamma(N_eff)、目标自漏与被测格相关取一阶)。N_eff ≥ 24 时对注入单音的蒙卡 ±0.03;
    8 chirp(N_eff 11.8)13 dB 处 0.86 对 0.93,2 × 4 MIMO 每 TX 4 chirp(N_eff 5.2)5 dB 处 0.77 对 0.83。Pfa 用的是精确式,不受影响。
