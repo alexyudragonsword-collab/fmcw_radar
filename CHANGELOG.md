@@ -4,6 +4,16 @@
 
 ---
 
+## [0.2.15] — 2026-11-18 — 更正"斜坡上线性剖面差 ±3.5 dB":稳的是相干分量(数不动)
+
+- pll_simulator#80(本库发起)的答复:在它的 main 上用本库的环路复现,按频带平均电平与 `analyze()` 差 1 dB 左右;0.2.12 的 ±3.5 dB 是单个 seed、±25 % 频带的读数,
+  300 kHz 那个带套住了一条每个斜坡都重复的谱线(±15 % 频带、seed 7–9:−0.7 … −3.3 dB)。本库重量后同意。
+- 稳的量是**相干分量**:1 ps 抖动、16 个斜坡,300 kHz 处 −1.3 … −1.5 dB、1–10 MHz −3.7 … −5.6 dB(纯随机 −12);6.5 ps 回到随机水平。两边独立量的一致。这正是一帧积出鬼目标的部分。
+- `test_the_default_tdc_is_not_dithered_enough_for_the_profile` 改为断言相干分量(默认 300 kHz > −3 dB、300 kHz 以上都 > −6 dB;半格抖动 < −9 dB),电平只留宽界;README、ROADMAP、`cairn/chirp-engine.md` 追加更正。
+- ROADMAP P1 #1(a):dither 改为等 pll_simulator#80 的扣除式 TDC dither(默认关、幅度按 LSB、DTC 增益误差单列、`analyze()` 补失配项)。指纹不动(只改测试与文档)。
+
+---
+
 ## [0.2.14] — 2026-11-17 — spec_sources 0.6.0 重新 pin(数不动)
 
 - fmcw_radar#21(spec_sources 发起):重新 pin 到 `a9af261`(spec_sources 0.6.0)。本库拷的 6 个文件里只有 `data/frontend60.yaml` 变了:
@@ -37,7 +47,7 @@
   chirp 量化底 0.54 → 1.25 MHz RMS,ISLR −28.6 → −22.6 dB。**鬼目标结论翻了**:1 ps 抖动只有 0.08 格(5 ps 时 0.2 格),打不散量化,
   最强 −54.8 → −37.3 dBc,每帧检出 0.00 → **2.75** 个(示例 00 主瓣外 22 → 35 格;示例 05 四目标帧 70 → 284 格)。ROADMAP P1 #1(a) 改写。
 - CW 死区:1 ps 时 `simulate − analyze` 均 +14.9 dB(5 ps TDC 时 +5.5 … +10.9),半格要 6.1 ps;测试的"不被标"对照从 5 ps 换成 6.5 ps。
-- 同一个原因,斜坡上逐周期引擎对线性剖面在 100 / 300 kHz 差 ±3.5 dB(5 ps 时 0.6 dB 内,半格抖动回到 1.2 dB 内)。测试:`test_lo_noise_split` 的账目检查改在
+- 同一个原因,斜坡上逐周期引擎对线性剖面在 100 / 300 kHz 差 ±3.5 dB(5 ps 时 0.6 dB 内,半格抖动回到 1.2 dB 内;**0.2.15 更正**:那是一种读法,稳的是相干分量)。测试:`test_lo_noise_split` 的账目检查改在
   "12.2 ps + 半格抖动"上,量化形状两条留在 5 ps,新加一条守着默认的偏离;鬼目标、死区、chirp 的机理测试改写成新数并保留 5 ps 的对照。
 - `data/clock_profiles/adpll_15g_fingerprint.yaml` 用 `tools/export_lo_profile.py` 从新默认重新导出;示例 01 的说明行改读 config 的 TDC 值(原来写死 "5 ps")。
 - 指纹(numbers-move):2035 个值里 720 个动(1979 → 2035:过检出限的鬼目标多了);全部经 LO / chirp 传下来。77 GHz 配置、response 引擎的 chirp、接收功率与热噪声逐位不变。
