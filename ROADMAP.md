@@ -107,6 +107,18 @@
    (e) 只读了美国的 §15.255;欧洲(ETSI)等没有条目。61.0–61.5 GHz 档的档外限值、无人机档的高度、换档停 33 ms 没建模。
    复现:`tests/test_compliance.py`;`python examples/09_band_tradeoff.py`;报表的"Regulatory check"一节。
 
+7. **拨旋钮摸出来的三处"设置了却不是你以为的那样"**(0.2.21,`tests/test_guispec.py` 的"每个旋钮拨一格",`cairn/gui.md`;三处都没有改库,只在界面规格里声明并用测试钉住现状):
+   (a) **`lo.engine: response` 下 `lo.dp_cal: online` 被静默忽略**:5 % 两点失配(`lo.dp_gain: 1.05`)时 `dp_gain_used` 仍是 1.05、`notes` 为空,chirp 的全部读数与 `dp_cal: none` 逐项相同;
+       逐周期引擎下在线校准到 1.0026,离线校准两个引擎都到 1.0000。要做:response 引擎遇到 online 时给一条提示(或由配置层拒绝这一对)。界面规格用 `CHOICE_WHEN` 声明了这一条。
+       复现:`test_online_calibration_is_the_event_engines_only`。
+   (b) **IF 高通单独开时统计引擎不认**:`leakage.enabled: false` 时 `rx.hpf_corner_hz` / `rx.hpf_order` 怎么改,统计报告逐项不变;时域引擎照样滤。截止 1 MHz、2 阶(目标拍频 1.33 MHz):
+       时域的目标峰 −1.08 dB、底噪 −1.29 dB,统计引擎 0 / 0。统计预算只在泄漏预算里用高通(`hpf_atten_at_target`)。截止远低于拍频(默认 MIMO 配置的 200 kHz:0.002 dB)时没有可见后果。
+       要做:链路预算在没有泄漏时也扣高通对回波与噪声的衰减。复现:`test_the_high_pass_alone_shows_in_the_time_engine_only`。
+   (c) **两个虚拟阵元 + 默认的 Hann 角窗,测角是垃圾值,没有报错**:`mimo.n_rx: 2`(或 2 TX × 1 RX)时 Hann(2) 的两个权都是 0;20° 的目标统计引擎读 −69.6°、时域引擎读 −57.1°(1 × 2)/ −69.6°(2 × 1),
+       角旁瓣 0.0、期望散布 NaN(`mimo.py:278` 一条 RuntimeWarning)。`rect` / `hamming` 下 20.01° / 19.99°,3 个阵元起 Hann 正常。界面上 `mimo.n_rx` 从默认的 1 拨一格就到这里。
+       要做(待定):配置层拒绝"端点为零的窗 + 少于 3 个虚拟阵元",或阵元数为 2 时改用不过零的窗。
+       复现:`run_statistical(apply_overrides(RadarConfig(), {"mimo.n_rx": 2, "target.angle_deg": 20.0})).angle["theta_est_deg"]`。
+
 ## P2 — 一致性与能力
 
 0. **里程碑 2 留下的**(复现:示例 05–08,`cairn/mimo-angle.md`):
@@ -122,9 +134,17 @@
    但慢目标 / 长帧(PRF 10 kHz 以下的相噪)没有验证。
 4. **性能**:时域引擎 64 chirp × 500k 包络样本约 7 s(4 核);fingerprint 9 s;全套测试约 3 分钟,`test_engines.py` 占一半。
 
+5. **`sim.pn_bins_per_decade` 没有任何引擎读**(0.2.21 拨旋钮时发现):schema 与表单里都有,`grep -rn pn_bins_per_decade src/` 只有这两处;20 / 60 / 120 的报告与时域帧逐位相同。
+   界面规格把它放进 `HIDDEN`(不给页面),测试守着它"仍然什么都不动"。要做:从 schema 删掉(配置文件里写了它的会加载失败,要过一次 `schema_version`),或真的接到闭式积分的网格上。
+
 ## P3 — 能力扩展
 
-1. GUI 与 Android:`config/form.py` 的表单声明已在,Dash / Chaquopy 都没接。
+1. **图形界面还剩 P2–P4**(`cairn/gui.md`;做法照 polar_tx / array_tx:一份网页界面三个宿主,描述 guispec / 计算 guiutil / 分发与队列 webhost、appbridge / 画 webui)。
+   P0 效果图与 P1 界面规格层(`guispec.py`,0.2.21)已做。还没做的:
+   - P2 `guiutil`(一次运行的报告 + 图数据 + 引擎行 + 可复现卡)与本地宿主、工作台页。库里缺的三样要在这里补:配置哈希函数、CFAR 过门限格的分类、距离-多普勒图 / L(f) / 鬼目标的图数据接口。
+   - P3 系统框图页、频段取舍页、基线与扫描;MIMO 测角界面(效果图里没画)。
+   - P4 Android(Chaquopy + WebView)。
+   - 显示范围与步进(`guispec.RANGES`,69 个数值控件)是这一轮定的显示用取值,没有出处,也不是合法性判据;跨字段的约束(斜坡时长 × 采样率为整数等)仍只由配置层报错,页面上还没有逐字段的提示。
 2. 三角波 / 多斜率 chirp、chirp 间空闲对 ADPLL 的影响(现在 `idle_s` 只是让 LO 停在起始频率)。
 3. 77 GHz 档只换了数(`configs/radar_77g_automotive.yaml`,全 assumed),没有任何车载规范的数字。
 4. 零中频 IQ 失配(mmw60_trx `IqMismatch` 的面):时域引擎是复包络、没有 IQ 失配,镜像会在 −拍频处出一个鬼目标(幅度 ≈ 失配的 IRR);

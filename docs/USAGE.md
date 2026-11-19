@@ -57,6 +57,13 @@ blanking 的时长,0.2.1:距离窗按剩下的样本重配,`cfg.n_blank` 是样�
 - `LOProfile.from_config(cfg)`:`psd(f)` / `l_dbc(f)` 在载波处;`components`(ref / dco / tdc_quant / dco_quant / tdc_jitter 分项)、`without(*names)`、`above(f)`;`lo.profile` 指向 pll_simulator 剖面文件时按 (DCO/f0)² N² 缩放;文件带 `components` 时按它拆分,不带时在 event 引擎下加上 chirp 发生器的两项量化(`file` / `tdc_quant` / `dco_quant`),ideal 引擎下原样。
   `configs/radar_60g_x10lo.yaml` 是同一个雷达换成 mmw60_trx 的 ×10 LO(vendored 的 `pllsim_wu19_x10_60p48g_floor150.yaml`)。
 
+## 图形界面的契约(界面本身还没做)
+
+`fmcw_radar.guispec`(0.2.21)描述一个页面可以拨什么、读回什么,不算物理:`controls()`(88 个控件,就是配置字段;默认值读自 `RadarConfig()`)、
+`resolve(cfg, path)`(留空字段背后库实际取的数、出处标签、来源表的键)、`tags(values)`(页面该显示的标签:改过的数是 `assumed`)、
+`inert(values)`(此刻不起作用的控件和原因)、`values_to_config(values)`(经 `config_from_dict`,与读 YAML 同一条路)、`band_switch(values, kind)`、`spec()`(整份契约的 JSON)。
+值一律用配置的 SI 单位,显示单位换算用 `to_display` / `from_display`。
+
 ## 工具
 
 | 命令 | 作用 |
