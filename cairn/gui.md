@@ -1,7 +1,7 @@
 ---
 type: project_topic
 status: active
-summary: "图形界面的决定与分层:一份网页界面三个宿主(桌面应用窗口 / 浏览器 / Android WebView),描述 guispec / 计算 guiutil / 分发与队列 webhost、appbridge / 画 webui,页面只画不算;界面方案是'方案 A 的风格 + 方案 B 的九处 + 系统框图页'(合并稿)。P1 已做:guispec(88 个控件 = 配置字段,默认值读出不手填,留空字段背后的数走库自己的查找,条件 when 与读数处 seen)和'每个旋钮拨一格'的测试。拨旋钮摸出四件事:一个没人读的字段、response 引擎静默不做在线校准、IF 高通只在时域引擎里起作用、两个虚拟阵元配 Hann 角窗测角是垃圾值。"
+summary: "图形界面的决定与分层:一份网页界面三个宿主(桌面应用窗口 / 浏览器 / Android WebView),描述 guispec / 计算 guiutil / 分发与队列 webhost、appbridge / 画 webui,页面只画不算;界面方案是'方案 A 的风格 + 方案 B 的九处 + 系统框图页'(合并稿)。P1 已做:guispec(88 个控件 = 配置字段,默认值读出不手填,留空字段背后的数走库自己的查找,条件 when 与读数处 seen)和'每个旋钮拨一格'的测试。拨旋钮摸出四件事:一个没人读的字段、response 引擎静默不做在线校准、IF 高通只在时域引擎里起作用、两个虚拟阵元配 Hann 角窗测角是垃圾值;第二、四件 0.2.22 起由配置层拒绝。"
 tags: [gui, guispec, web, android, form, provenance]
 contains: [decision, lesson, pitfall]
 created: "2026-11-19"
@@ -43,7 +43,10 @@ authoring_mode: ai_generated
   没有占位数的控件是设计决定,不带标签。库的报告对配置里显式给的值标 `config`,页面不显示这个词。`values_to_config(canonical=True)` 把"填了来源表原数"的字段写回留空:
   往字段里敲 12(占位就是 12)什么都不变,配置逐值相等,哈希也就不变。
 - **`when`:控件在什么设置下才起作用**(27 个控件)。原子是 `{path, op, value}`,`op` ∈ `in` / `gt` / `set`,全部成立才算。`inert(values)` 返回此刻不起作用的控件和没满足的那几条,
-  页面据此置灰并写原因。`CHOICE_WHEN` 管选项:`lo.dp_cal: online` 只在 `lo.engine: event` 下成立。
+  页面据此置灰并写原因。`CHOICE_WHEN` 管选项,从两头声明同一对:`lo.dp_cal: online` 要 `lo.engine` 不是 response,`lo.engine: response` 要 `lo.dp_cal` 不是 online;
+  `refused_choices(values)` 给出此刻该在菜单里置灰的选项。
+- **配置层拒绝的,页面原样显示**:`values_to_config` 走读 YAML 的那条路,schema 不收的改动抛它自己的 `ValueError`,那句话就是页面放在控件旁边的提示
+  (比如"2 个虚拟阵元配 Hann:换 rect / hamming,或至少 3 个虚拟阵元")。页面不重写合法性判断。
 - **`seen`:拨了以后在哪读到**:`report`(统计引擎的报告,默认)、`frame`(时域引擎的帧:seed、包络过采样、合成的 chirp 数、IF 高通两项)、`run`(一次运行里有什么:`sim.engine`)。
 - `band_switch(values, kind)`:换频段不能只改 `band.kind`(60 GHz 的扫频在 77 GHz 窗外,配置层直接拒绝),它把扫频移进新窗口(放得下就保持带宽,居中);留空字段随后自己解析成新频段的占位。
 - `METRICS`(13 个页面要读的数:在报告里的路径、单位、位数、哪个方向算改善)、`ENGINES`(五条:统计、时域、三个 chirp 引擎各自"做什么 / 结论适用到哪里")、`spec()`(整份契约的 JSON,38 kB)。
@@ -60,15 +63,19 @@ polar_tx 的经验:一个摆在那里却不起作用的控件、一个被库静�
 - break-check(改坏再恢复,各自变红):控件丢掉条件(1 条红)、把没人读的字段放回控件(4 条)、给一个本来总起作用的控件安上假条件(1 条)、把高通说成在报告里读(3 条)、
   步进改成不是整数个 ADC 样本(1 条)。
 
-## 拨旋钮摸出来的四件事(都记在 ROADMAP;contains:pitfall)
+## 拨旋钮摸出来的四件事(contains:pitfall;第 2、4 件 0.2.22 修了,第 1、3 件在 ROADMAP)
 
 1. **`sim.pn_bins_per_decade` 没人读**:schema 里有、表单里有,任何引擎都不读;20 / 60 / 120 给出逐位相同的报告与时域帧。进了 `HIDDEN`,不给页面;测试守着它"仍然什么都不动"。
 2. **`lo.engine: response` 下 `lo.dp_cal: online` 被静默忽略**:5 % 失配时 `dp_gain_used` 仍是 1.05、没有任何提示,chirp 的读数与 `none` 逐项相同(逐周期引擎下在线校准到 1.0026)。
-   规格里用 `CHOICE_WHEN` 声明,页面可以不让选这一对;库本身该给一条提示(没做)。
+   **0.2.22 起配置层拒绝这一对**(报错里写:换 offline / none,或用 event 引擎);`ideal` 引擎没有误差曲线,配什么校准都无所谓,不拒绝。
 3. **IF 高通单独开时,统计引擎不认**:没开泄漏时,`rx.hpf_corner_hz` / `rx.hpf_order` 怎么改统计报告都不动;时域引擎照样滤——截止 1 MHz、2 阶,在 1.33 MHz 拍频的目标上掉 1.08 dB、
    底噪掉 1.29 dB。统计预算只在泄漏预算里用高通(`hpf_atten_at_target`)。所以这两个控件的 `seen` 是 `frame`。默认(高通关)与"截止远低于拍频"时无影响。
-4. **两个虚拟阵元 + 默认的 Hann 角窗 = 垃圾角度**:`mimo.n_rx` 从 1 拨到 2(或 2 TX × 1 RX),Hann(2) 两个权都是 0,20° 的目标统计引擎读 −69.6°、时域引擎读 −57 … −70°,
+4. **两个虚拟阵元 + 默认的 Hann 角窗 = 垃圾角度**:`mimo.n_rx` 从 1 拨到 2(或 2 TX × 1 RX),20° 的目标统计引擎读 −69.6°、时域引擎读 −57 … −70°,
    旁瓣 0.0、期望散布 NaN,没有报错。rect / hamming 下正常(20.01° / 19.99°),3 个阵元起 Hann 也正常。界面上一格就能拨到。
+   **更正(0.2.22)**:0.2.21 写"Hann(2) 两个权都是 0",不对。`processing.windows` 用周期形式,hann(2) = [0, 1](blackman 同,首权 −1.4e-17):是**只剩一个阵元**,
+   一个阵元的波束形成器没有方向,读出来的角度是任意的。Hann(3) = [0, 0.75, 0.75] 还剩两个,所以 3 个起正常。
+   **0.2.22 起配置层拒绝**"首权为零的窗(`schema.ZERO_FIRST_WINDOWS` = hann、blackman)+ 恰好 2 个虚拟阵元",报错里写两条出路。
+   多普勒维同源的情形(每个发射通道 2 个 chirp)量了,没有拒绝:SNR 是老实的,只是速度读数无意义(ROADMAP P1 #8)。
 
 另:`sim.time_osr` 是时域引擎的参数,但统计引擎的"期望格点 SNR"按时域引擎看得到的带宽积相噪,所以它也让报告动一点(1.25 → 1.5:`cfar.snr_look_db` 差 0.0014 dB)——设计如此,不是问题。
 

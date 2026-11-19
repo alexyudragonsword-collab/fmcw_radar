@@ -30,6 +30,9 @@ T0_K = 290.0
 #: and the key prefix of the front-end placeholders in sources.yaml
 BANDS: dict[str, tuple[float, float]] = {"60g_sensing": (57.0e9, 64.0e9), "77g_automotive": (76.0e9, 81.0e9)}
 WINDOWS = ("rect", "hann", "hamming", "blackman")
+# windows whose first weight is zero (processing.windows uses the periodic form: hann(2) = [0, 1]): on n samples
+# they leave n - 1.  tests/test_config.py holds this list to the windows themselves.
+ZERO_FIRST_WINDOWS = ("hann", "blackman")
 
 
 def _require(cond: bool, msg: str) -> None:
@@ -207,6 +210,10 @@ class LOConfig:
         _require(self.dp_cal_window_cycles >= 1, "lo.dp_cal_window_cycles must be >= 1")
         _require(self.settle_cycles >= 1000, "lo.settle_cycles must be >= 1000 (the loop has to lock first)")
         _require_in(self.engine, {"event", "response", "ideal"}, "lo.engine")
+        # the linearised engine has no online calibration: until 0.2.22 it took the setting and ran uncalibrated, silently
+        _require(not (self.engine == "response" and self.dp_cal == "online"),
+                 "lo.dp_cal 'online' needs lo.engine 'event': the linearised engine (response) has no online calibration and "
+                 "would run the chirp uncalibrated; use dp_cal 'offline' or 'none', or the event engine")
         _finite(self.profile_shift_db, "lo.profile_shift_db")
 
 
@@ -514,6 +521,12 @@ class RadarConfig:
             _require(isinstance(t, TargetConfig), f"extra_targets[{i}] must be a target mapping")
         _require(self.chirp.n_chirps % self.mimo.n_tx == 0,
                  f"chirp.n_chirps ({self.chirp.n_chirps}) must be a multiple of mimo.n_tx ({self.mimo.n_tx}): TDM blocks")
+        # two virtual elements under a window whose first weight is zero are one element: the beamformer has no
+        # direction left and the angle it reads is arbitrary (until 0.2.22: -69.6 deg for a target at 20 deg, no error)
+        _require(not (self.mimo.n_virtual == 2 and self.mimo.angle_window in ZERO_FIRST_WINDOWS),
+                 f"mimo.angle_window {self.mimo.angle_window!r} on {self.mimo.n_tx} TX x {self.mimo.n_rx} RX = 2 virtual elements: "
+                 f"its first weight is zero, which leaves one element and no angle to read; use angle_window 'rect' or "
+                 f"'hamming', or at least 3 virtual elements")
         n = self.chirp.duration_s * self.rx.adc_fs_hz
         _require(abs(n - round(n)) < 1e-6 and round(n) >= 16,
                  f"chirp.duration_s x rx.adc_fs_hz = {n:g} must be a whole number of samples >= 16")

@@ -107,17 +107,15 @@
    (e) 只读了美国的 §15.255;欧洲(ETSI)等没有条目。61.0–61.5 GHz 档的档外限值、无人机档的高度、换档停 33 ms 没建模。
    复现:`tests/test_compliance.py`;`python examples/09_band_tradeoff.py`;报表的"Regulatory check"一节。
 
-7. **拨旋钮摸出来的三处"设置了却不是你以为的那样"**(0.2.21,`tests/test_guispec.py` 的"每个旋钮拨一格",`cairn/gui.md`;三处都没有改库,只在界面规格里声明并用测试钉住现状):
-   (a) **`lo.engine: response` 下 `lo.dp_cal: online` 被静默忽略**:5 % 两点失配(`lo.dp_gain: 1.05`)时 `dp_gain_used` 仍是 1.05、`notes` 为空,chirp 的全部读数与 `dp_cal: none` 逐项相同;
-       逐周期引擎下在线校准到 1.0026,离线校准两个引擎都到 1.0000。要做:response 引擎遇到 online 时给一条提示(或由配置层拒绝这一对)。界面规格用 `CHOICE_WHEN` 声明了这一条。
-       复现:`test_online_calibration_is_the_event_engines_only`。
-   (b) **IF 高通单独开时统计引擎不认**:`leakage.enabled: false` 时 `rx.hpf_corner_hz` / `rx.hpf_order` 怎么改,统计报告逐项不变;时域引擎照样滤。截止 1 MHz、2 阶(目标拍频 1.33 MHz):
-       时域的目标峰 −1.08 dB、底噪 −1.29 dB,统计引擎 0 / 0。统计预算只在泄漏预算里用高通(`hpf_atten_at_target`)。截止远低于拍频(默认 MIMO 配置的 200 kHz:0.002 dB)时没有可见后果。
-       要做:链路预算在没有泄漏时也扣高通对回波与噪声的衰减。复现:`test_the_high_pass_alone_shows_in_the_time_engine_only`。
-   (c) **两个虚拟阵元 + 默认的 Hann 角窗,测角是垃圾值,没有报错**:`mimo.n_rx: 2`(或 2 TX × 1 RX)时 Hann(2) 的两个权都是 0;20° 的目标统计引擎读 −69.6°、时域引擎读 −57.1°(1 × 2)/ −69.6°(2 × 1),
-       角旁瓣 0.0、期望散布 NaN(`mimo.py:278` 一条 RuntimeWarning)。`rect` / `hamming` 下 20.01° / 19.99°,3 个阵元起 Hann 正常。界面上 `mimo.n_rx` 从默认的 1 拨一格就到这里。
-       要做(待定):配置层拒绝"端点为零的窗 + 少于 3 个虚拟阵元",或阵元数为 2 时改用不过零的窗。
-       复现:`run_statistical(apply_overrides(RadarConfig(), {"mimo.n_rx": 2, "target.angle_deg": 20.0})).angle["theta_est_deg"]`。
+7. **IF 高通单独开时统计引擎不认**(0.2.21 拨旋钮时发现,`tests/test_guispec.py::test_the_high_pass_alone_shows_in_the_time_engine_only`,`cairn/gui.md`)。
+   `leakage.enabled: false` 时 `rx.hpf_corner_hz` / `rx.hpf_order` 怎么改,统计报告逐项不变;时域引擎照样滤。截止 1 MHz、2 阶(目标拍频 1.33 MHz):
+   时域的目标峰 −1.08 dB、底噪 −1.29 dB,统计引擎 0 / 0。统计预算只在泄漏预算里用高通(`hpf_atten_at_target`)。截止远低于拍频(默认 MIMO 配置的 200 kHz:0.002 dB)时没有可见后果。
+   要做:链路预算在没有泄漏时也扣高通对回波与噪声的衰减(开了高通的配置数字会动,单独一轮)。
+8. **每个发射通道只有 2 个 chirp 时,首权为零的多普勒窗只剩一个 chirp**(0.2.22 修角度那一处时量的,没有改):`processing.windows` 用周期形式,hann(2) = [0, 1]。
+   `chirp.n_chirps: 2`、默认 Hann:格点 SNR 27.04 dB(就是单个 chirp 的;rect 30.05),两个引擎一致(时域 26.91),所以 SNR 是老实的;
+   但多普勒谱是平的,读出来的速度没有意义:+2 m/s 的目标时域引擎读 −12.49 m/s(rect 读 0.0;两个格本来也只能分到 12.49 m/s)。报表里的速度分辨率照样写 12.49 m/s。
+   与 0.2.22 拒绝的"2 个虚拟阵元 + Hann 角窗"同源,但后果轻(SNR 对、只是速度读数无意义),测试里常用 2 个 chirp 的短帧求快,所以没有一并拒绝。
+   要做(待定):拒绝、或在报表里对"有效 chirp 数 1"标注。复现:`run_time(apply_overrides(RadarConfig(), {"chirp.n_chirps": 2, "lo.engine": "response"})).peak_velocity_mps`。
 
 ## P2 — 一致性与能力
 

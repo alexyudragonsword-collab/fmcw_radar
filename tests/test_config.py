@@ -99,3 +99,40 @@ def test_form_declares_every_field_and_nothing_else():
 def test_config_to_dict_carries_the_schema_version(cfg60):
     d = config_to_dict(cfg60)
     assert d["schema_version"] == 1 and d["band"]["kind"] == "60g_sensing"
+
+
+def test_settings_that_used_to_be_taken_and_silently_dropped_are_refused():
+    """0.2.22, found by turning every GUI control one step (tests/test_guispec.py).
+
+    Two virtual elements under a window whose first weight is zero are one
+    element -- ``processing.windows`` uses the periodic form, hann(2) =
+    [0, 1] -- and a one-element beamformer has no direction: a target at
+    20 deg read -69.6 deg in both engines, with no error.  And the
+    linearised chirp engine has no online calibration: it took ``lo.dp_cal:
+    online`` and ran uncalibrated, with no note."""
+    import numpy as np
+
+    from fmcw_radar.config.schema import WINDOWS, ZERO_FIRST_WINDOWS
+    from fmcw_radar.engine.statistical import run_statistical
+    from fmcw_radar.processing.windows import window
+
+    # the list is the windows' own doing, not a typed one
+    assert tuple(w for w in WINDOWS if abs(window(w, 2)[0]) < 1e-12) == ZERO_FIRST_WINDOWS == ("hann", "blackman")      # blackman: -1.4e-17
+    assert np.allclose(window("hann", 2), [0.0, 1.0]) and np.count_nonzero(window("hann", 3)) == 2
+    base = {"chirp.n_chirps": 8, "lo.engine": "ideal", "target.angle_deg": 20.0}
+    for ov in ({"mimo.n_rx": 2}, {"mimo.n_tx": 2}, {"mimo.n_rx": 2, "mimo.angle_window": "blackman"}):
+        with pytest.raises(ValueError, match="2 virtual elements: its first weight is zero"):
+            apply_overrides(RadarConfig(), {**base, **ov})
+    # what the message offers works: another window, or a third element
+    for ov, tol in (({"mimo.n_rx": 2, "mimo.angle_window": "rect"}, 0.02), ({"mimo.n_rx": 2, "mimo.angle_window": "hamming"}, 0.02),
+                    ({"mimo.n_tx": 2, "mimo.angle_window": "rect"}, 0.02), ({"mimo.n_rx": 3}, 0.02), ({"mimo.n_rx": 3, "mimo.angle_window": "blackman"}, 0.02)):
+        cfg = apply_overrides(RadarConfig(), {**base, **ov})
+        assert run_statistical(cfg).angle["theta_est_deg"] == pytest.approx(20.0, abs=tol), ov
+    # one element has no angle to read and is not an array: still fine
+    apply_overrides(RadarConfig(), {"mimo.n_rx": 1, "mimo.angle_window": "hann"})
+
+    with pytest.raises(ValueError, match="lo.dp_cal 'online' needs lo.engine 'event'"):
+        apply_overrides(RadarConfig(), {"lo.engine": "response", "lo.dp_cal": "online"})
+    for ov in ({"lo.engine": "response"}, {"lo.engine": "response", "lo.dp_cal": "none"}, {"lo.dp_cal": "online"},
+               {"lo.engine": "ideal", "lo.dp_cal": "online"}):                  # ideal has no error curve for a calibration to act on
+        apply_overrides(RadarConfig(), ov)

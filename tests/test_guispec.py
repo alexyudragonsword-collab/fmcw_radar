@@ -7,9 +7,11 @@ says it needs, and not without them -- and a number edited on the page is
 The "turn every knob" test is polar_tx's (its ``cairn/gui-redesign.md``):
 a control that is offered and does nothing, or a setting the library
 quietly drops, cannot be read off any output; only a declaration plus a
-turn of the knob finds it.  It found three things here (cairn/gui.md): a
+turn of the knob finds it.  It found four things here (cairn/gui.md): a
 schema field nothing reads, online calibration silently not done by the
-linearised engine, and the IF high-pass seen by one engine only."""
+linearised engine, the IF high-pass seen by one engine only, and an angle
+read off a single element.  The second and the fourth are refused by the
+config layer since 0.2.22."""
 
 import functools
 import json
@@ -119,8 +121,8 @@ EXAMPLE = {"lo.profile": g.bundled_profiles()[0], "leakage.reflector_range_m": 0
            "lo.tdc_dither_lsb": 1.0, "mimo.n_rx": 4, "mimo.n_tx": 2}
 #: physics the turn needs besides the declared settings.  Off broadside: at 0 deg the element pattern is 1 and the
 #: coupling's bias on the angle is 0 by symmetry, so the array's controls are turned with the target at 20 deg --
-#: and on four receivers: two virtual elements under the default Hann angle window have both weights zero and the
-#: estimate is garbage (found by this test, ROADMAP P1).  A mismatch for the calibration's controls to work on.
+#: and on four receivers (two virtual elements under the default Hann angle window are one element -- found by this
+#: test, refused by the config since 0.2.22).  A mismatch for the calibration's controls to work on.
 ALSO = {"mimo": {"target.angle_deg": 20.0, "mimo.n_rx": 4},
         "lo.dp_cal_iterations": {"lo.dp_gain": 1.05}, "lo.dp_cal_mu": {"lo.dp_gain": 1.05}, "lo.dp_cal_window_cycles": {"lo.dp_gain": 1.05}}
 #: one step from the default is not a legal config, or not a turn: the value to turn to instead
@@ -290,17 +292,40 @@ def test_a_control_whose_condition_fails_moves_nothing():
 
 def test_online_calibration_is_the_event_engines_only():
     """Found by turning the knobs: with ``lo.engine: response`` the library
-    takes ``lo.dp_cal: online`` and runs the chirp uncalibrated, with no
-    note -- the same curve as ``none``.  The spec says so (``CHOICE_WHEN``),
-    so a page can refuse the pair; this pins the behaviour the declaration
-    rests on (ROADMAP: the engine should say it itself)."""
+    took ``lo.dp_cal: online`` and ran the chirp uncalibrated, with no note
+    -- at 5 % mismatch the same curve as ``none``.  Since 0.2.22 the config
+    layer refuses the pair, and the spec declares it from both sides so a
+    page greys the option out before the user meets the refusal."""
+    with pytest.raises(ValueError, match="needs lo.engine 'event'"):
+        g.values_to_config({"lo.engine": "response", "lo.dp_cal": "online"})
     mis = {**FAST, "lo.dp_gain": 1.05}
     chirp = lambda cal: json.loads(_report(json.dumps({**mis, "lo.dp_cal": cal}, sort_keys=True)))["chirp"]      # noqa: E731
-    assert chirp("online") == chirp("none") and chirp("online")["dp_gain_used"] == 1.05 and chirp("online")["notes"] == []
-    assert chirp("offline")["dp_gain_used"] == pytest.approx(1.0, abs=1e-4)
-    assert g.inert({"lo.engine": "response", "lo.dp_cal": "online"})["lo.dp_cal=online"] == [g._in("lo.engine", "event")]
-    assert "lo.dp_cal=online" not in g.inert({"lo.dp_cal": "online"})            # the default engine is event
-    assert BY["lo.dp_cal"].choice_when == (("online", (g._in("lo.engine", "event"),)),)
+    assert chirp("none")["dp_gain_used"] == 1.05 and chirp("offline")["dp_gain_used"] == pytest.approx(1.0, abs=1e-4)
+    event = json.loads(_report(json.dumps({"chirp.n_chirps": 8, "lo.dp_gain": 1.05, "lo.dp_cal": "online"}, sort_keys=True)))["chirp"]
+    assert event["engine"] == "event" and event["dp_gain_used"] == pytest.approx(1.0026, abs=5e-4)
+    assert BY["lo.dp_cal"].choice_when == (("online", (g._in("lo.engine", "event", "ideal"),)),)
+    assert BY["lo.engine"].choice_when == (("response", (g._in("lo.dp_cal", "none", "offline"),)),)
+    # what a page reads while the user holds one of the two: the other option is the one to grey out
+    assert g.inert({"lo.engine": "response", "lo.dp_cal": "online"}) .keys() >= {"lo.dp_cal=online", "lo.engine=response"}
+    assert not {"lo.dp_cal=online", "lo.engine=response"} & set(g.inert({"lo.dp_cal": "online"}))      # the default engine is event
+    assert not {"lo.dp_cal=online", "lo.engine=response"} & set(g.inert({"lo.engine": "response"}))    # the default calibration is offline
+    assert g.refused_choices({"lo.engine": "response"}) == {"lo.dp_cal": ["online"]}
+    assert g.refused_choices({"lo.dp_cal": "online"}) == {"lo.engine": ["response"]} and g.refused_choices({}) == {}
+
+
+def test_what_the_config_refuses_reaches_the_page_as_its_own_sentence():
+    """Two virtual elements under a window whose first weight is zero are
+    one element (found by turning ``mimo.n_rx`` one step: a target at 20
+    deg read -69.6 deg, no error).  The config refuses it since 0.2.22;
+    ``values_to_config`` raises the schema's sentence, which says what to
+    change."""
+    with pytest.raises(ValueError, match="2 virtual elements.*use angle_window 'rect' or 'hamming', or at least 3"):
+        g.values_to_config({"mimo.n_rx": 2})
+    with pytest.raises(ValueError, match="2 TX x 1 RX = 2 virtual elements"):
+        g.values_to_config({"mimo.n_tx": 2})
+    for ok in ({"mimo.n_rx": 2, "mimo.angle_window": "rect"}, {"mimo.n_rx": 2, "mimo.angle_window": "hamming"}, {"mimo.n_rx": 3}):
+        cfg = g.values_to_config({**FAST, "target.angle_deg": 20.0, **ok})
+        assert run_statistical(cfg).angle["theta_est_deg"] == pytest.approx(20.0, abs=0.02), ok
 
 
 def test_hidden_fields_move_nothing():

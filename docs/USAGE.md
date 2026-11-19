@@ -61,7 +61,7 @@ blanking 的时长,0.2.1:距离窗按剩下的样本重配,`cfg.n_blank` 是样�
 
 `fmcw_radar.guispec`(0.2.21)描述一个页面可以拨什么、读回什么,不算物理:`controls()`(88 个控件,就是配置字段;默认值读自 `RadarConfig()`)、
 `resolve(cfg, path)`(留空字段背后库实际取的数、出处标签、来源表的键)、`tags(values)`(页面该显示的标签:改过的数是 `assumed`)、
-`inert(values)`(此刻不起作用的控件和原因)、`values_to_config(values)`(经 `config_from_dict`,与读 YAML 同一条路)、`band_switch(values, kind)`、`spec()`(整份契约的 JSON)。
+`inert(values)`(此刻不起作用的控件和原因)、`refused_choices(values)`(此刻配置层会拒绝的选项)、`values_to_config(values)`(经 `config_from_dict`,与读 YAML 同一条路)、`band_switch(values, kind)`、`spec()`(整份契约的 JSON)。
 值一律用配置的 SI 单位,显示单位换算用 `to_display` / `from_display`。
 
 ## 工具
