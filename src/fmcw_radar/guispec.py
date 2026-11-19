@@ -23,6 +23,10 @@ enforces for a GUI:
   to change: the statistical report, the time engine's frame, or what a run
   holds.  A field that nothing reads is in ``HIDDEN`` with the reason, and
   a test holds that it still moves nothing.
+* **What the config refuses, a page shows.**  ``values_to_config`` goes
+  through the loader a YAML file goes through, so an edit the schema does
+  not take raises its ``ValueError`` -- the sentence a page puts beside the
+  control (two virtual elements under a Hann angle window, say).
 * **A number edited on the page is ``assumed``.**  ``tags`` gives the tag a
   page shows: the source table's while the field is empty (or holds the
   very number the table gives), ``assumed`` once it holds another one.
@@ -189,10 +193,13 @@ WHEN: dict[str, list[dict]] = {
     "rx.hpf_order": [_gt("rx.hpf_corner_hz", 0.0)],
 }
 
-#: a choice that acts only under a condition: (path, option) -> atoms.  ``lo.dp_cal: online`` exists in the
-#: cycle-accurate engine only; with ``lo.engine: response`` the library runs uncalibrated and says nothing.
+#: a choice the config refuses unless a condition holds: (path, option) -> atoms.  Online calibration exists in the
+#: cycle-accurate engine only: the config layer refuses ``lo.dp_cal: online`` with ``lo.engine: response`` (0.2.22;
+#: before that the library ran uncalibrated and said nothing).  Declared from both sides, so a page can grey the
+#: option out instead of letting the user run into the refusal.
 CHOICE_WHEN: dict[tuple[str, Any], list[dict]] = {
-    ("lo.dp_cal", "online"): [_in("lo.engine", "event")],
+    ("lo.dp_cal", "online"): [_in("lo.engine", "event", "ideal")],
+    ("lo.engine", "response"): [_in("lo.dp_cal", "none", "offline")],
 }
 
 #: where a turned control shows: the statistical report (the default), the time engine's frame, or what a run holds.
@@ -500,6 +507,18 @@ def inert(values: dict[str, Any]) -> dict[str, list[dict]]:
     return out
 
 
+def refused_choices(values: dict[str, Any]) -> dict[str, list]:
+    """Options the config would refuse under ``values``: ``{path: [options]}``
+    for a page to grey out in its menus (``CHOICE_WHEN``, read forwards)."""
+    flat = dict(values_from_config(RadarConfig()))
+    flat.update(values)
+    out: dict[str, list] = {}
+    for (path, opt), atoms in CHOICE_WHEN.items():
+        if flat.get(path) != opt and not all(_holds(a, flat) for a in atoms):
+            out.setdefault(path, []).append(opt)
+    return out
+
+
 def band_switch(values: dict[str, Any], kind: str) -> dict[str, Any]:
     """The values after choosing another band: the sweep is kept if the new
     band's window holds it and narrowed to the window otherwise, and centred
@@ -521,4 +540,4 @@ def diff(a: RadarConfig, b: RadarConfig) -> list[dict[str, Any]]:
 
 __all__ = ["GROUPS", "ZH", "EN", "COMMON", "RANGES", "WHEN", "CHOICE_WHEN", "SEEN", "HIDDEN", "ENGINES", "METRICS", "Control",
            "controls", "spec", "resolve", "bundled_profiles", "to_display", "from_display", "values_from_config",
-           "values_to_config", "tags", "inert", "band_switch", "diff"]
+           "values_to_config", "tags", "inert", "refused_choices", "band_switch", "diff"]

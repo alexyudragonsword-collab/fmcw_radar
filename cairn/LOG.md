@@ -3,6 +3,19 @@
 本文件按倒序记录实质性进展 —— 最新条目在本行正下方。每条保持简短(数字原值、被推翻的判断、下一步),
 结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-11-19 · 0.2.22:配置层拒绝"2 个虚拟阵元 + Hann 角窗"与"response + 在线校准"(用户:修吧;feat/reject-silent-configs;数字不动)
+
+- 用户问建议,我建议修库而不是只让界面拦(配置是唯一真值,写 YAML 的人一样会撞上;静默给错比报错糟),拒绝而不是自动换窗,(2)(4) 一起修、(1)(3) 留着;用户同意。
+- **更正上一条**:写的"Hann(2) 两个权都是 0"不对。窗是周期形式:hann(2) = [0, 1]、blackman(2) = [−1.4e-17, 1]、hamming(2) = [0.08, 1]。是只剩一个阵元,不是全零;
+  hann(3) = [0, 0.75, 0.75] 剩两个,所以 3 个起正常。blackman 量了,同样 −69.6°。
+- 改动:`schema.py` 两条 `_require`(`RadarConfig`:n_virtual == 2 且角窗在 `ZERO_FIRST_WINDOWS`;`LoConfig`:response + online),报错写出路。
+  按报错改:2 阵元 rect 20.009°、hamming 19.989°、3 阵元 hann 19.998° / blackman 在 ±0.02° 内。`ideal` + online 不拒绝(没有误差曲线)。
+- guispec:`CHOICE_WHEN` 两头声明、`refused_choices`;`test_guispec` 103 条、`test_config` 加一条;阵列类控件的拨动本来就在 4 个接收上,不用改。
+- 顺便量的多普勒维:`n_chirps: 2` + Hann → 一个有效 chirp,SNR 27.04(统计)/ 26.91(时域),rect 30.05 / 29.41;速度读数 −12.49 m/s(目标 +2;rect 读 0.0)。
+  2 TX、4 chirp(每通道 2 个):角度仍对(20.20°)。`n_chirps: 1` 或每通道 1 个时时域的 SNR 读 inf(噪底估计退化)。没拒绝,记 ROADMAP P1 #8。
+- 第一次全量红一条,是我新写的断言用 `== 0.0` 判 blackman 的首权(−1.4e-17),改成容差。break-check:两处拒绝各关一次,各 2 条红。
+- 指纹 2451 逐位相同;示例冒烟 10 / 10;全套 342 条。下一步:P2(guiutil + 本地宿主 + 工作台页)。
+
 ## 2026-11-19 · 0.2.21:图形界面 P1——界面规格层 guispec 与"每个旋钮拨一格"(feat/gui-p1-guispec;数字不动)
 
 - 用户确认合并稿,开工。P1 只做描述层:`src/fmcw_radar/guispec.py` + `tests/test_guispec.py`(102 条),没有界面代码。专题文档 `cairn/gui.md`(决定、分层、契约、测试的做法、发现)。
