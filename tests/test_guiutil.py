@@ -297,3 +297,68 @@ def test_a_baseline_says_which_way_each_number_moved(fast):
     # the run against itself: nothing changed, nothing moved
     same = guiutil.run_report(FAST, pin)["baseline"]
     assert same["changed"] == [] and all(r["verdict"] in ("same", None) and r["delta"] in (0.0, None) for r in same["metrics"].values())
+
+
+# ---------------------------------------------------------------- a preview ahead of the cycle-accurate run; a config file in and out
+
+@pytest.mark.parametrize("name", ["radar_60g_sensing", "radar_60g_mimo", "radar_60g_dither", "radar_60g_x10lo", "radar_77g_automotive"])
+def test_a_preview_is_the_linearised_engines_run_of_the_real_config(name):
+    """A config on the cycle-accurate chirp engine can be answered at once
+    with the linearised engine's run of it.  The preview says so, keeps
+    everything about the config itself (values, tags, hash), and is already
+    final in every headline number that is not the chirp engine's own."""
+    flat = guispec.values_from_config(load_config(REPO / "configs" / f"{name}.yaml"))
+    flat["chirp.n_chirps"] = 8
+    assert flat["lo.engine"] == "event"
+    pre, full = guiutil.run_report(flat, preview=True), guiutil.run_report(flat)
+    own = [k for k, m in guispec.METRICS.items() if m.get("chirp_engine")]
+    assert pre["preview"] == {"shown": "response", "final": "event", "pending": own} and "preview" not in full
+    assert own == ["ghost_detections_per_frame", "pn_residual_rms_rad", "chirp_rms_hz"]
+    assert pre["report"] == guiutil.run_report({**flat, "lo.engine": "response"})["report"]
+    assert pre["report"]["radar"]["lo_engine"] == "response" and full["report"]["radar"]["lo_engine"] == "event"
+    for key in ("values", "tags", "inert", "refused", "resolved", "full_power"):
+        assert pre[key] == full[key], key
+    assert pre["values"]["lo.engine"] == "event" and pre["repro"]["config_sha256"] == full["repro"]["config_sha256"]
+    assert pre["repro"]["call"] == full["repro"]["call"]
+    for k in guispec.METRICS:
+        if k not in own:
+            assert pre["metrics"][k] == full["metrics"][k], k                 # final already
+    assert pre["metrics"]["chirp_rms_hz"] != full["metrics"]["chirp_rms_hz"]  # and this one is not
+    assert [e["id"] for e in pre["engines"]][1] == "chirp:response" and pre["engines"][1]["vouches_for_spurs"] is False
+
+
+def test_where_the_linearised_engine_cannot_stand_in_the_run_is_the_full_one():
+    f8 = {"chirp.n_chirps": 8}
+    for ov in ({"lo.engine": "response"}, {"lo.engine": "ideal"}, {"lo.dp_cal": "online"}):       # not cycle-accurate; or refused by the stand-in
+        r = guiutil.run_report({**f8, **ov}, preview=True)
+        assert r["ok"] and "preview" not in r and r["report"]["radar"]["lo_engine"] == {**{"lo.engine": "event"}, **ov}["lo.engine"]
+    assert guiutil.run_report({"mimo.n_rx": 2}, preview=True)["field"] == "mimo.angle_window"   # a refusal is a refusal either way
+
+
+@pytest.mark.parametrize("name", ["radar_60g_sensing", "radar_60g_mimo", "radar_60g_x10lo", "radar_77g_automotive"])
+def test_a_config_file_goes_out_and_comes_back(name, tmp_path):
+    cfg = apply_overrides(load_config(REPO / "configs" / f"{name}.yaml"), {"target.range_m": 7.25, "frontend.nf_db": 10.5})
+    flat = guispec.values_from_config(cfg)
+    out = guiutil.export_yaml(flat)
+    assert out["ok"] and out["config_sha256"] == guiutil.config_hash(cfg) and out["filename"] == f"fmcw_radar_{out['config_sha256'][:8]}.yaml"
+    assert out["yaml"].splitlines()[0] == f"# fmcw_radar {guiutil.__version__} -- config sha256 {out['config_sha256']}"
+    # the library reads the file back to the same config ...
+    path = tmp_path / out["filename"]
+    path.write_text(out["yaml"], encoding="utf-8")
+    assert load_config(path) == cfg
+    # ... and so does the page's own way in
+    back = guiutil.load_yaml(out["yaml"])
+    assert back["ok"] and back["config_sha256"] == out["config_sha256"] and guispec.values_to_config(back["values"]) == cfg
+    assert guiutil.load_bundled(name)["values"] == guiutil.plain(guispec.values_from_config(load_config(REPO / "configs" / f"{name}.yaml")))
+
+
+def test_a_file_that_is_not_a_config_says_why():
+    assert guiutil.bundled_configs() == sorted(p.stem for p in (REPO / "configs").glob("*.yaml"))
+    assert "band.kind must be one of" in guiutil.load_yaml("band: {kind: nope}")["error"]
+    assert "mapping of sections" in guiutil.load_yaml("- 1\n- 2")["error"] and guiutil.load_yaml("a: [")["error"].startswith("not YAML")
+    assert "at most" in guiutil.load_yaml("x" * (guiutil.YAML_MAX_BYTES + 1))["error"] and guiutil.load_yaml(None)["ok"] is False
+    assert "2 virtual elements" in guiutil.load_yaml("mimo: {n_rx: 2}")["error"]
+    assert guiutil.load_bundled("../pyproject")["ok"] is False
+    assert guiutil.export_yaml({"mimo.n_rx": 2})["field"] == "mimo.angle_window"
+    # an empty file is the default config, as it is for load_config
+    assert guispec.values_to_config(guiutil.load_yaml("{}")["values"]) == RadarConfig()

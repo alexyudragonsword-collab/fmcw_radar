@@ -35,7 +35,7 @@ IF / ADC、窗与 CFAR、仿真。77 GHz 车载一档结构相同只换数(`conf
 |---|---|---|
 | `config/` | frozen `RadarConfig`、YAML 加载、表单字段声明 | 1 |
 | `guispec.py` | 图形界面的契约(只描述,不算):88 个控件 = 配置字段,中英文标签、单位、显示范围,留空字段背后的数与出处标签,控件在什么设置下才起作用(`cairn/gui.md`) | 1、5 |
-| `guiutil.py`, `webhost.py`, `webui/www/` | 图形界面(`fmcw-gui`):工作台(库自己的报告 + 满功率一列 + 图数据 + 可复现卡 + 基线对比)、系统框图页、频段取舍页、扫描页;本地宿主(`Api` + 时域帧 / 扫描 / 频段表三种任务 + 标准库 HTTP);页面只画不算,无外部资源 | 1、3、5、6 |
+| `guiutil.py`, `webhost.py`, `webui/www/` | 图形界面(`fmcw-gui`):工作台(库自己的报告 + 满功率一列 + 图数据 + 可复现卡 + 基线对比;逐周期引擎先出线性化引擎的预览;YAML 载入 / 导出)、系统框图页、频段取舍页、扫描页;本地宿主(`Api` + 时域帧 / 扫描 / 频段表三种任务 + 标准库 HTTP);页面只画不算,无外部资源 | 1、3、5、6 |
 | `sources.py` + `data/sources.yaml` | 每个不是设计决定的数:占位 `assumed`、文献转述 `survey`(0.2.13 起没有这类条目)、原文 `spec`、由原文按公式算出的 `derived`;`upstream:` 指向共享库 spec_sources 的条目(只查找),加载时核对两边相等 | 5 |
 | `lo.py` | vendored ADPLL 的构造;LO 相噪剖面 = analyze() ×N²(fref/2 以上取 DCO 自身)或剖面文件 | 2 |
 | `phase_noise/` | range correlation:残余 PSD = 2(1 − cos 2πfτ)·S_φ,合成与闭式 | 2 |
