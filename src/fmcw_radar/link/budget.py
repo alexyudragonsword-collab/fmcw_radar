@@ -28,6 +28,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..config.schema import K_BOLTZMANN, T0_K, RadarConfig
+from ..processing.iffilter import hpf_attenuation_db
 from ..processing.windows import coherent_gain_db, enbw_hz, range_window, window
 
 
@@ -69,6 +70,7 @@ class LinkBudget:
     quant_share_db: float               # how much the ADC adds to the thermal floor
     compression_signal_db: float = 0.0  # what the receiver's compression by a strong signal (the TX leakage) takes off
     compression_noise_db: float = 0.0   # ... the echo, and the thermal noise's power (link/compression.py)
+    hpf_db: float = 0.0                 # the IF high-pass's attenuation at this target's beat: off the echo and the thermal noise alike
 
     def as_rows(self) -> list[tuple[str, float, str]]:
         """``(label, value, unit)`` rows for the report."""
@@ -88,7 +90,8 @@ class LinkBudget:
                 ("in-band P1dB margin (input, target only)", self.p1db_margin_db, "dB")] + (
             [("receiver compression by the TX leakage: the echo", self.compression_signal_db, "dB"),
              ("receiver compression by the TX leakage: the thermal noise", self.compression_noise_db, "dB")]
-            if (self.compression_signal_db or self.compression_noise_db) else [])
+            if (self.compression_signal_db or self.compression_noise_db) else []) + (
+            [("IF high-pass at the target's beat (echo and thermal noise)", self.hpf_db, "dB")] if self.hpf_db else [])
 
 
 def link_budget(cfg: RadarConfig, range_m: float | None = None, eirp_cap_dbm: float | None = None) -> LinkBudget:
@@ -113,9 +116,12 @@ def link_budget(cfg: RadarConfig, range_m: float | None = None, eirp_cap_dbm: fl
     atmos = alpha * 2.0 * r / 1000.0
     extra = cfg.channel.extra_loss_db
     pr = eirp + gr + rcs - path - atmos - extra
-    ps_adc = pr + g_rx
+    # the IF high-pass (rx.hpf_*) sits ahead of the ADC: at this target's beat it takes the same off the echo and
+    # off the thermal noise in its range bin; the ADC's quantisation noise comes after it and loses nothing
+    a_hp = hpf_attenuation_db(cfg.slope_hz_per_s * cfg.tau_s(r), cfg.rx.hpf_corner_hz, cfg.rx.hpf_order)
+    ps_adc = pr + g_rx - a_hp
     n0_th = w_to_dbm(K_BOLTZMANN * T0_K) + nf
-    n0_th_adc = n0_th + g_rx
+    n0_th_adc = n0_th + g_rx - a_hp
     fs = cfg.rx.adc_fs_hz
     n0_q = cfg.rx.adc_fullscale_dbm - (6.02 * cfg.rx.adc_bits + 1.76) - db(fs)
     n0_tot = w_to_dbm(dbm_to_w(n0_th_adc) + dbm_to_w(n0_q))
@@ -136,7 +142,7 @@ def link_budget(cfg: RadarConfig, range_m: float | None = None, eirp_cap_dbm: fl
         ps_adc_dbm=ps_adc, n0_thermal_dbm_hz=n0_th, n0_thermal_adc_dbm_hz=n0_th_adc, n0_quant_adc_dbm_hz=n0_q,
         n0_total_adc_dbm_hz=n0_tot, cn0_dbhz=cn0, snr_chirp_db=snr_chirp, snr_cell_db=snr_cell,
         snr_cell_rect_db=snr_rect, window_loss_db=snr_rect - snr_cell, enbw_range_hz=enbw_r,
-        p1db_margin_db=p1 - pr, quant_share_db=n0_tot - n0_th_adc)
+        p1db_margin_db=p1 - pr, quant_share_db=n0_tot - n0_th_adc, hpf_db=a_hp)
 
 
 def with_compression(b: LinkBudget, signal_db: float, noise_db: float) -> LinkBudget:
@@ -172,9 +178,10 @@ def adc_amplitudes(cfg: RadarConfig, budget: LinkBudget) -> tuple[float, float, 
     amplitude A has power A^2 / 50; the noise sigma is the complex variance
     (I + Q) of white noise of the thermal density over the waveform's sample
     rate, taken by the caller."""
-    a_s = math.sqrt(dbm_to_w(budget.ps_adc_dbm) * 50.0)
+    # ahead of the IF high-pass: the time engine runs the filter itself
+    a_s = math.sqrt(dbm_to_w(budget.ps_adc_dbm + budget.hpf_db) * 50.0)
     a_fs = math.sqrt(dbm_to_w(cfg.rx.adc_fullscale_dbm) * 50.0)
-    n0_w = dbm_to_w(budget.n0_thermal_adc_dbm_hz)
+    n0_w = dbm_to_w(budget.n0_thermal_adc_dbm_hz + budget.hpf_db)
     return a_s, a_fs, n0_w * 50.0
 
 

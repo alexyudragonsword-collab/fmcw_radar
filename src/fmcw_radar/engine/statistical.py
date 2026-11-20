@@ -33,6 +33,7 @@ from ..phase_noise import RangeCorrelation
 from ..processing.cfar import threshold_factor
 from ..processing.cfarstats import cfar_pd, cfar_snr_for_pd, cfar_statistics, correlation_length
 from ..processing.detection import pd_swerling0, snr_for_pd
+from ..processing.iffilter import hpf_response
 from ..processing.rd import power_db, range_axis_m, range_fft, read_peak, velocity_axis_mps
 from ..processing.windows import (coherent_gain_db, enbw_bins, mainlobe_width_bins, peak_sidelobe_db, range_window, spectrum_db,
                                   window)
@@ -315,7 +316,7 @@ def target_rows(cfg: RadarConfig, rc: RangeCorrelation, n_tx: int = 1, squeeze: 
         b = with_compression(link_budget(c), *squeeze)          # every echo is weak against the leakage: the same loss
         rows.append({"kind": t.kind, "range_m": t.range_m, "velocity_mps": t.velocity_mps, "angle_deg": t.angle_deg,
                      "rcs_dbsm": b.rcs_dbsm, "rcs_source": b.inputs["rcs_dbsm"][1], "beat_hz": c.beat_hz(),
-                     "doppler_hz": c.doppler_hz(), "ps_adc_dbm": b.ps_adc_dbm,
+                     "doppler_hz": c.doppler_hz(), "ps_adc_dbm": b.ps_adc_dbm, "hpf_db": b.hpf_db,
                      "snr_cell_db": b.snr_cell_db - 10.0 * math.log10(n_tx), "pd": float(pd_swerling0(b.snr_cell_db - 10.0 * math.log10(n_tx), cfg.processing.cfar_pfa)),
                      "in_if_band": bool(c.beat_hz() <= cfg.rx.if_bw_hz)})
     for i, r in enumerate(rows):
@@ -331,9 +332,13 @@ def target_rows(cfg: RadarConfig, rc: RangeCorrelation, n_tx: int = 1, squeeze: 
             side = _envelope(bins_r, w_r, d_r) + (_envelope(bins_d, w_d, d_d) if m > 1 else 0.0)
             rc_o = RangeCorrelation(rc.profile, cfg.tau_s(o["range_m"]))
             pn = float(rc_o.sidelobe_dbc(max(abs(r["beat_hz"] - o["beat_hz"]), df), enbw)) + cell_off if d_r >= 1.0 else 0.0
-            lvl = o["ps_adc_dbm"] + max(side, pn) - r["ps_adc_dbm"]
+            # at the ADC, after the IF high-pass: the other target's window skirt is its own tone's (filtered at its
+            # beat); its phase-noise skirt is noise at *this* target's beat, filtered where this target is
+            via_window = o["ps_adc_dbm"] + side
+            via_pn = o["ps_adc_dbm"] + o["hpf_db"] + pn - r["hpf_db"]
+            lvl = max(via_window, via_pn) - r["ps_adc_dbm"]
             if worst is None or lvl > worst[1]:
-                worst = (j, lvl, "window" if side >= pn else "phase noise")
+                worst = (j, lvl, "window" if via_window >= via_pn else "phase noise")
         r["interferer"] = None if worst is None else worst[0]
         r["interference_dbc"] = None if worst is None else worst[1]          # the interferer's skirt at this cell rel. this target
         r["interference_kind"] = None if worst is None else worst[2]
@@ -384,7 +389,8 @@ def cfar_detection(cfg: RadarConfig, res: "StatResult") -> dict:
     targets nor noise."""
     cf = res.cfar
     k = cf["n_looks"]
-    snr_look = res.angle["snr_element_cell_db"] if k > 1 and res.angle else res.extras["snr_cell_expected_db"]
+    # the CFAR's training cells are the target's neighbours: its SNR against the noise where it sits
+    snr_look = res.angle["snr_element_cell_db"] if k > 1 and res.angle else res.extras["snr_cell_local_db"]
     out = {"snr_look_db": snr_look, "pd_target": float(cfar_pd(snr_look, cf)[0]), "snr_pd90_db": cfar_snr_for_pd(0.9, cf)}
     if k == 1:
         out["cfar_loss_db"] = out["snr_pd90_db"] - snr_for_pd(0.9, cfg.processing.cfar_pfa)
@@ -397,6 +403,27 @@ def cfar_detection(cfg: RadarConfig, res: "StatResult") -> dict:
     out["ghost_detections_per_frame"] = float(sum(g["pd"] for g in rows if g["in_view"]))
     out["ghosts_vouched"] = bool(res.nonlinearity.get("ghosts_vouched", False))
     return out
+
+
+def hpf_floor_tilt(cfg: RadarConfig, budget: LinkBudget) -> float:
+    """The map-wide mean noise floor over the floor at the target's beat
+    (linear; 1 without the IF high-pass).  The filter shapes the thermal
+    noise across range, |H(f)|^2 of it per bin, and leaves the ADC's
+    quantisation noise flat; the time engine reads its floor as the mean
+    over the IF band outside the target's neighbourhood (``_process_frame``:
+    the same columns here), the budget quotes the noise where the target is."""
+    if cfg.rx.hpf_corner_hz <= 0.0:
+        return 1.0
+    n_r = cfg.n_samples * cfg.processing.range_pad
+    half = n_r // 2
+    n_if = int(cfg.rx.if_bw_hz * cfg.chirp.duration_s * cfg.processing.range_pad)
+    cols = np.arange(min(n_if, half))
+    df = cfg.rx.adc_fs_hz / n_r
+    keep = np.abs(cols - int(round(cfg.beat_hz() / df))) > max(8, half // 16)
+    h2 = hpf_response(cols[keep] * df, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order) ** 2
+    thermal_flat = 10.0 ** ((budget.n0_thermal_adc_dbm_hz + budget.hpf_db) / 10.0)       # ahead of the filter
+    quant = 10.0 ** (budget.n0_quant_adc_dbm_hz / 10.0)
+    return float((thermal_flat * np.mean(h2) + quant) / 10.0 ** (budget.n0_total_adc_dbm_hz / 10.0))
 
 
 def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatResult:
@@ -439,7 +466,13 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
     sb = beat_sideband(cfg, rc)
     res.extras["pn_carrier_loss_db"] = sb.carrier_loss_db
     res.extras["pn_residual_total_rad"] = math.sqrt(sb.sigma2)
-    res.extras["snr_cell_expected_db"] = (-10.0 * math.log10(thermal_cell + pn_cell)
+    # with the IF high-pass on the thermal floor is no longer flat: a map-wide estimate (the time engine's) averages
+    # it over the band, the CFAR sees it where the target is.  Both are kept; without the filter they are one number.
+    tilt = hpf_floor_tilt(cfg, budget)
+    res.extras["hpf_floor_tilt_db"] = 10.0 * math.log10(tilt)
+    res.extras["snr_cell_local_db"] = (-10.0 * math.log10(thermal_cell + pn_cell)
+                                       + res.extras["pn_carrier_loss_db"])
+    res.extras["snr_cell_expected_db"] = (-10.0 * math.log10(thermal_cell * tilt + pn_cell)
                                           + res.extras["pn_carrier_loss_db"])
     res.targets = target_rows(cfg, rc, cfg.mimo.n_tx, squeeze)
     res.angle = angle_metrics(cfg, budget.snr_cell_db, budget.snr_chirp_db, sc_r)

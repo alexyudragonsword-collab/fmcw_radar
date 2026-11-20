@@ -188,7 +188,8 @@ def leakage_budget(cfg: RadarConfig, budget: LinkBudget | None = None) -> Leakag
     att_target = hpf_attenuation_db(f_target, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order)
     # the target at the ADC: the radar equation's level, less what the leakage's compression takes off a weak echo
     # (``budget`` is the uncompressed one; run_statistical carries the same loss into the SNR)
-    target_adc = b.ps_adc_dbm - b.compression_signal_db + sig_db - att_target
+    # (the budget's level is already after the high-pass at the target's beat)
+    target_adc = b.ps_adc_dbm - b.compression_signal_db + sig_db
     # the strongest term's window sidelobe at the target's bin relative to the target's own level
     at_cell = max(t.level_adc_hpf_dbm + t.window_sidelobe_at_target_db for t in terms) - target_adc
     # the chirp-start transient: every term's phase jumps by 2 pi f_beat T_c

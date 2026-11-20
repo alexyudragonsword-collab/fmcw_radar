@@ -44,7 +44,7 @@ IF / ADC、窗与 CFAR、仿真。77 GHz 车载一档结构相同只换数(`conf
 | `processing/` | 窗、距离 / 多普勒 FFT、峰值读数、CA-CFAR 与它的蒙卡 Pd(Swerling 0 / 1)、相关格上的 CFAR 统计(`cfarstats`)、IF 高通 | — |
 | `mimo.py` | TDM-MIMO 虚拟阵列:位置之和、u 格点 DBF、TDM 多普勒补偿、互耦(array_tx 三来源)与校准、CRLB、斜视 | 1, 5 |
 | `engine/statistical.py` | 格点 SNR、分辨率、相噪旁瓣表、非线性旁瓣(误差曲线喂一次 FFT)、Pd;每目标一行与遮蔽、测角指标、泄漏 | 3 |
-| `engine/timedomain.py` | 5 GS/s 包络真混频 → 泄漏音 → 砖墙 IF → 高通 → ADC 量化(削波)→ 距离–多普勒图 / MIMO 立方与 DBF | 3 |
+| `engine/timedomain.py` | 5 GS/s 包络真混频 → 泄漏音 → 高通(在波形采样率上,0.2.25)→ 砖墙 IF → ADC 量化(削波)→ 距离–多普勒图 / MIMO 立方与 DBF | 3 |
 | `report.py`, `tools/` | 预算一页、指纹、vendor 漂移、示例冒烟 / 漂移 | 7 |
 | `vendor/polartx/` | polar_tx@b007e60 的两点调制器、两点校准、嵌套的 pllsim 子树(pll_simulator@5564c64,逐字节校验) | — |
 | `vendor/spec_sources/` | spec_sources@d7b4d1e 的读取器与一张表(`reader.py` + `data/frontend60.yaml`):60 GHz 雷达前端的数从这里读 | 5 |

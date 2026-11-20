@@ -203,10 +203,8 @@ CHOICE_WHEN: dict[tuple[str, Any], list[dict]] = {
 }
 
 #: where a turned control shows: the statistical report (the default), the time engine's frame, or what a run holds.
-#: The IF high-pass is in the statistical budget only together with the leakage; alone it shows in the time engine.
 SEEN: dict[str, str] = {
     "sim.seed": "frame", "sim.time_osr": "frame", "sim.time_n_chirps": "frame",
-    "rx.hpf_corner_hz": "frame", "rx.hpf_order": "frame",
     "sim.engine": "run",
 }
 

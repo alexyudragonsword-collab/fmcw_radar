@@ -340,22 +340,23 @@ def test_hidden_fields_move_nothing():
             assert _same(_see("frame", FAST), _see("frame", {**FAST, path: v})), path
 
 
-def test_the_high_pass_alone_shows_in_the_time_engine_only():
-    """Found by turning the knobs: without the leakage the statistical
-    report does not move with the IF high-pass at all, while the time
-    engine filters the frame -- a corner at 1 MHz under the 1.33 MHz beat
-    takes 1.1 dB off the target there.  Hence ``seen: frame`` for the two
-    controls (ROADMAP P1: the statistical budget applies the filter inside
-    the leakage budget only)."""
+def test_the_high_pass_alone_is_in_both_engines():
+    """Until 0.2.25 the statistical report did not move with the IF high-pass
+    unless the leakage was on, while the time engine filtered the frame
+    (found by turning the knobs, 0.2.21).  Now the budget takes the filter's
+    attenuation at the target's beat off the echo and the thermal noise, and
+    the two engines read the same drop: a 2nd-order corner at 1 MHz under the
+    1.33 MHz beat costs the target 1.19 dB in both."""
     hp = {**FAST, "rx.hpf_corner_hz": 1.0e6, "rx.hpf_order": 2}
-    assert _same(_see("report", FAST), _see("report", hp))
+    off_r, on_r = _see("report", FAST), _see("report", hp)
+    assert not _same(off_r, on_r)
+    cfg_on = apply_overrides(RadarConfig(), hp)
+    b = run_statistical(cfg_on).budget
+    assert b.hpf_db == pytest.approx(-10.0 * math.log10(1.0 / (1.0 + (1.0e6 / cfg_on.beat_hz()) ** 4)), abs=1e-9) and b.hpf_db == pytest.approx(1.19, abs=0.01)
     off, on = (run_time(apply_overrides(RadarConfig(), {**o, "chirp.n_chirps": 4})) for o in (FAST, hp))
     drop = 10.0 * math.log10(on.extras["peak_power"] / off.extras["peak_power"])
-    assert drop == pytest.approx(-1.08, abs=0.1)
-    assert BY["rx.hpf_corner_hz"].seen == BY["rx.hpf_order"].seen == "frame"
-    # with the leakage on it is in the statistical budget
-    leak = {**FAST, "leakage.enabled": True}
-    assert not _same(_see("report", {**leak, "rx.hpf_corner_hz": 200e3}), _see("report", leak))
+    assert drop == pytest.approx(-b.hpf_db, abs=0.1)
+    assert BY["rx.hpf_corner_hz"].seen == BY["rx.hpf_order"].seen == "report"
 
 
 # ---------------------------------------------------------------- tags, spec
