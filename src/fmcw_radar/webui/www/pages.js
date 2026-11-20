@@ -42,10 +42,19 @@ async function pollK(kind){
 // where each stage sits on the 1400-wide sheet: x, y, width (height follows the number of lines; chan and tgt span both rows)
 const SYSG = {ramp:[40,66,182], ref:[250,96,130], tdc:[410,66,182], lf:[622,81,158], dco:[808,66,210], mult:[1036,96,118], lo:[1184,66,186],
  split:[1198,340,158], pa:[640,340,196], txant:[440,340,164], comp:[392,228,260], leak:[440,436,164],
- chan:[222,340,182,294], tgt:[30,340,164,294], rxant:[440,524,164], mix:[640,524,196], hpf:[872,524,142], ifa:[1036,524,180], adc:[1226,524,156],
+ chan:[214,340,200,294], tgt:[30,340,164,294], rxant:[440,524,164], mix:[640,524,196], hpf:[872,524,142], ifa:[1036,524,180], adc:[1226,524,156],
  rfft:[1190,702,182], dfft:[946,702,206], rd:[700,702,208], cfar:[454,702,208], det:[208,702,208], dbf:[30,702,140]};
 function sysBlocks(){
   return S.run.system.stages.map(st=>{ const g=SYSG[st.id]; const h = g[3] || 28 + 15*st.lines.length + (st.out?24:0) + 4; return Object.assign({x:g[0], y:g[1], w:g[2], h}, st); });
+}
+// a line wider than its box -- a font other than the one this sheet was laid out in -- is squeezed to fit, never cut off
+function fitSys(root){
+  root.querySelectorAll('svg.sys .blk').forEach(g=>{ const r=g.querySelector('rect'); const x0=+r.getAttribute('x'), w=+r.getAttribute('width');
+    const chips=[...g.querySelectorAll('.stag')].map(c=>{ const b=c.querySelector('rect'); return {y:+b.getAttribute('y')+10, x:+b.getAttribute('x')}; });
+    const bv=g.querySelector('.bv');
+    g.querySelectorAll('text.bl, text.bo, text.bt').forEach(t=>{ const y=+t.getAttribute('y'); const chip=chips.find(c=>Math.abs(c.y-y)<2);
+      const end = chip ? chip.x-4 : (t.classList.contains('bt') && bv ? x0+w-16-bv.getComputedTextLength() : x0+w-8); const avail=end-(+t.getAttribute('x'));
+      if(avail>0 && t.getComputedTextLength()>avail){ t.setAttribute('textLength', avail.toFixed(1)); t.setAttribute('lengthAdjust','spacingAndGlyphs'); } }); });
 }
 function sysTagSvg(path, x, y){
   const src=S.tags[path]; if(!src) return '';

@@ -419,7 +419,7 @@ function drawCharts(){
     else if(k==='tiers'){ const c=R().compliance; el.innerHTML=tiersSvg(w,c.sweep_ghz,c.governing,c.tiers); }
     else if(k==='lf') el.innerHTML=lfSvg(w);
     else if(k==='ghosts') el.innerHTML=ghostSvg(w);
-    else if(k==='sys') el.innerHTML=sysSvg();
+    else if(k==='sys'){ el.innerHTML=sysSvg(); fitSys(el); }
     else if(k==='levels') el.innerHTML=levelsSvg(w);
     else if(k==='bands'){ if(S.bands && S.bands.applies) el.innerHTML=bandsSvg(w); }
     else if(k==='btiers'){ const r=S.bands && S.bands.rows.find(x=>x.id===S.band); if(r) el.innerHTML=tiersSvg(w, r.sweep_ghz, r.governing, r.tiers); }
