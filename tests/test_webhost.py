@@ -2,6 +2,7 @@
 transport; the time engine's frame is a job that can be cancelled."""
 
 import json
+import os
 import threading
 import time
 import urllib.error
@@ -71,20 +72,27 @@ def test_a_frame_is_a_job_and_the_next_one_knows_how_long_it_took():
 def test_cancel_terminates_the_process_and_a_new_frame_replaces_the_running_one():
     """The desktop backend: each frame in its own spawned process.  Cancel
     is a terminate -- the full 64-chirp frame takes seconds, the cancel
-    takes none -- and submitting another frame cancels the one in flight."""
+    well under one -- and submitting another frame cancels the one in flight.
+
+    The test watches the job and the process id, never the process object:
+    that belongs to the queue's thread (two threads waiting on one
+    multiprocessing.Process disagree about whether it is alive)."""
     api = webhost.Api(backend="process")
     slow = {"lo.engine": "response"}                         # the default 64 chirps
     code, job = api.call("frame", {"values": slow})
     t0 = time.time()
-    while api.queue.get(job["id"])["status"] != "running" and time.time() - t0 < 30:
+    while api.queue.jobs[job["id"]].get("_pid") is None and time.time() - t0 < 30:
         time.sleep(0.02)
-    proc = api.queue._procs[job["id"]]
-    assert proc.is_alive()
+    pid = api.queue.jobs[job["id"]]["_pid"]
+    assert api.queue.get(job["id"])["status"] == "running" and "_pid" not in api.queue.get(job["id"])
+    t_cancel = time.time()
     assert api.call(f"jobs/{job['id']}/cancel", {})[1] == {"cancelled": True}
-    proc.join(5)
-    assert not proc.is_alive() and proc.exitcode not in (0, None)                        # terminated, not left to finish
     gone = _wait(api.queue, job["id"], timeout=15)
-    assert gone["status"] == "cancelled" and gone["result"] is None and gone["elapsed_s"] < 5
+    # ended by the cancel, not by the frame finishing (>= 6 s) or by the queue giving up on it (5 s)
+    assert gone["status"] == "cancelled" and gone["result"] is None and time.time() - t_cancel < 3
+    if os.name == "posix":
+        with pytest.raises(ProcessLookupError):                                            # no such process any more
+            os.kill(pid, 0)
     assert api.call(f"jobs/{job['id']}/cancel", {})[1] == {"cancelled": False}            # nothing left to cancel
     code, a = api.call("frame", {"values": slow})
     code, b = api.call("frame", {"values": FAST})
