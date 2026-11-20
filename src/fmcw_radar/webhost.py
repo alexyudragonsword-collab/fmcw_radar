@@ -60,7 +60,8 @@ class JobQueue:
     frame cancels the ones still queued or running (the page shows one).
 
     ``backend="process"`` (the desktop): each job in its own spawned
-    process, cancel is a terminate.  ``backend="thread"`` (where there is no
+    process; cancel sets a flag and the queue's thread -- the only one that
+    touches the process -- terminates it within 0.1 s.  ``backend="thread"`` (where there is no
     multiprocessing): the frame runs to its end on a worker thread and a
     cancelled job's result is dropped."""
 
@@ -74,7 +75,6 @@ class JobQueue:
         self._lock = threading.Lock()
         self._cv = threading.Condition(self._lock)
         self._ctx = mp.get_context("spawn") if backend == "process" else None
-        self._procs: dict[str, Any] = {}
         threading.Thread(target=self._loop, daemon=True).start()
 
     @staticmethod
@@ -111,10 +111,7 @@ class JobQueue:
             if job["status"] == "queued":
                 job["status"] = "cancelled"
                 job["finished"] = time.time()
-            p = self._procs.get(jid)
-        if p is not None:
-            p.terminate()
-        return True
+        return True                                          # the worker loop sees the flag within 0.1 s and terminates
 
     def listing(self) -> list[dict]:
         with self._lock:
@@ -160,8 +157,7 @@ class JobQueue:
         p = self._ctx.Process(target=_worker, args=(child, job["_values"]), daemon=True)
         p.start()
         child.close()
-        with self._lock:
-            self._procs[job["id"]] = p
+        job["_pid"] = p.pid                                  # only this thread touches the process object (it is not thread-safe)
         msg, payload = None, None
         try:
             while True:
@@ -183,8 +179,9 @@ class JobQueue:
                     break
         finally:
             p.join(5)
-            with self._lock:
-                self._procs.pop(job["id"], None)
+            if p.is_alive():                                 # it ignored the terminate
+                p.kill()
+                p.join(5)
             if msg is None and not job["cancel"]:
                 payload = f"worker exited with code {p.exitcode}"
             self._finish(job, msg, payload)
