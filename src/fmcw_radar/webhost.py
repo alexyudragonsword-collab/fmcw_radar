@@ -228,14 +228,120 @@ class JobQueue:
             parent.close()
 
 
+def _report_loop(conn) -> None:
+    """The report worker's process: full statistical runs one after another,
+    for as long as the host lives -- so the chirp engine's cache stays warm
+    between them (a run that keeps the loop's settings is 0.9 s, not 3.3)."""
+    while True:
+        try:
+            msg = conn.recv()
+        except (EOFError, OSError):
+            return
+        if msg is None:
+            return
+        seq, values, baseline = msg
+        try:
+            out = guiutil.run_report(values, baseline)
+        except Exception as e:                               # noqa: BLE001 -- the page has to hear of it
+            out = {"ok": False, "error": f"{type(e).__name__}: {e}", "field": None}
+        conn.send((seq, out))
+
+
+class ReportWorker:
+    """The full (cycle-accurate) statistical run, out of the host's process.
+
+    The page gets a preview on the linearised chirp engine at once, in the
+    host's process, and asks for the full run after it; that one takes
+    seconds, and in a thread of this process it would starve the next
+    preview (measured: 0.35 s previews became 0.9-2.8 s).  ``run`` blocks
+    its caller until its answer is there.  Requests are served newest
+    first, one at a time: a request still waiting when a newer one arrives
+    is answered ``{"superseded": True}`` -- the page has moved on."""
+
+    def __init__(self):
+        self._ctx = mp.get_context("spawn")
+        self._lock = threading.Lock()
+        self._cv = threading.Condition(self._lock)
+        self._seq = 0
+        self._pending: tuple | None = None
+        self._running: int | None = None
+        self._done: dict[int, dict] = {}
+        self._proc = None
+        self._conn = None
+        self._closed = False
+        self._plock = threading.Lock()                       # the process is started by whoever needs it first
+        threading.Thread(target=self._serve, daemon=True).start()
+
+    def _ensure(self) -> None:
+        with self._plock:
+            if self._closed or (self._proc is not None and self._proc.is_alive()):
+                return
+            parent, child = self._ctx.Pipe()
+            self._proc = self._ctx.Process(target=_report_loop, args=(child,), daemon=True)
+            self._proc.start()
+            child.close()
+            self._conn = parent
+
+    def _serve(self) -> None:
+        while True:
+            with self._cv:
+                while self._pending is None and not self._closed:
+                    self._cv.wait()
+                if self._closed:
+                    return
+                seq, values, baseline = self._pending
+                self._pending, self._running = None, seq
+            try:
+                self._ensure()
+                self._conn.send((seq, values, baseline))
+                while not self._conn.poll(0.2):
+                    if not self._proc.is_alive() or self._closed:
+                        raise EOFError("the report worker ended")
+                _, out = self._conn.recv()
+            except (EOFError, OSError) as e:
+                out = {"ok": False, "error": f"the report worker failed: {e}", "field": None}
+                self._proc = None
+            with self._cv:
+                self._done[seq] = out
+                self._running = None
+                self._cv.notify_all()
+
+    def warm(self) -> None:
+        """Start the process ahead of the first request (its imports take a second)."""
+        self._ensure()
+
+    def run(self, values: dict, baseline: dict | None = None) -> dict:
+        with self._cv:
+            self._seq += 1
+            seq = self._seq
+            self._pending = (seq, dict(values), baseline)
+            self._cv.notify_all()
+            while True:
+                if seq in self._done:
+                    return self._done.pop(seq)
+                if self._closed or (self._running != seq and (self._pending is None or self._pending[0] != seq)):
+                    return {"ok": True, "superseded": True}
+                self._cv.wait(0.5)
+
+    def close(self) -> None:
+        with self._cv:
+            self._closed = True
+            self._cv.notify_all()
+        with self._plock:
+            if self._proc is not None and self._proc.is_alive():
+                self._proc.terminate()
+
+
 class Api:
     """Every route the page uses.  ``call`` is what a transport needs."""
 
-    GET_ROUTES = ("version", "spec", "config", "sources", "jobs")
+    GET_ROUTES = ("version", "spec", "config", "sources", "jobs", "configs")
 
     def __init__(self, backend: str = "process"):
         self.queue = JobQueue(backend)
         self._run_lock = threading.Lock()
+        # the desktop: full cycle-accurate runs in a process of their own, so a preview is never behind one
+        self.reports = ReportWorker() if backend == "process" else None
 
     def get(self, route: str) -> tuple[int, dict]:
         if route == "version":
@@ -249,6 +355,8 @@ class Api:
         if route == "sources":
             return 200, {"entries": {k: {"value": e.value, "unit": e.unit, "source": e.source, "cite": e.cite,
                                          "section": getattr(e, "section", None)} for k, e in all_entries().items()}}
+        if route == "configs":
+            return 200, {"bundled": guiutil.bundled_configs()}
         if route == "jobs":
             return 200, {"jobs": self.queue.listing(), "last_wall_s": self.queue.last_wall_s}
         if route.startswith("jobs/"):
@@ -265,8 +373,16 @@ class Api:
             base = req.get("baseline")
             if base is not None and not (isinstance(base, dict) and isinstance(base.get("values"), dict) and isinstance(base.get("metrics"), dict)):
                 return 400, {"error": "baseline must be {values, metrics} of an earlier run"}
-            with self._run_lock:                             # one statistical run at a time
-                return 200, guiutil.run_report(values, base)
+            if req.get("final") and self.reports is not None:
+                return 200, self.reports.run(values, base)
+            with self._run_lock:                             # one statistical run at a time in this process
+                return 200, guiutil.run_report(values, base, preview=bool(req.get("preview")))
+        if route == "yaml/export":
+            return 200, guiutil.export_yaml(values)
+        if route == "yaml/load":
+            if req.get("name") is not None:
+                return 200, guiutil.load_bundled(str(req["name"]))
+            return 200, guiutil.load_yaml(req.get("yaml"))
         if route == "validate":
             v = guiutil.validate(values)
             out = {k: v[k] for k in v if k != "config"}
@@ -314,8 +430,11 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass                                             # the page went away while its answer was being computed
 
     def _json(self, code: int, payload: Any) -> None:
         self._send(code, dumps(payload).encode("utf-8"), _TYPES[".json"])
@@ -352,6 +471,12 @@ class _Server(ThreadingHTTPServer):
     daemon_threads = True
     # Windows: SO_REUSEADDR lets a second socket bind a port that is being listened on (polar_tx's pitfall)
     allow_reuse_address = os.name != "nt"
+
+    def server_close(self):
+        api = getattr(self, "api", None)
+        if api is not None and api.reports is not None:
+            api.reports.close()
+        super().server_close()
 
 
 def make_server(port: int = 0, host: str = "127.0.0.1", backend: str = "process") -> _Server:
@@ -394,6 +519,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     url = f"http://127.0.0.1:{srv.server_address[1]}/"
     print(f"fmcw-gui {__version__}: {url}  (Ctrl+C stops it)")
+    srv.api.reports.warm()                                   # the report worker's imports, ahead of the first run
     if not args.no_open:
         browser = None if args.tab else find_app_browser()
         if browser:
@@ -409,7 +535,7 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-__all__ = ["WWW", "KINDS", "JobQueue", "Api", "run_job", "make_server", "find_app_browser", "main", "dumps"]
+__all__ = ["WWW", "KINDS", "JobQueue", "ReportWorker", "Api", "run_job", "make_server", "find_app_browser", "main", "dumps"]
 
 if __name__ == "__main__":
     raise SystemExit(main())

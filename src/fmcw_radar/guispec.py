@@ -243,6 +243,8 @@ ENGINES: dict[str, dict[str, str]] = {
 
 #: the headline numbers a page reads from the statistical report: id -> where it is and how to show it.
 #: ``better`` says which way is an improvement (None: neither).  ``report`` is a path into ``report.report()``.
+#: ``chirp_engine``: the number is the chirp engine's own (the others are the same whichever engine made the error curve),
+#: so a preview run on the linearised engine does not have it yet.
 METRICS: dict[str, dict[str, Any]] = {
     "eirp_margin_db": {"zh": "EIRP 裕度", "en": "EIRP margin", "unit": "dB", "digits": 1, "better": "higher",
                        "report": "compliance.eirp_margin_db"},
@@ -254,7 +256,7 @@ METRICS: dict[str, dict[str, Any]] = {
                   "report": "cfar.pd_target"},
     "snr_pd90_db": {"zh": "Pd 0.9 所需 SNR", "en": "SNR for Pd 0.9", "unit": "dB", "digits": 2, "better": "lower",
                     "report": "cfar.snr_pd90_db"},
-    "ghost_detections_per_frame": {"zh": "鬼目标每帧期望检出", "en": "ghost detections per frame", "unit": "", "digits": 2, "better": "lower",
+    "ghost_detections_per_frame": {"chirp_engine": True, "zh": "鬼目标每帧期望检出", "en": "ghost detections per frame", "unit": "", "digits": 2, "better": "lower",
                                    "report": "cfar.ghost_detections_per_frame"},
     "false_alarm_cells_per_frame": {"zh": "噪声虚警格 / 帧", "en": "noise false-alarm cells per frame", "unit": "", "digits": 2,
                                     "better": None, "report": "cfar.false_alarm_cells_per_frame"},
@@ -263,9 +265,9 @@ METRICS: dict[str, dict[str, Any]] = {
                          "report": "radar.velocity_res_mps"},
     "max_range_m": {"zh": "最大距离(IF 带限)", "en": "max range (IF band)", "unit": "m", "digits": 2, "better": "higher",
                     "report": "radar.max_range_m"},
-    "pn_residual_rms_rad": {"zh": "相噪残余(目标处)", "en": "phase-noise residual at the target", "unit": "rad", "digits": 4,
+    "pn_residual_rms_rad": {"chirp_engine": True, "zh": "相噪残余(目标处)", "en": "phase-noise residual at the target", "unit": "rad", "digits": 4,
                             "better": "lower", "report": "phase_noise.residual_rms_rad"},
-    "chirp_rms_hz": {"zh": "chirp 频率误差 RMS", "en": "chirp frequency error RMS", "unit": "Hz", "digits": 0, "better": "lower",
+    "chirp_rms_hz": {"chirp_engine": True, "zh": "chirp 频率误差 RMS", "en": "chirp frequency error RMS", "unit": "Hz", "digits": 0, "better": "lower",
                      "report": "chirp.rms_hz"},
 }
 

@@ -143,14 +143,15 @@
 ## P3 — 能力扩展
 
 1. **图形界面还剩 P4 和几处缺口**(`cairn/gui.md`;做法照 polar_tx / array_tx:一份网页界面三个宿主,描述 guispec / 计算 guiutil / 分发与队列 webhost、appbridge / 画 webui)。
-   P0 效果图、P1 界面规格层(0.2.21)、P2 工作台(0.2.23,`fmcw-gui`)、P3 系统框图页 / 频段取舍页 / 扫描页 / 基线(0.2.24)已做。还没做的:
-   - P4 Android(Chaquopy + WebView;桥调 `webhost.Api`,任务用线程后端)。
+   P0 效果图、P1 界面规格层(0.2.21)、P2 工作台(0.2.23,`fmcw-gui`)、P3 系统框图页 / 频段取舍页 / 扫描页 / 基线(0.2.24)、逐周期引擎的预览与配置文件载入 / 导出(0.2.26)已做。还没做的:
+   - P4 Android(Chaquopy + WebView;桥调 `webhost.Api`,任务用线程后端;导出 YAML 现在走浏览器下载,WebView 里要另给出口)。
    - MIMO 测角界面(效果图里没画):现在只有框图里"测角 DBF"环节的三个数(波束宽、读出角度、期望 σ);角谱、阵列几何没有画。
-   - 页面的缺口:`target.extra_targets`(表)只读;不能载入 / 导出 YAML;多目标时主瓣框是一个包住所有目标的框;泄漏格没有单独的画法;关掉应用窗口不停本地服务(Ctrl+C);
+   - 页面的缺口:`target.extra_targets`(表)只读(能从 YAML 载入,不能在页面上改);多目标时主瓣框是一个包住所有目标的框;泄漏格没有单独的画法;关掉应用窗口不停本地服务(Ctrl+C);
      扫描只扫一个控件、看一个数,结果不能导出。
-   - 默认的逐周期引擎下不算"实时":拨环路参数一次 3.3 s,频段表 18.4 s,9 点环路带宽扫描 35.4 s
-     (`python -c "import time; from fmcw_radar import guiutil as g; t=time.time(); g.band_tradeoff({}); print(time.time()-t)"`;线性化引擎下分别是 0.2 / 1.2 / 2 s)。
-     页面如实写耗时与进度。可做:拨环路旋钮时先用线性化引擎出一份并标明,或缓存按环路参数分的 chirp 结果(现在 `_NOISY_CACHE` 只留 4 份)。
+   - 预览只管工作台的一次运行。频段表(逐周期引擎下 18.4 s)和扫描(9 点环路带宽 35.4 s)没有预览,仍是带进度的任务。
+   - 预览在全量运行期间被拖慢:4 核容器上 0.35 s 的预览变成 0.5–1.7 s(全量在另一个进程里;在同一进程的线程里是 0.9–2.8 s)。
+     复现:`fmcw-gui --no-open` 起宿主,连改两次 `lo.loop_bw_hz`,看浏览器网络面板里 `api/run` 的耗时。没有限制工作进程的线程数;更多核的机器上没量过(未核实)。
+   - `configs/` 不在安装包里:装成 wheel 时没有随库配置菜单,频段页的"随库配置现状"卡不显示(`python -c "from fmcw_radar import guiutil; print(guiutil.bundled_configs())"` 在 wheel 安装下是 `[]`)。
    - 显示范围与步进(`guispec.RANGES`,69 个数值控件)是 P1 定的显示用取值,没有出处,也不是合法性判据;跨字段的约束(斜坡时长 × 采样率为整数等)仍只由配置层报错,页面把原话放在页顶并标红它点名的字段,没有逐字段的预先提示。
 2. 三角波 / 多斜率 chirp、chirp 间空闲对 ADPLL 的影响(现在 `idle_s` 只是让 LO 停在起始频率)。
 3. 77 GHz 档只换了数(`configs/radar_77g_automotive.yaml`,全 assumed),没有任何车载规范的数字。

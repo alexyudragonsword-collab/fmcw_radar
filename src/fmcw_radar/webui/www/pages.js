@@ -12,6 +12,13 @@ function lineText(ln){ if(ln.kind==='note') return L(ln.zh,ln.en); const v=lineV
 const stale = sha => !!(S.run && sha && sha!==S.run.repro.config_sha256);
 const stalePill = () => `<span class="pill warn">${L('属于上一组参数','from other settings')}</span>`;
 
+// the run on screen is the linearised engine's stand-in for a cycle-accurate one still being computed
+function previewBar(){
+  const p=S.run && S.run.preview; if(!p) return '';
+  const M=S.spec.metrics, E=S.spec.engines;
+  return `<div class="previewbar span2" data-tab="results budget pn"><b>${L('预览','Preview')}</b><span>${L(`这是 ${E['chirp:'+p.shown].zh} 的结果,${E['chirp:'+p.final].zh} 算完自动换上。`,`This is the ${E['chirp:'+p.shown].en}; the ${E['chirp:'+p.final].en} replaces it when it is done.`)} ${L('还不是最终值的:','Not final yet: ')}${p.pending.map(k=>esc(L(M[k].zh,M[k].en))).join(L('、',', '))}${L(',以及鬼目标清单与 chirp 误差曲线;其余结论数两个引擎相同。','; also the ghost list and the chirp error curve. The other headline numbers are the same from either engine.')}</span></div>`;
+}
+
 /* ---------- jobs with progress: the sweep and the band table ---------- */
 function kjobHtml(kind){
   const j=S.jobs[kind]; if(!j) return '';
@@ -137,7 +144,7 @@ function systemPage(){
   const erow=(id,extra)=>`<tr><td class="st">${L(E[id].zh,E[id].en)}</td><td>${L(E[id].does_zh,E[id].does_en)} ${L(E[id].covers_zh,E[id].covers_en)} ${extra||''}</td></tr>`;
   const full = S.run.plots.levels.some(p=>p.full_power!==null && Math.abs(p.full_power-p.now)>1e-9);
   return `<div class="sp-page">
-   ${S.error?refusalBar():''}
+   ${S.error?refusalBar():''}${previewBar()}
    <div class="card">
     <div class="hdr"><div><h2>${L('系统框图','System block diagram')}</h2>
     <p class="sub">${L('从 chirp 发生到检测结果的整条链:每一级写着它在当前参数下的数、出处标签和这一级之后的量。蓝线是同一条 LO——发射和混频用的是它的同一份相噪,这是相关抵消的来源。虚线框是当前没有启用的环节。点任一级,下表对应行高亮。','The whole chain from the chirp generator to the detections: every stage with its numbers under the current settings, their source tags and the quantity after it. The blue line is the one LO — transmit and mixer share its phase noise, which is where the correlation cancelling comes from. A dashed box is a stage not in play. Click a stage to highlight its row below.')}</p></div></div>
@@ -232,6 +239,7 @@ function bandsPage(){
   </div>`;
 }
 function bundledCard(B){
+  if(!B.bundled.length) return '';                        // an installed wheel ships no config files
   return `<div class="card"><h2>${L('随库配置的现状','Bundled configs as they are')}</h2>
     <div class="tblwrap"><table class="tbl"><thead><tr><th>${L('配置','Config')}</th><th>${L('判定','Verdict')}</th></tr></thead><tbody>
     ${B.bundled.map(c=>`<tr><td><span class="mono">${c.config}</span><br><span style="color:var(--muted);font-size:11.5px">${c.n_tx>1?L(`${c.n_tx} 路 TDM 轮流`,`${c.n_tx} TX in turn (TDM)`):'1 TX'}${c.eirp_dbm!==null?` · EIRP <span class="num">${f(c.eirp_dbm,1)} dBm</span>`:''}</span></td><td>${c.applies?`<span class="pill ${c.compliant?'ok':'bad'}">${c.compliant?'✓':'✕'}</span> ${esc(c.verdict)}`:`<span class="pill neu">${L('不适用','n/a')}</span> ${esc(c.why)}`}</td></tr>`).join('')}</tbody></table></div></div>`;
@@ -294,9 +302,9 @@ function sweepPage(){
 
 /* ---------- the pinned baseline (a card on the workbench) ---------- */
 function baselineCard(){
-  if(!S.baseline) return `<div class="card span2 basebar" data-tab="results"><div class="baserow"><span class="sub" style="margin:0">${L('把当前这一组参数钉成基线,之后每次改动都对着它比:哪些控件变了、每个结论数朝哪边动。','Pin the current settings as a baseline; every later change is compared against it: which controls differ, and which way each headline number moved.')}</span><button class="btn sm" data-act="pin">${L('设为基线','Pin as baseline')}</button></div></div>`;
+  if(!S.baseline) return `<div class="card span2 basebar" data-tab="results"><div class="baserow"><span class="sub" style="margin:0">${L('把当前这一组参数钉成基线,之后每次改动都对着它比:哪些控件变了、每个结论数朝哪边动。','Pin the current settings as a baseline; every later change is compared against it: which controls differ, and which way each headline number moved.')}</span><button class="btn sm" data-act="pin" ${S.run&&S.run.preview?'disabled':''}>${L('设为基线','Pin as baseline')}</button></div></div>`;
   const b=S.run.baseline; const M=S.spec.metrics;
-  const head=`<div class="baserow"><b>${L('相对基线','Against the baseline')} <span class="mono" style="font-weight:400;color:var(--muted)">${S.baseline.sha.slice(0,10)}</span></b><span class="spacer"></span><button class="btn sm" data-act="pin">${L('把当前设为基线','Pin the current run')}</button><button class="btn sm" data-act="unpin">${L('清除基线','Clear')}</button></div>`;
+  const head=`<div class="baserow"><b>${L('相对基线','Against the baseline')} <span class="mono" style="font-weight:400;color:var(--muted)">${S.baseline.sha.slice(0,10)}</span></b><span class="spacer"></span><button class="btn sm" data-act="pin" ${S.run&&S.run.preview?'disabled':''}>${L('把当前设为基线','Pin the current run')}</button><button class="btn sm" data-act="unpin">${L('清除基线','Clear')}</button></div>`;
   if(!b) return `<div class="card span2 basebar" data-tab="results">${head}</div>`;
   const cv=(c,v)=>v===null||v===undefined?L('留空','empty'):typeof v==='boolean'?String(v):`${numv(disp(c,v))}${c&&c.unit?' '+esc(c.unit):''}`;
   const ch=b.changed.map(x=>{ const c=S.spec.controls.find(k=>k.path===x.path); return `<span class="chg1">${esc(c?L(c.zh,c.en):x.path)} <span class="num">${cv(c,x.a)} → ${cv(c,x.b)}</span></span>`; }).join('');

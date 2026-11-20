@@ -4,7 +4,7 @@
 'use strict';
 const S = {lang:'zh', theme:'auto', spec:null, sources:{}, values:{}, tags:{}, inert:{}, refused:{}, resolved:{}, run:null, frame:null,
            error:null, pending:false, dirty:false, job:null, jobMsg:null, lastWall:null, mtab:'results', open:{}};
-Object.assign(S, {page:'workbench', sys:null, band:'current', sw:{path:'target.range_m', lo:null, hi:null, points:9, metric:'snr_cell_db'}, jobs:{sweep:null, bands:null}, kmsg:{}, baseline:null, bands:null, sweep:null, bandsFor:null, bandsShown:null});
+Object.assign(S, {page:'workbench', sys:null, band:'current', sw:{path:'target.range_m', lo:null, hi:null, points:9, metric:'snr_cell_db'}, jobs:{sweep:null, bands:null}, kmsg:{}, baseline:null, bands:null, sweep:null, bandsFor:null, bandsShown:null, finalSeq:0, finalizing:false, yamlMsg:null, bundled:[]});
 try{ const s = JSON.parse(localStorage.getItem('fmcw-ui')||'{}'); if(s.lang) S.lang=s.lang; if(s.theme) S.theme=s.theme; }catch(e){}
 function save(){ try{ localStorage.setItem('fmcw-ui', JSON.stringify({lang:S.lang, theme:S.theme})); }catch(e){} }
 const L = (zh,en) => S.lang==='zh' ? zh : en;
@@ -67,6 +67,8 @@ function paramsPanel(){
   const n=Object.keys(S.values).filter(p=>JSON.stringify(S.values[p])!==JSON.stringify(S.defaults[p])).length;
   return `<aside class="card params" data-tab="params">
    <div class="ph"><h2>${L('参数','Parameters')}</h2>${n?`<button class="btn sm" data-act="reset">${L(`恢复默认(已改 ${n} 项)`,`Defaults (${n} edited)`)}</button>`:''}</div>
+   <div class="yamlrow"><button class="btn sm" data-act="yamlopen">${L('载入 YAML…','Load YAML…')}</button><button class="btn sm" data-act="yamlsave" ${S.error?'disabled':''}>${L('导出 YAML','Export YAML')}</button>${S.bundled.length?`<select data-yaml="bundled" aria-label="${L('随库配置','bundled configs')}"><option value="">${L('随库配置…','Bundled config…')}</option>${S.bundled.map(b=>`<option value="${b}">${b}</option>`).join('')}</select>`:''}<input type="file" id="yamlfile" accept=".yaml,.yml,text/yaml,text/plain" hidden></div>
+   ${S.yamlMsg?`<p class="yamlmsg ${S.yamlMsg.ok?'':'bad'}">${esc(S.yamlMsg.text)}</p>`:''}
    <p class="sub" style="margin:0">${L(`${cs.length} 个字段,与配置一一对应;留空的字段显示库实际取的数和它的出处。`,`${cs.length} fields, one per config field; an empty field shows the number the library uses and its source.`)}</p>
    <div class="pgrid">${html}</div>
    <div class="psec"><div class="legend-tags">${Object.keys(S.spec.tags).map(k=>`<span>${tag(k,'','legend')} ${L(...S.spec.tags[k])}</span>`).join('')}</div></div>
@@ -84,7 +86,7 @@ function kpis(){
     comp=k(L('合规 · §15.255(c)(2)','Compliance · §15.255(c)(2)'), c.compliant?L('通过','pass'):L('不合规','fail'), '', `EIRP ${f(c.eirp_dbm,1)} / ${f(c.limit_dbm,0)} dBm · ${L('裕度','margin')} ${fs(c.eirp_margin_db,1)} dB<br>${off}`, c.compliant?'ok':'bad'); }
   return `<div class="kpis span2" data-tab="results">${comp}
    ${k(L('格点 SNR','Cell SNR'), f(r.detection.snr_cell_db), 'dB', `Pd ${f(r.cfar.pd_target,2)} @ Pfa ${fe(r.cfar.pfa_design)}<br>${L(`Pd 0.9 需 ${f(r.cfar.snr_pd90_db)} dB`,`Pd 0.9 needs ${f(r.cfar.snr_pd90_db)} dB`)}`)}
-   ${k(L('鬼目标 · 每帧期望检出','Ghosts · expected per frame'), gpf<0.01&&gpf>0?gpf.toFixed(4):f(gpf,2), L('个',''), strongest===null?L('这个 chirp 引擎没有鬼目标清单','no ghost list from this chirp engine'):`${L('最强','strongest')} ${f(strongest,2)} dBc<br>${r.nonlin.ghosts_vouched?L('逐周期引擎背书','vouched by the cycle-accurate engine'):L('线性化引擎:不能背书','linearised engine: not vouched')}`, gpf>=0.5?'bad':'')}
+   ${k(L('鬼目标 · 每帧期望检出','Ghosts · expected per frame')+(S.run.preview?` <span class="pill warn pv">${L('预览','preview')}</span>`:''), gpf<0.01&&gpf>0?gpf.toFixed(4):f(gpf,2), L('个',''), strongest===null?L('这个 chirp 引擎没有鬼目标清单','no ghost list from this chirp engine'):`${L('最强','strongest')} ${f(strongest,2)} dBc<br>${r.nonlin.ghosts_vouched?L('逐周期引擎背书','vouched by the cycle-accurate engine'):L('线性化引擎:不能背书','linearised engine: not vouched')}`, gpf>=0.5?'bad':'')}
    ${k(L('距离分辨率','Range res.'), f(r.radar.range_res_m*100,2), 'cm', `${r.radar.range_window} −3 dB<br>c/2B ${f(r.radar.range_res_rect_m*100,2)} cm`)}
    ${k(L('速度分辨率','Velocity res.'), f(r.radar.velocity_res_mps,3), 'm/s', L(`最大 ±${f(r.radar.max_velocity_mps,2)} m/s`,`max ±${f(r.radar.max_velocity_mps,2)} m/s`))}
    ${k(L('最大距离','Max range'), f(r.radar.max_range_m,2), 'm', L(`IF 带宽 ${r.radar.if_bw_mhz} MHz 限定`,`set by ${r.radar.if_bw_mhz} MHz IF`))}
@@ -389,7 +391,7 @@ const TABS = [['results','结果','Results'],['params','参数','Params'],['budg
 function bnav(){ return `<nav class="bnav" aria-label="sections">${TABS.map(([k,zh,en])=>`<button data-act="mtab" data-tab-to="${k}" class="${S.mtab===k?'on':''}">${IC[k]}<span>${L(zh,en)}</span></button>`).join('')}</nav>`; }
 function workbench(){
   const stale = S.error ? `<div class="refusal" data-tab="results params budget pn"><b>${L('配置层不接受这组参数','The config refuses these settings')}</b><span>${esc(S.error.error)}</span><span class="spacer"></span><span style="color:var(--muted)">${L('下面仍是上一组合法参数的结果。','Below is still the last legal run.')}</span></div>` : '';
-  return `<div class="wb"><div class="wb-in" data-mtab="${S.mtab}">${paramsPanel()}<div class="main">${stale}${RUN ? kpis()+baselineCard()+runbar()+rdCard()+budgetCard()+complianceCard()+pnCard()+timeCard()+reproCard() : `<div class="empty span2">${L('计算中…','computing…')}</div>`}</div>${bnav()}</div></div>`;
+  return `<div class="wb"><div class="wb-in" data-mtab="${S.mtab}">${paramsPanel()}<div class="main">${stale}${RUN ? kpis()+previewBar()+baselineCard()+runbar()+rdCard()+budgetCard()+complianceCard()+pnCard()+timeCard()+reproCard() : `<div class="empty span2">${L('计算中…','computing…')}</div>`}</div>${bnav()}</div></div>`;
 }
 function renderTop(){
   document.getElementById('langseg').innerHTML = `<button data-act="lang" data-v="zh" class="${S.lang==='zh'?'on':''}">中</button><button data-act="lang" data-v="en" class="${S.lang==='en'?'on':''}">EN</button>`;
@@ -397,7 +399,7 @@ function renderTop(){
   document.getElementById('pages').innerHTML = pnav();
   document.documentElement.lang = S.lang==='zh'?'zh-CN':'en';
   if(S.theme==='auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', S.theme);
-  const b=document.getElementById('busy'); b.hidden=!S.pending; b.textContent=L('计算中','computing');
+  const b=document.getElementById('busy'); b.hidden=!(S.pending||S.finalizing); b.textContent = S.pending ? L('计算中','computing') : L('预览 · 逐周期引擎计算中','preview · cycle-accurate run in progress');
 }
 function render(){
   if(!S.spec) return;
@@ -433,13 +435,25 @@ function changed(){ S.dirty=true; clearTimeout(timer); timer=setTimeout(compute,
 async function compute(){
   if(S.pending){ S.dirty=true; return; }
   S.pending=true; S.dirty=false; renderTop();
-  let res; try{ res = await api('run', S.baseline ? {values:S.values, baseline:{values:S.baseline.values, metrics:S.baseline.metrics}} : {values:S.values}); }catch(e){ res={ok:false, error:String(e), field:null, inert:S.inert, refused:S.refused}; }
+  const body = {values:Object.assign({}, S.values)}; if(S.baseline) body.baseline={values:S.baseline.values, metrics:S.baseline.metrics};
+  let res; try{ res = await api('run', Object.assign({preview:true}, body)); }catch(e){ res={ok:false, error:String(e), field:null, inert:S.inert, refused:S.refused}; }
   S.pending=false;
   S.inert=res.inert||{}; S.refused=res.refused||{};
   if(res.ok){ S.run=res; S.error=null; S.values=res.values; S.tags=res.tags; S.resolved=res.resolved; RUN=adapt(res, S.frame); }
   else S.error={error:res.error, field:res.field};
+  S.finalSeq++; S.finalizing=false;                       // whatever full run was on its way belongs to older settings
   render();
-  if(S.dirty) compute();
+  if(S.dirty){ compute(); return; }
+  if(res.ok && res.preview) finalize(body);
+}
+// the answer above was a preview on the linearised chirp engine: fetch the cycle-accurate run of the same settings
+async function finalize(body){
+  const mine=++S.finalSeq; S.finalizing=true; renderTop();
+  let res; try{ res = await api('run', Object.assign({final:true}, body)); }catch(e){ res={ok:false}; }
+  if(mine!==S.finalSeq) return;                           // the settings moved on while it ran
+  S.finalizing=false;
+  if(res.ok && !res.superseded && S.run && res.repro.config_sha256===S.run.repro.config_sha256){ S.run=res; S.tags=res.tags; S.resolved=res.resolved; RUN=adapt(res, S.frame); render(); }
+  else renderTop();
 }
 async function poll(){
   if(!S.job) return;
@@ -451,6 +465,14 @@ async function poll(){
   if(j.status==='error'){ S.job=null; S.jobMsg=L('时域引擎出错:','time engine failed: ')+esc(j.error||''); render(); return; }
   const slot=document.getElementById('jobslot'); if(slot) slot.innerHTML=jobHtml();
   setTimeout(poll, 250);
+}
+
+// a config file's settings into the form: the library's own loader reads it, the page takes the values it gives back
+async function loadYaml(body, label){
+  let r; try{ r = await api('yaml/load', body); }catch(e){ r={ok:false, error:String(e)}; }
+  if(r.ok){ S.values=r.values; S.yamlMsg={ok:true, text:L(`已载入 ${label}`,`Loaded ${label}`)}; changed(); }
+  else S.yamlMsg={ok:false, text:L(`没有载入 ${label}:`,`${label} not loaded: `)+r.error};
+  render();
 }
 
 /* ---------- events ---------- */
@@ -472,7 +494,12 @@ document.addEventListener('click', async e=>{
   const a=e.target.closest('[data-act]'); if(!a) return; const act=a.dataset.act;
   if(act==='lang'){ S.lang=a.dataset.v; save(); render(); }
   else if(act==='theme'){ S.theme=a.dataset.v; save(); renderTop(); }
-  else if(act==='reset'){ S.values=Object.assign({}, S.defaults); changed(); render(); }
+  else if(act==='reset'){ S.values=Object.assign({}, S.defaults); S.yamlMsg=null; changed(); render(); }
+  else if(act==='yamlopen'){ document.getElementById('yamlfile').click(); }
+  else if(act==='yamlsave'){ const r=await api('yaml/export', {values:S.values});
+    if(!r.ok){ S.yamlMsg={ok:false, text:r.error}; render(); return; }
+    const u=URL.createObjectURL(new Blob([r.yaml], {type:'text/yaml'})); const l=document.createElement('a'); l.href=u; l.download=r.filename; document.body.appendChild(l); l.click(); l.remove(); setTimeout(()=>URL.revokeObjectURL(u), 1000);
+    S.yamlMsg={ok:true, text:L(`已导出 ${r.filename}`,`Exported ${r.filename}`)}; render(); }
   else if(act==='dither'){ S.values['lo.tdc_dither_lsb'] = (S.values['lo.tdc_dither_lsb']||0)>0 ? 0 : 1; if(S.values['lo.tdc_dither_lsb']===0) S.values['lo.tdc_dither_gain_error']=0; changed(); render(); }
   else if(act==='frame'){ S.jobMsg=null; const j=await api('frame', {values:S.values}); if(j.status==='error'){ S.jobMsg=esc(j.error); render(); } else { S.job=j; render(); poll(); } }
   else if(act==='cancel'){ if(S.job) await api('jobs/'+S.job.id+'/cancel', {}); }
@@ -495,6 +522,8 @@ document.addEventListener('change', async e=>{
     else if(k==='metric') S.sw.metric=el.value;
     else { const n=parseFloat(el.value.replace('−','-')); if(!isNaN(n)) S.sw[k] = k==='points' ? Math.max(2, Math.min(S.spec.sweep_max_points, Math.round(n))) : n; }
     render(); return; }
+  if(el.id==='yamlfile'){ const file=el.files && el.files[0]; if(!file) return; const text=await file.text(); el.value=''; await loadYaml({yaml:text}, file.name); return; }
+  if(el.dataset && el.dataset.yaml==='bundled'){ if(el.value) await loadYaml({name:el.value}, el.value+'.yaml'); return; }
   const p=el.dataset && el.dataset.path; if(!p) return; const c=S.spec.controls.find(x=>x.path===p);
   let v=el.value;
   if(el.tagName==='SELECT'){ v = c.kind==='bool' ? v==='true' : (v===''?null:v); }
@@ -511,7 +540,8 @@ window.addEventListener('hashchange', ()=>{ window.scrollTo(0,0); render(); });
 let rz=null; window.addEventListener('resize', ()=>{ clearTimeout(rz); rz=setTimeout(drawCharts,120); });
 
 (async function boot(){
-  const [ver, spec, cfg, src] = await Promise.all([api('version'), api('spec'), api('config'), api('sources')]);
+  const [ver, spec, cfg, src, cfgs] = await Promise.all([api('version'), api('spec'), api('config'), api('sources'), api('configs')]);
+  S.bundled=cfgs.bundled||[];
   S.spec=spec; S.sources=src.entries; S.values=cfg.values; S.defaults=Object.assign({}, cfg.values); S.tags=cfg.tags; S.inert=cfg.inert; S.refused=cfg.refused;
   S.resolved={}; spec.controls.forEach(c=>{ if(c.source) S.resolved[c.path]={value:c.resolved, source:c.source, key:c.sources_key}; });
   document.getElementById('ver').textContent = ver.version;

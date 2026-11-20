@@ -419,3 +419,15 @@ svg .swx{fill:none;stroke:var(--bad);stroke-width:2}
 .basechg .chg1{white-space:nowrap}
 .basetbl td:first-child{min-width:120px}
 .swtbl .btn,.btable .btn{white-space:nowrap}
+
+/* ---- preview of a cycle-accurate run; a config file in and out ---- */
+.previewbar{grid-column:1/-1;border:1px solid var(--warn);background:var(--warn-soft);border-radius:10px;padding:8px 12px;font-size:13px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.previewbar b{color:var(--warn);white-space:nowrap}
+.previewbar span{flex:1 1 320px;min-width:0}
+.sp-page .previewbar{grid-column:auto}
+.kpi .k .pv{font-size:10.5px;padding:0 6px;margin-left:2px}
+.yamlrow{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 8px;align-items:center}
+.yamlrow select{font:inherit;font-size:12.5px;color:var(--ink);background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:4px 6px;min-width:0;max-width:100%}
+.yamlmsg{font-size:12px;margin:0 0 8px;color:var(--muted);overflow-wrap:anywhere}
+.yamlmsg.bad{color:var(--bad)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}

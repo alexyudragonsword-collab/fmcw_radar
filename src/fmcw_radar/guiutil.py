@@ -166,21 +166,40 @@ def _levels(rep: dict, full: dict | None, k: dict) -> list[dict]:
     return [{"id": i, "now": now[n], "full_power": None if fp is None else fp[n]} for n, i in enumerate(ids)]
 
 
-def run_report(values: dict[str, Any], baseline: dict | None = None) -> dict:
+def run_report(values: dict[str, Any], baseline: dict | None = None, preview: bool = False) -> dict:
     """One statistical run for the page: the library's report with what the
     page shows around it.  JSON-ready.
 
     ``baseline``: ``{"values", "metrics"}`` of an earlier run the page pinned;
-    the result then carries ``baseline`` (``compare``)."""
+    the result then carries ``baseline`` (``compare``).
+
+    ``preview``: a config on the cycle-accurate chirp engine (seconds per
+    run) is answered with the same config on the linearised engine (tenths
+    of one) and marked ``preview``: which engine made it, which one the
+    config asks for, and the headline numbers that are the chirp engine's
+    own and therefore not final (``guispec.METRICS[...]["chirp_engine"]``).
+    Everything about the config itself -- values, tags, hash, the
+    reproducibility card -- is the real config's.  Where the linearised
+    engine cannot stand in (the config refuses it: online calibration), or
+    the config is not on the cycle-accurate engine, the run is the full one."""
     v = validate(values)
     if not v["ok"]:
         return {"ok": False, "error": v["error"], "field": v["field"], "inert": guispec.inert(values),
                 "refused": guispec.refused_choices(values)}
     cfg: RadarConfig = v["config"]
+    run_cfg, pre = cfg, None
+    if preview and cfg.lo.engine == "event":
+        try:
+            run_cfg = apply_overrides(cfg, {"lo.engine": "response"})
+        except (ValueError, TypeError):
+            run_cfg = cfg
+        else:
+            pre = {"shown": "response", "final": "event",
+                   "pending": [name for name, m in guispec.METRICS.items() if m.get("chirp_engine")]}
     t0 = time.perf_counter()
-    st = run_statistical(cfg)
+    st = run_statistical(run_cfg)
     wall = time.perf_counter() - t0
-    rep = plain(build_report(cfg, st))
+    rep = plain(build_report(run_cfg, st))
     flat = guispec.values_from_config(cfg)
     full = plain(full_power(cfg))
     k = rep["compliance"]
@@ -193,14 +212,14 @@ def run_report(values: dict[str, Any], baseline: dict | None = None) -> dict:
     chirp = rep.get("chirp") or {}
     engines = [
         {"id": "statistical", "wall_s": round(wall, 3)},
-        {"id": f"chirp:{cfg.lo.engine}", "vouches_for_spurs": bool(chirp.get("vouches_for_spurs", False)),
+        {"id": f"chirp:{run_cfg.lo.engine}", "vouches_for_spurs": bool(chirp.get("vouches_for_spurs", False)),
          "rms_hz": chirp.get("rms_hz"), "peak_hz": chirp.get("peak_hz"), "notes": list(chirp.get("notes") or [])},
         {"id": "time", "state": "not_run"},
     ]
     nl = rep.get("nonlinearity") or {}
     gov = next((t for t in k.get("tiers", []) if t["tier"] == k.get("governing")), None)
     plots = {
-        "pn": plain(_pn_curves(cfg)),
+        "pn": plain(_pn_curves(run_cfg)),
         "ghosts": {"stems": [{"offset_m": g[0], "level_dbc": g[1]} for g in (nl.get("ghosts") or [])],
                    "limit_dbc": nl.get("ghost_limit_dbc"), "vouched": bool(nl.get("ghosts_vouched", False)),
                    "strongest_dbc": max((g[1] for g in (nl.get("ghosts") or [])), default=None),
@@ -225,6 +244,8 @@ def run_report(values: dict[str, Any], baseline: dict | None = None) -> dict:
                   "edits": plain(edits), "call": call},
         "wall_s": round(wall, 3),
     }
+    if pre is not None:
+        out["preview"] = pre
     out["system"] = system(out, cfg)
     if baseline is not None:
         out["baseline"] = compare(baseline, out, cfg)
@@ -449,6 +470,63 @@ def run_sweep(values: dict[str, Any], path: str, lo: float, hi: float, points: i
         cur = next((k.resolved for k in guispec.controls(v["config"]) if k.path == path and k.source), None)
     return {"ok": True, "path": path, "zh": c.zh, "en": c.en, "unit": c.unit, "scale": c.scale, "current": cur, "points": plain(out),
             "config_sha256": config_hash(v["config"]), "wall_s": round(time.perf_counter() - t0, 3)}
+
+
+# ---------------------------------------------------------------- a config file in, a config file out
+
+#: the largest YAML text ``load_yaml`` will parse (a full config is 3 kB)
+YAML_MAX_BYTES = 200_000
+
+
+def export_yaml(values: dict[str, Any]) -> dict:
+    """The form's settings as a config file: what ``dump_config`` writes
+    (``load_config`` reads it back to the same config), under a comment line
+    that names the library version and the config's hash."""
+    import yaml
+
+    v = validate(values)
+    if not v["ok"]:
+        return {"ok": False, "error": v["error"], "field": v["field"]}
+    cfg: RadarConfig = v["config"]
+    sha = config_hash(cfg)
+    text = f"# fmcw_radar {__version__} -- config sha256 {sha}\n" + yaml.safe_dump(config_to_dict(cfg), sort_keys=False, allow_unicode=True)
+    return {"ok": True, "yaml": text, "filename": f"fmcw_radar_{sha[:8]}.yaml", "config_sha256": sha}
+
+
+def load_yaml(text: str) -> dict:
+    """A config file's text -> the form's values, through the loader a file
+    on disk goes through (``config_from_dict``).  What the schema refuses
+    comes back as its own sentence."""
+    import yaml
+
+    from .config.loader import config_from_dict
+
+    if not isinstance(text, str) or len(text.encode("utf-8")) > YAML_MAX_BYTES:
+        return {"ok": False, "error": f"a config file is text of at most {YAML_MAX_BYTES} bytes", "field": None}
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as e:
+        return {"ok": False, "error": f"not YAML: {str(e).splitlines()[0]}", "field": None}
+    if not isinstance(data, dict):
+        return {"ok": False, "error": "a config file is a mapping of sections (band:, chirp:, lo:, ...)", "field": None}
+    try:
+        cfg = config_from_dict(data)
+    except (ValueError, TypeError, KeyError) as e:
+        return {"ok": False, "error": str(e), "field": None}
+    return {"ok": True, "values": plain(guispec.values_from_config(cfg)), "config_sha256": config_hash(cfg)}
+
+
+def bundled_configs() -> list[str]:
+    """The config files that ship beside the library (a source checkout has
+    them; an installed wheel does not, and the list is empty)."""
+    d = Path(__file__).resolve().parents[2] / "configs"
+    return sorted(f.stem for f in d.glob("*.yaml")) if d.is_dir() else []
+
+
+def load_bundled(name: str) -> dict:
+    if name not in bundled_configs():
+        return {"ok": False, "error": f"no bundled config named {name!r}", "field": None}
+    return load_yaml((Path(__file__).resolve().parents[2] / "configs" / f"{name}.yaml").read_text(encoding="utf-8"))
 
 
 # ---------------------------------------------------------------- the time engine's frame

@@ -153,6 +153,56 @@ def test_a_sweep_in_its_own_process_reports_its_progress():
     assert len(seen - {None}) >= 2                                                         # it was seen moving
 
 
+def test_a_preview_at_once_and_the_full_run_from_a_process_of_its_own():
+    """The desktop host: a config on the cycle-accurate engine is answered
+    first by its preview, in the host's process; the full run comes from a
+    worker process that lives on between runs.  Of the full runs asked for
+    while one is going, only the newest is done."""
+    slow = {"chirp.n_chirps": 8}                              # cycle-accurate, 8 chirps: about a second
+    api = webhost.Api(backend="process")
+    try:
+        code, pre = api.call("run", {"values": slow, "preview": True})
+        assert code == 200 and pre["preview"]["shown"] == "response" and pre["values"]["lo.engine"] == "event"
+        code, full = api.call("run", {"values": slow, "final": True})
+        direct = guiutil.run_report(slow)
+        assert "preview" not in full and full["report"] == direct["report"] and full["repro"]["config_sha256"] == pre["repro"]["config_sha256"]
+        pid = api.reports._proc.pid
+        # three at once: the first is running, the second is overtaken by the third while it waits
+        got = {}
+
+        def ask(i):
+            got[i] = api.call("run", {"values": {**slow, "lo.loop_bw_hz": 1.2e6 + 1.0e5 * i}, "final": True})[1]
+
+        threads = [threading.Thread(target=ask, args=(i,)) for i in range(3)]
+        for t in threads:
+            t.start()
+            time.sleep(0.3)
+        for t in threads:
+            t.join(120)
+        assert got[1] == {"ok": True, "superseded": True}
+        assert [got[i]["values"]["lo.loop_bw_hz"] for i in (0, 2)] == [1.2e6, 1.4e6]
+        assert api.reports._proc.pid == pid                                              # the same process all along
+        # what the schema refuses is the same answer from there
+        assert api.call("run", {"values": {"mimo.n_rx": 2}, "final": True})[1]["field"] == "mimo.angle_window"
+    finally:
+        api.reports.close()
+    assert api.call("run", {"values": slow, "final": True})[1] == {"ok": True, "superseded": True}     # closed: nothing runs any more
+    # a host without processes does the full run itself
+    here = webhost.Api(backend="thread")
+    assert here.reports is None and here.call("run", {"values": slow, "final": True})[1]["report"] == direct["report"]
+
+
+def test_config_files_through_the_api():
+    api = webhost.Api(backend="thread")
+    assert api.call("configs") == (200, {"bundled": guiutil.bundled_configs()})
+    code, out = api.call("yaml/export", {"values": {"target.range_m": 7.0}})
+    assert code == 200 and out["ok"] and out["yaml"] == guiutil.export_yaml({"target.range_m": 7.0})["yaml"]
+    code, back = api.call("yaml/load", {"yaml": out["yaml"]})
+    assert back["ok"] and back["values"]["target.range_m"] == 7.0
+    assert api.call("yaml/load", {"name": "radar_60g_mimo"})[1]["values"]["mimo.n_rx"] == 4
+    assert api.call("yaml/load", {"yaml": "band: {kind: nope}"})[1]["ok"] is False and api.call("yaml/load", {})[1]["ok"] is False
+
+
 @pytest.fixture()
 def server():
     srv = webhost.make_server(0, backend="thread")

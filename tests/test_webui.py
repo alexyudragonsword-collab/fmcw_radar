@@ -308,6 +308,123 @@ def test_a_pinned_baseline_shows_which_way_the_numbers_moved(page):
     assert not page.evaluate("!!document.querySelector('.basetbl')") and page.evaluate("!!document.querySelector('[data-act=pin]')")
 
 
+# ---------------------------------------------------------------- a preview first; a config file out and in
+
+def test_a_loop_knob_shows_a_preview_first_and_the_cycle_accurate_run_after(page):
+    """The default config is on the cycle-accurate chirp engine: seconds per
+    run.  The page shows the linearised engine's run of the same settings at
+    once, says which numbers are not final, and swaps in the real one."""
+    _set(page, "chirp.n_chirps", 8)
+    _settled(page)
+    assert not page.evaluate("!!document.querySelector('.previewbar')")
+    values = {"chirp.n_chirps": 8, "lo.loop_bw_hz": 1.5e6}
+    final = guiutil.run_report(values)
+    ghosts = lambda: _tile(page, 2)                                                   # noqa: E731
+    _set(page, "lo.loop_bw_hz", 1.5)
+    page.wait_for_selector(".previewbar")
+    # the preview: marked, its chirp engine named, the ghost tile flagged, the busy mark saying what is still coming
+    bar = page.evaluate("document.querySelector('.previewbar').textContent")
+    assert "预览" in bar and "鬼目标每帧期望检出" in bar and "chirp 频率误差 RMS" in bar
+    assert page.evaluate("!!document.querySelector('.kpi .pv')") and "逐周期引擎计算中" in page.evaluate("document.getElementById('busy').textContent")
+    assert "response" in page.evaluate("document.querySelector('.engrow').textContent") and page.evaluate("document.querySelector('[data-act=pin]').disabled")
+    assert _tile(page, 1) == f"{final['metrics']['snr_cell_db']:.2f}dB"              # final already: not the chirp engine's number
+    assert page.evaluate("document.querySelector('[data-path=\"lo.engine\"]').value") == "event"   # the form still asks for what it asks for
+    # ... and then the real run
+    page.wait_for_selector(".previewbar", state="detached", timeout=60000)
+    _settled(page)
+    assert "event" in page.evaluate("document.querySelector('.engrow').textContent") and not page.evaluate("!!document.querySelector('.kpi .pv')")
+    assert ghosts().startswith(f"{final['metrics']['ghost_detections_per_frame']:.2f}") and not page.evaluate("document.querySelector('[data-act=pin]').disabled")
+    assert page.evaluate("document.querySelector('.kv').textContent").count(final["repro"]["config_sha256"]) == 1
+    # an edit while the full run is on its way: that run is dropped, the page ends on the newest settings
+    _set(page, "lo.loop_bw_hz", 0.8)
+    page.wait_for_selector(".previewbar")
+    _set(page, "lo.loop_bw_hz", 1.2)
+    page.wait_for_selector(".previewbar", state="detached", timeout=60000)
+    _settled(page)
+    last = guiutil.run_report({"chirp.n_chirps": 8, "lo.loop_bw_hz": 1.2e6})
+    assert page.evaluate("document.querySelector('.kv').textContent").count(last["repro"]["config_sha256"]) == 1
+    assert ghosts().startswith(f"{last['metrics']['ghost_detections_per_frame']:.2f}")
+    # on the linearised engine there is nothing to preview
+    _set(page, "lo.engine", "response")
+    _settled(page)
+    assert not page.evaluate("!!document.querySelector('.previewbar')")
+
+
+def test_a_full_run_of_older_settings_never_reaches_the_screen(browser):
+    """The desktop host: the full run comes from the worker process, so the
+    preview of a second edit can be on screen while the full run of the
+    first is still on its way.  When that one arrives it is not this page's
+    any more: the screen stays on the preview of the newer settings, still
+    marked as waiting, until their own full run is there."""
+    srv, url = _serve("process")
+    ctx = browser.new_context(viewport={"width": 1440, "height": 900})
+    p = ctx.new_page()
+    try:
+        p.goto(url)
+        p.wait_for_selector(".kpi")
+        _set(p, "chirp.n_chirps", 8)
+        p.wait_for_selector(".previewbar", state="detached", timeout=90000)
+        _settled(p)
+        sha = lambda v: guiutil.run_report({"chirp.n_chirps": 8, **v}, preview=True)["repro"]["config_sha256"]   # noqa: E731
+        a, b = sha({"lo.loop_bw_hz": 0.8e6}), sha({"lo.loop_bw_hz": 1.2e6})
+        on_screen = "document.querySelector('.kv').textContent"
+        # a watch: a preview on screen with nothing said to be coming would be a lie; so would run A's hash under form B
+        p.evaluate(f"""() => {{ window.__bad = []; setInterval(() => {{
+            const bar = !!document.querySelector('.previewbar'), busy = !document.getElementById('busy').hidden, kv = {on_screen};
+            if (bar && !busy) window.__bad.push('a preview with nothing coming');
+            if (window.__b && kv.includes('{a}')) window.__bad.push('the older run on screen');
+        }}, 15); }}""")
+        _set(p, "lo.loop_bw_hz", 0.8)
+        p.wait_for_function(f"!!document.querySelector('.previewbar') && {on_screen}.includes('{a}')")       # preview A; full run A now in the worker
+        _set(p, "lo.loop_bw_hz", 1.2)
+        p.wait_for_function(f"!!document.querySelector('.previewbar') && {on_screen}.includes('{b}')")       # preview B, with A still running
+        p.evaluate("window.__b = true")
+        p.wait_for_selector(".previewbar", state="detached", timeout=90000)
+        assert p.evaluate(on_screen).count(b) == 1 and p.evaluate("window.__bad") == []
+        final = guiutil.run_report({"chirp.n_chirps": 8, "lo.loop_bw_hz": 1.2e6})
+        assert p.evaluate("document.querySelectorAll('.kpi .v')[2].textContent.trim()").startswith(f"{final['metrics']['ghost_detections_per_frame']:.2f}")
+        assert "event" in p.evaluate("document.querySelector('.engrow').textContent")
+    finally:
+        ctx.close()
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_a_config_file_goes_out_of_the_page_and_comes_back(page, tmp_path):
+    _set(page, "lo.engine", "response")
+    _set(page, "target.range_m", 7)
+    _settled(page)
+    values = {"lo.engine": "response", "target.range_m": 7.0}
+    with page.expect_download() as dl:
+        page.click("[data-act=yamlsave]")
+    out = guiutil.export_yaml(values)
+    got = tmp_path / dl.value.suggested_filename
+    dl.value.save_as(got)
+    assert dl.value.suggested_filename == out["filename"] and got.read_text(encoding="utf-8") == out["yaml"]
+    assert out["filename"] in page.evaluate("document.querySelector('.yamlmsg').textContent")
+    # back to the defaults, then the file in again: the form is where it was
+    page.click("[data-act=reset]")
+    _settled(page)
+    assert page.evaluate("document.querySelector('[data-path=\"target.range_m\"]').value") == "5"
+    page.set_input_files("#yamlfile", str(got))
+    page.wait_for_function("document.querySelector('[data-path=\"target.range_m\"]').value === '7'")
+    _settled(page)
+    assert page.evaluate("document.querySelector('[data-path=\"lo.engine\"]').value") == "response"
+    assert page.evaluate("document.querySelector('.kv').textContent").count(out["config_sha256"]) == 1
+    # a file the schema refuses: its sentence, and the form untouched
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("band: {kind: nope}\n", encoding="utf-8")
+    page.set_input_files("#yamlfile", str(bad))
+    page.wait_for_selector(".yamlmsg.bad")
+    assert "band.kind must be one of" in page.evaluate("document.querySelector('.yamlmsg').textContent")
+    assert page.evaluate("document.querySelector('[data-path=\"target.range_m\"]').value") == "7"
+    # a bundled config from the menu
+    assert page.evaluate("[...document.querySelectorAll('[data-yaml=bundled] option')].map(o => o.value).filter(Boolean)") == guiutil.bundled_configs()
+    page.select_option("[data-yaml=bundled]", "radar_60g_mimo")
+    page.wait_for_function("document.querySelector('[data-path=\"mimo.n_rx\"]') && document.querySelector('[data-path=\"mimo.n_rx\"]').value === '4'", timeout=60000)
+    assert "radar_60g_mimo.yaml" in page.evaluate("document.querySelector('.yamlmsg').textContent")
+
+
 def test_cancel_stops_the_frame(browser):
     """The desktop backend: the 64-chirp frame takes seconds; cancel ends it
     at once and the page says when."""
