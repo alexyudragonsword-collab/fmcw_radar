@@ -35,6 +35,10 @@ def test_the_report_inside_is_the_command_lines(fast):
             node = node[k]
         assert fast["metrics"][name] == node, name
     assert fast["tags"] == guispec.tags(FAST) and fast["inert"] == guispec.inert(FAST) and fast["refused"] == guispec.refused_choices(FAST)
+    # a sourced number edited on the page is the user's assumption from then on; the table's own number is not an edit
+    edit = dict(FAST, **{"frontend.tx_power_dbm": 10.0})
+    assert fast["tags"]["frontend.tx_power_dbm"] == "spec" and guiutil.run_report(edit)["tags"]["frontend.tx_power_dbm"] == "assumed"
+    assert guiutil.run_report(dict(FAST, **{"frontend.tx_power_dbm": 12.0}))["tags"] == fast["tags"]
     assert fast["resolved"]["frontend.tx_power_dbm"] == {"value": 12.0, "source": "spec", "key": "60g_sensing.tx_power_dbm"}
     eng = {e["id"]: e for e in fast["engines"]}
     assert set(eng) == {"statistical", "chirp:response", "time"} and set(eng) <= set(guispec.ENGINES)

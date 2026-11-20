@@ -78,9 +78,13 @@ def test_cancel_terminates_the_process_and_a_new_frame_replaces_the_running_one(
     t0 = time.time()
     while api.queue.get(job["id"])["status"] != "running" and time.time() - t0 < 30:
         time.sleep(0.02)
+    proc = api.queue._procs[job["id"]]
+    assert proc.is_alive()
     assert api.call(f"jobs/{job['id']}/cancel", {})[1] == {"cancelled": True}
+    proc.join(5)
+    assert not proc.is_alive() and proc.exitcode not in (0, None)                        # terminated, not left to finish
     gone = _wait(api.queue, job["id"], timeout=15)
-    assert gone["status"] == "cancelled" and gone["result"] is None and gone["elapsed_s"] < 10
+    assert gone["status"] == "cancelled" and gone["result"] is None and gone["elapsed_s"] < 5
     assert api.call(f"jobs/{job['id']}/cancel", {})[1] == {"cancelled": False}            # nothing left to cancel
     code, a = api.call("frame", {"values": slow})
     code, b = api.call("frame", {"values": FAST})
@@ -129,11 +133,22 @@ def test_http_is_only_a_transport(server):
 
 def test_the_page_is_packaged_and_the_entry_point_exists():
     assert (webhost.WWW / "index.html").is_file() and (webhost.WWW / "app.js").is_file() and (webhost.WWW / "style.css").is_file()
-    import tomllib
     from conftest import REPO
 
-    meta = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
-    assert meta["project"]["scripts"]["fmcw-gui"] == "fmcw_radar.webhost:main"
-    assert any("webui/www" in p for p in meta["tool"]["setuptools"]["package-data"]["fmcw_radar"])
+    meta = (REPO / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'fmcw-gui = "fmcw_radar.webhost:main"' in meta and '"webui/www/*"' in meta
     with pytest.raises(SystemExit):
         webhost.main(["--help"])
+
+
+def test_the_page_names_nothing_outside_itself():
+    """No library, font, image or stylesheet from anywhere else: the three
+    files are the whole page (the same files go into the Android WebView)."""
+    import re
+
+    for f in sorted(webhost.WWW.iterdir()):
+        text = f.read_text(encoding="utf-8")
+        assert f.suffix in (".html", ".js", ".css"), f.name
+        assert not re.search(r"(https?:)?//[A-Za-z0-9]", text) and "@import" not in text and "url(" not in text, f.name
+    html = (webhost.WWW / "index.html").read_text(encoding="utf-8")
+    assert set(re.findall(r'(?:src|href)="([^"]+)"', html)) == {"data:,", "style.css", "app.js"}
