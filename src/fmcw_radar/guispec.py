@@ -366,7 +366,7 @@ STAGES: tuple[dict[str, Any], ...] = (
         _r("report.radar.velocity_res_mps", "速度分辨率", "velocity res.", "m/s", 3), _r("report.radar.max_velocity_mps", "不模糊速度 ±", "unambiguous ±", "m/s", 2)]},
     {"id": "rd", "lane": "dsp", "zh": "距离-多普勒图", "en": "Range-Doppler map", "lines": [
         _r("report.detection.snr_cell_db", "格点 SNR", "cell SNR", "dB", 2),
-        _r("report.phase_noise.floor[1.0].per_cell_dbc", "相噪底 +1 m", "PN floor at +1 m", "dBc/格", 1),
+        _r("report.phase_noise.floor[1.0].per_cell_dbc", "相噪底 +1 m,每格", "PN floor at +1 m, per cell", "dBc", 1),
         _r("plots.ghosts.strongest_dbc", "最强鬼目标", "strongest ghost", "dBc", 2)]},
     {"id": "cfar", "lane": "dsp", "zh": "CA-CFAR", "en": "CA-CFAR", "lines": [
         _c("processing.cfar_guard", "保护格", "guard cells"), _c("processing.cfar_train", "训练格", "training cells"),

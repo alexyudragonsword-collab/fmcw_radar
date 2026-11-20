@@ -4,6 +4,7 @@
 'use strict';
 const S = {lang:'zh', theme:'auto', spec:null, sources:{}, values:{}, tags:{}, inert:{}, refused:{}, resolved:{}, run:null, frame:null,
            error:null, pending:false, dirty:false, job:null, jobMsg:null, lastWall:null, mtab:'results', open:{}};
+Object.assign(S, {page:'workbench', sys:null, band:'current', sw:{path:'target.range_m', lo:null, hi:null, points:9, metric:'snr_cell_db'}, jobs:{sweep:null, bands:null}, kmsg:{}, baseline:null, bands:null, sweep:null, bandsFor:null, bandsShown:null});
 try{ const s = JSON.parse(localStorage.getItem('fmcw-ui')||'{}'); if(s.lang) S.lang=s.lang; if(s.theme) S.theme=s.theme; }catch(e){}
 function save(){ try{ localStorage.setItem('fmcw-ui', JSON.stringify({lang:S.lang, theme:S.theme})); }catch(e){} }
 const L = (zh,en) => S.lang==='zh' ? zh : en;
@@ -388,11 +389,12 @@ const TABS = [['results','结果','Results'],['params','参数','Params'],['budg
 function bnav(){ return `<nav class="bnav" aria-label="sections">${TABS.map(([k,zh,en])=>`<button data-act="mtab" data-tab-to="${k}" class="${S.mtab===k?'on':''}">${IC[k]}<span>${L(zh,en)}</span></button>`).join('')}</nav>`; }
 function workbench(){
   const stale = S.error ? `<div class="refusal" data-tab="results params budget pn"><b>${L('配置层不接受这组参数','The config refuses these settings')}</b><span>${esc(S.error.error)}</span><span class="spacer"></span><span style="color:var(--muted)">${L('下面仍是上一组合法参数的结果。','Below is still the last legal run.')}</span></div>` : '';
-  return `<div class="wb"><div class="wb-in" data-mtab="${S.mtab}">${paramsPanel()}<div class="main">${stale}${RUN ? kpis()+runbar()+rdCard()+budgetCard()+complianceCard()+pnCard()+timeCard()+reproCard() : `<div class="empty span2">${L('计算中…','computing…')}</div>`}</div>${bnav()}</div></div>`;
+  return `<div class="wb"><div class="wb-in" data-mtab="${S.mtab}">${paramsPanel()}<div class="main">${stale}${RUN ? kpis()+baselineCard()+runbar()+rdCard()+budgetCard()+complianceCard()+pnCard()+timeCard()+reproCard() : `<div class="empty span2">${L('计算中…','computing…')}</div>`}</div>${bnav()}</div></div>`;
 }
 function renderTop(){
   document.getElementById('langseg').innerHTML = `<button data-act="lang" data-v="zh" class="${S.lang==='zh'?'on':''}">中</button><button data-act="lang" data-v="en" class="${S.lang==='en'?'on':''}">EN</button>`;
   document.getElementById('themeseg').innerHTML = [['auto',L('自动','Auto')],['light',L('浅','Light')],['dark',L('深','Dark')]].map(([k,l])=>`<button data-act="theme" data-v="${k}" class="${S.theme===k?'on':''}" aria-label="theme ${k}">${l}</button>`).join('');
+  document.getElementById('pages').innerHTML = pnav();
   document.documentElement.lang = S.lang==='zh'?'zh-CN':'en';
   if(S.theme==='auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', S.theme);
   const b=document.getElementById('busy'); b.hidden=!S.pending; b.textContent=L('计算中','computing');
@@ -401,8 +403,8 @@ function render(){
   if(!S.spec) return;
   const act=document.activeElement; const keep = act && act.dataset && act.dataset.path ? {path:act.dataset.path, a:act.selectionStart, b:act.selectionEnd} : null;
   const sc=document.querySelector('.params'); const top=sc?sc.scrollTop:0;
-  renderTop();
-  document.getElementById('view').innerHTML = workbench();
+  S.page = route(); renderTop();
+  document.getElementById('view').innerHTML = S.page==='system' ? systemPage() : S.page==='bands' ? bandsPage() : S.page==='sweep' ? sweepPage() : workbench();
   const sc2=document.querySelector('.params'); if(sc2) sc2.scrollTop=top;
   if(keep){ const el=document.querySelector(`[data-path="${keep.path}"]`); if(el){ el.focus(); try{ el.setSelectionRange(keep.a, keep.b); }catch(e){} } }
   drawCharts();
@@ -417,6 +419,11 @@ function drawCharts(){
     else if(k==='tiers'){ const c=R().compliance; el.innerHTML=tiersSvg(w,c.sweep_ghz,c.governing,c.tiers); }
     else if(k==='lf') el.innerHTML=lfSvg(w);
     else if(k==='ghosts') el.innerHTML=ghostSvg(w);
+    else if(k==='sys') el.innerHTML=sysSvg();
+    else if(k==='levels') el.innerHTML=levelsSvg(w);
+    else if(k==='bands'){ if(S.bands && S.bands.applies) el.innerHTML=bandsSvg(w); }
+    else if(k==='btiers'){ const r=S.bands && S.bands.rows.find(x=>x.id===S.band); if(r) el.innerHTML=tiersSvg(w, r.sweep_ghz, r.governing, r.tiers); }
+    else if(k==='sweep'){ if(S.sweep) el.innerHTML=sweepSvg(w); }
   });
 }
 
@@ -426,7 +433,7 @@ function changed(){ S.dirty=true; clearTimeout(timer); timer=setTimeout(compute,
 async function compute(){
   if(S.pending){ S.dirty=true; return; }
   S.pending=true; S.dirty=false; renderTop();
-  let res; try{ res = await api('run', {values:S.values}); }catch(e){ res={ok:false, error:String(e), field:null, inert:S.inert, refused:S.refused}; }
+  let res; try{ res = await api('run', S.baseline ? {values:S.values, baseline:{values:S.baseline.values, metrics:S.baseline.metrics}} : {values:S.values}); }catch(e){ res={ok:false, error:String(e), field:null, inert:S.inert, refused:S.refused}; }
   S.pending=false;
   S.inert=res.inert||{}; S.refused=res.refused||{};
   if(res.ok){ S.run=res; S.error=null; S.values=res.values; S.tags=res.tags; S.resolved=res.resolved; RUN=adapt(res, S.frame); }
@@ -459,7 +466,7 @@ function showPop(tg){
   pop.style.left=x+'px'; pop.style.top=(r.bottom+window.scrollY+6)+'px';
 }
 document.addEventListener('click', async e=>{
-  const pop=document.getElementById('pop'); const tg=e.target.closest('.tag');
+  const pop=document.getElementById('pop'); const tg=e.target.closest('.tag, .stag');
   if(tg){ e.preventDefault(); showPop(tg); return; }
   if(!e.target.closest('#pop')) pop.style.display='none';
   const a=e.target.closest('[data-act]'); if(!a) return; const act=a.dataset.act;
@@ -470,10 +477,25 @@ document.addEventListener('click', async e=>{
   else if(act==='frame'){ S.jobMsg=null; const j=await api('frame', {values:S.values}); if(j.status==='error'){ S.jobMsg=esc(j.error); render(); } else { S.job=j; render(); poll(); } }
   else if(act==='cancel'){ if(S.job) await api('jobs/'+S.job.id+'/cancel', {}); }
   else if(act==='mtab'){ S.mtab=a.dataset.tabTo; const w=document.querySelector('.wb-in'); w.dataset.mtab=S.mtab; w.querySelectorAll('.bnav button').forEach(b=>b.classList.toggle('on',b===a)); window.scrollTo(0,0); drawCharts(); }
+  else if(act==='sysblk'){ S.sys = S.sys===a.dataset.id ? null : a.dataset.id; const sc=document.querySelector('.sysscroll'); const left=sc?sc.scrollLeft:0; render(); const sc2=document.querySelector('.sysscroll'); if(sc2) sc2.scrollLeft=left; }
+  else if(act==='band'){ if(e.target.closest('button')) return; S.band=a.dataset.band; render(); }
+  else if(act==='useband'){ const r=S.bands.rows.find(x=>x.id===a.dataset.band); Object.assign(S.values, r.apply); location.hash='#workbench'; changed(); }
+  else if(act==='bandsrun'){ S.bandsFor=null; render(); }
+  else if(act==='sweeprun'){ const c=swCtl(), E=swEnds(); startJob('sweep', {values:S.run.values, path:S.sw.path, lo:E.lo*c.scale, hi:E.hi*c.scale, points:S.sw.points}); }
+  else if(act==='usepoint'){ S.values[S.sweep.path]=S.sweep.points[+a.dataset.pt].x; location.hash='#workbench'; changed(); }
+  else if(act==='kcancel'){ const j=S.jobs[a.dataset.kind]; if(j) await api('jobs/'+j.id+'/cancel', {}); }
+  else if(act==='pin'){ if(S.run){ S.baseline={values:Object.assign({}, S.run.values), metrics:S.run.metrics, sha:S.run.repro.config_sha256}; compute(); } }
+  else if(act==='unpin'){ S.baseline=null; if(S.run) delete S.run.baseline; render(); }
   else if(act==='copy'){ const t=a.dataset.copy; try{ await navigator.clipboard.writeText(t); a.textContent=L('已复制','Copied'); }catch(err){ a.textContent=L('请手动选中复制','select and copy by hand'); } setTimeout(()=>{ a.textContent=L('复制','Copy'); },1200); }
 });
 document.addEventListener('change', async e=>{
-  const el=e.target; const p=el.dataset && el.dataset.path; if(!p) return; const c=S.spec.controls.find(x=>x.path===p);
+  const el=e.target;
+  if(el.dataset && el.dataset.sw){ const k=el.dataset.sw;
+    if(k==='path'){ S.sw.path=el.value; S.sw.lo=null; S.sw.hi=null; }
+    else if(k==='metric') S.sw.metric=el.value;
+    else { const n=parseFloat(el.value.replace('−','-')); if(!isNaN(n)) S.sw[k] = k==='points' ? Math.max(2, Math.min(S.spec.sweep_max_points, Math.round(n))) : n; }
+    render(); return; }
+  const p=el.dataset && el.dataset.path; if(!p) return; const c=S.spec.controls.find(x=>x.path===p);
   let v=el.value;
   if(el.tagName==='SELECT'){ v = c.kind==='bool' ? v==='true' : (v===''?null:v); }
   else if(v.trim()===''){ if(!c.kind.startsWith('opt_')){ render(); return; } v=null; }
@@ -485,6 +507,7 @@ document.addEventListener('change', async e=>{
 });
 document.addEventListener('toggle', e=>{ const d=e.target; if(d.dataset && d.dataset.key) S.open[d.dataset.key]=d.open; }, true);
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') document.getElementById('pop').style.display='none'; if(e.key==='Enter' && e.target.dataset && e.target.dataset.path) e.target.blur(); });
+window.addEventListener('hashchange', ()=>{ window.scrollTo(0,0); render(); });
 let rz=null; window.addEventListener('resize', ()=>{ clearTimeout(rz); rz=setTimeout(drawCharts,120); });
 
 (async function boot(){

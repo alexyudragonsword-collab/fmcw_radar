@@ -69,11 +69,17 @@ fmcw-gui --no-open --port 0   # 只起服务,打印地址;Ctrl+C 停
 每个外部数字旁边是出处标签,点开看来源表的条目;在页面上改过的数标 `assumed`。灰掉的控件写着在什么设置下才起作用;配置层不收的改动,它的原话显示在页顶,上一次合法结果留着。
 距离-多普勒图来自时域引擎的一帧(约 6.5 s),是一个带进度、可取消的任务;统计引擎的结论不依赖它。可复现卡给 seed、配置哈希、vendored pin 与等价的 Python 调用。
 
+另外三页读同一份当前参数(参数只在工作台改):
+- **系统框图**:整条链 25 个环节,每一级的数、出处标签和这一级之后的量;电平图;三个引擎各算哪一段。
+- **频段取舍**:当前扫频和四个候选,每一行是一份真的配置(回退到刚好压在治理档上限),数是那份配置自己的报告;"用这一档"把表单改过去。
+- **扫描**:一个数值控件从一头到另一头(2–41 点),看一个结论数;"用这个值"写回表单。逐周期引擎下 9 点要 9–35 s,是带进度、可取消的任务。
+- 工作台上的**基线**:钉住当前一组参数,之后每次改动列出变了哪些控件、每个结论数朝哪边动。
+
 分层(页面只画不算):
 - `fmcw_radar.guispec` 描述:`controls()`(默认值读自 `RadarConfig()`)、`resolve(cfg, path)`(留空字段背后库实际取的数、出处标签、来源表的键)、`tags(values)`、
   `inert(values)`、`refused_choices(values)`、`values_to_config(values)`(经 `config_from_dict`,与读 YAML 同一条路)、`band_switch(values, kind)`、`spec()`。值一律用配置的 SI 单位。
-- `fmcw_radar.guiutil` 计算:`run_report(values)`(其中 `report` 就是 `report.build(cfg)`)、`run_frame(values)`(时域引擎一帧 + 过门限格的分类)、`validate(values)`、`config_hash(cfg)`。
-- `fmcw_radar.webhost` 分发:`Api().call(route, req) -> (code, payload)`;路由 `version` / `spec` / `config` / `sources` / `run` / `validate` / `band` / `frame` / `jobs` / `jobs/<id>` / `jobs/<id>/cancel`,
+- `fmcw_radar.guiutil` 计算:`run_report(values)`(其中 `report` 就是 `report.build(cfg)`)、`run_frame(values)`(时域引擎一帧 + 过门限格的分类)、`band_tradeoff(values)`、`run_sweep(values, path, lo, hi, points)`、`run_report(values, baseline)`(带基线对比)、`validate(values)`、`config_hash(cfg)`。
+- `fmcw_radar.webhost` 分发:`Api().call(route, req) -> (code, payload)`;路由 `version` / `spec` / `config` / `sources` / `run` / `validate` / `band` / `frame` / `sweep` / `bands` / `jobs` / `jobs/<id>` / `jobs/<id>/cancel`,
   HTTP 下在 `/api/` 之后。不经浏览器也能用:`Api(backend="thread").call("run", {"values": {"target.range_m": 10.0}})`。
 
 ## 工具
