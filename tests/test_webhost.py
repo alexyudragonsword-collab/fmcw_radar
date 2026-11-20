@@ -192,7 +192,7 @@ def test_http_is_only_a_transport(server):
 
 
 def test_the_page_is_packaged_and_the_entry_point_exists():
-    assert (webhost.WWW / "index.html").is_file() and (webhost.WWW / "app.js").is_file() and (webhost.WWW / "style.css").is_file()
+    assert (webhost.WWW / "index.html").is_file() and (webhost.WWW / "app.js").is_file() and (webhost.WWW / "pages.js").is_file() and (webhost.WWW / "style.css").is_file()
     from conftest import REPO
 
     meta = (REPO / "pyproject.toml").read_text(encoding="utf-8")
@@ -209,6 +209,6 @@ def test_the_page_names_nothing_outside_itself():
     for f in sorted(webhost.WWW.iterdir()):
         text = f.read_text(encoding="utf-8")
         assert f.suffix in (".html", ".js", ".css"), f.name
-        assert not re.search(r"(https?:)?//[A-Za-z0-9]", text) and "@import" not in text and "url(" not in text, f.name
+        assert not re.search(r"(https?:)?//[A-Za-z0-9]", text) and "@import" not in text and not re.search(r"url\((?!#)", text), f.name   # url(#id) is the page's own SVG marker
     html = (webhost.WWW / "index.html").read_text(encoding="utf-8")
-    assert set(re.findall(r'(?:src|href)="([^"]+)"', html)) == {"data:,", "style.css", "app.js"}
+    assert set(re.findall(r'(?:src|href)="([^"]+)"', html)) == {"data:,", "style.css", "pages.js", "app.js"}

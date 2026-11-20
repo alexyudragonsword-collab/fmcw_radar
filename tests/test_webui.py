@@ -164,6 +164,143 @@ def test_the_time_engine_is_a_job_and_its_frame_knows_its_settings(page):
     assert page.evaluate("document.querySelector('[data-chart=\"rd\"]').classList.contains('dim')")
 
 
+# ---------------------------------------------------------------- P3: the system diagram, the band table, the sweep, the baseline
+
+_OVERFLOW = """() => { const out = []; document.querySelectorAll('svg.sys .blk').forEach(g => { const r = g.querySelector('rect').getBBox();
+  g.querySelectorAll('.bl,.bo,.bt').forEach(t => { const tb = t.getBBox();
+    const chip = [...g.querySelectorAll('.stag')].find(s => Math.abs(s.getBBox().y + 10 - (tb.y + tb.height - 3)) < 6);
+    const lim = chip ? chip.getBBox().x - 2 : r.x + r.width - 6;
+    if (tb.x + tb.width > lim) out.push([g.dataset.id, t.textContent]); }); }); return out; }"""
+
+
+def _go(p, name):
+    p.click(f"a[data-page={name}]")
+    p.wait_for_selector(f".pnav a.on[data-page={name}]")                    # the page has been drawn, not only the address changed
+
+
+def test_the_system_diagram_draws_the_runs_stages(page):
+    _set(page, "lo.engine", "response")
+    _set(page, "frontend.tx_power_dbm", 10)
+    _settled(page)
+    ref = guiutil.run_report({"lo.engine": "response", "frontend.tx_power_dbm": 10.0})
+    _go(page, "system")
+    page.wait_for_selector("svg.sys")
+    stages = {s["id"]: s for s in ref["system"]["stages"]}
+    assert page.evaluate("[...document.querySelectorAll('svg.sys .blk')].map(g => g.dataset.id)") == list(stages) and len(stages) == 25
+    # the optional stages not in play are drawn as options; the rest are not
+    assert set(page.evaluate("[...document.querySelectorAll('svg.sys .blk.dashed')].map(g => g.dataset.id)")) == {i for i, s in stages.items() if not s["active"]} == {"leak", "hpf", "dbf"}
+    # numbers are the run's: the conducted power after the transmitter, the EIRP after the antenna, the resolution
+    text = lambda i: page.evaluate(f"document.querySelector('svg.sys .blk[data-id={i}]').textContent")      # noqa: E731
+    assert f"{stages['pa']['out']['value']:.2f} dBm" in text("pa") and f"{stages['txant']['out']['value']:.2f} dBm" in text("txant")
+    assert f"{ref['metrics']['range_res_m'] * 100:.2f} cm" in text("rfft") and "✓" in text("comp")
+    # a number edited on the page is assumed in the diagram too, and its chip opens the same note
+    assert page.evaluate("document.querySelector('svg.sys .blk[data-id=pa] .stag').getAttribute('class')") == "stag t-assumed"
+    page.click("svg.sys .blk[data-id=pa] .stag")
+    assert "assumed" in page.evaluate("document.getElementById('pop').textContent") and "frontend.tx_power_dbm" in page.evaluate("document.getElementById('pop').textContent")
+    page.keyboard.press("Escape")
+    # no line runs out of its box, in either language
+    assert page.evaluate(_OVERFLOW) == []
+    page.click("[data-act=lang][data-v=en]")
+    assert page.evaluate(_OVERFLOW) == [] and "conducted" in text("pa")
+    page.click("[data-act=lang][data-v=zh]")
+    # a stage and its row in the table below
+    assert page.evaluate("document.querySelectorAll('.stages tbody tr').length") == 25
+    page.click("svg.sys .blk[data-id=mix] rect")
+    assert page.evaluate("[...document.querySelectorAll('.stages tr.hl')].map(r => r.dataset.id)") == ["mix"]
+    assert page.evaluate("document.querySelectorAll('[data-chart=levels] circle').length") == 10          # now and full power, five points each
+
+
+def test_a_band_row_can_be_taken_into_the_form(page):
+    _set(page, "lo.engine", "response")
+    _settled(page)
+    ref = {r["id"]: r for r in guiutil.band_tradeoff({"lo.engine": "response"})["rows"]}
+    _go(page, "bands")
+    page.wait_for_selector(".btable tbody tr", timeout=60000)
+    assert page.evaluate("[...document.querySelectorAll('.btable tbody tr')].map(r => r.dataset.band)") == list(ref)
+    row = lambda i: page.evaluate(f"document.querySelector('.btable tr[data-band=\"{i}\"]').textContent")   # noqa: E731
+    for i, r in ref.items():
+        assert f"{r['metrics']['snr_cell_db']:.2f} dB" in row(i) and f"{r['detection_range_m']:.1f} m" in row(i) and f"{r['limit_dbm']:.0f} dBm" in row(i)
+    assert "当前" in row("current") and page.evaluate("document.querySelectorAll('[data-chart=bands] svg').length") == 1
+    # take the indoor band: the form is on that row's config, and the workbench shows that row's SNR
+    page.click('.btable tr[data-band="57_59p4_indoor"] [data-act=useband]')
+    page.wait_for_selector(".pnav a.on[data-page=workbench]")
+    _settled(page)
+    assert _tile(page, 1) == f"{ref['57_59p4_indoor']['metrics']['snr_cell_db']:.2f}dB" and _tile(page, 0) == "通过"
+    page.evaluate("document.querySelectorAll('details').forEach(d => d.open = true)")
+    assert page.evaluate("document.querySelector('[data-path=\"band.sweep_hz\"]').value") == "2.4"
+    assert page.evaluate("document.querySelector('[data-path=\"regulatory.scenario\"]').value") == "indoor"
+    assert page.evaluate("document.querySelector('[data-fld=\"frontend.tx_backoff_db\"] .tag').textContent") == "assumed"
+    # back on the band page the table is this config's: its first row is where the form now is
+    _go(page, "bands")
+    page.wait_for_function("(document.querySelector('.btable tr[data-band=current]') || {textContent: ''}).textContent.includes('57–59.4 GHz')", timeout=60000)
+    # where the rule does not apply the page says why instead of a table
+    _go(page, "workbench")
+    _set(page, "band.kind", "77g_automotive")
+    _settled(page)
+    _go(page, "bands")
+    page.wait_for_selector(".bp .empty", timeout=60000)
+    assert "57-71 GHz" in page.evaluate("document.querySelector('.bp .empty').textContent") and not page.evaluate("!!document.querySelector('.btable')")
+
+
+def test_a_sweep_runs_as_a_job_and_a_point_can_be_taken(page):
+    _set(page, "lo.engine", "response")
+    _settled(page)
+    _go(page, "sweep")
+    # the form starts at half to twice the current value
+    assert page.evaluate("[document.querySelector('[data-sw=lo]').value, document.querySelector('[data-sw=hi]').value]") == ["2.5", "10"]
+    page.fill("[data-sw=points]", "4")
+    page.press("[data-sw=points]", "Enter")
+    page.click("[data-act=sweeprun]")
+    page.wait_for_selector("[data-chart=sweep] svg", timeout=60000)
+    ref = guiutil.run_sweep({"lo.engine": "response"}, "target.range_m", 2.5, 10.0, 4)
+    assert page.evaluate("document.querySelectorAll('[data-chart=sweep] .swp').length") == 4
+    cells = page.evaluate("[...document.querySelectorAll('.swtbl tbody tr')].map(r => [r.cells[0].textContent, r.cells[1].textContent])")
+    assert cells == [[f"{p['x']:g}", f"{p['metrics']['snr_cell_db']:.2f}"] for p in ref["points"]]
+    # a value the config refuses is a cross with the schema's sentence, not a number
+    page.select_option("[data-sw=path]", "frontend.tx_backoff_db")
+    for k, v in (("lo", "-2"), ("hi", "2"), ("points", "3")):
+        page.fill(f"[data-sw={k}]", v)
+        page.press(f"[data-sw={k}]", "Enter")
+    page.click("[data-act=sweeprun]")
+    page.wait_for_selector("[data-chart=sweep] .swx", timeout=60000)
+    assert page.evaluate("[document.querySelectorAll('[data-chart=sweep] .swx').length, document.querySelectorAll('[data-chart=sweep] .swp').length]") == [1, 2]
+    assert "frontend.tx_backoff_db" in page.evaluate("document.querySelector('.swtbl tr.dim').textContent")
+    # take the last point: the form holds it
+    page.click(".swtbl tbody tr:last-child [data-act=usepoint]")
+    page.wait_for_selector(".pnav a.on[data-page=workbench]")
+    _settled(page)
+    assert page.evaluate("document.querySelector('[data-path=\"frontend.tx_backoff_db\"]').value") == "2"
+    assert "EIRP 20.0 / 14 dBm" in page.evaluate("document.querySelector('.kpi .d').textContent") and _tile(page, 0) != "通过"
+    # the sweep on screen was made from other settings now, and says so
+    _go(page, "sweep")
+    assert "上一组参数" in page.evaluate("document.querySelector('.sp-page h2').textContent")
+
+
+def test_a_pinned_baseline_shows_which_way_the_numbers_moved(page):
+    _set(page, "lo.engine", "response")
+    _settled(page)
+    base = guiutil.run_report({"lo.engine": "response"})
+    page.click("[data-act=pin]")
+    page.wait_for_selector(".basechg")
+    assert not page.evaluate("!!document.querySelector('.basetbl')")                                    # nothing moved yet
+    _set(page, "target.range_m", 10)
+    page.wait_for_selector(".basetbl")
+    _settled(page)
+    cmp_ = guiutil.run_report({"lo.engine": "response", "target.range_m": 10.0}, {"values": {"lo.engine": "response"}, "metrics": base["metrics"]})["baseline"]
+    moved = [k for k, r in cmp_["metrics"].items() if r["delta"]]
+    assert page.evaluate("[...document.querySelectorAll('.basetbl tbody tr')].map(r => r.dataset.metric)") == moved
+    snr = cmp_["metrics"]["snr_cell_db"]
+    row = page.evaluate("document.querySelector('.basetbl tr[data-metric=snr_cell_db]').textContent")
+    assert f"{snr['base']:.2f}" in row and f"{snr['now']:.2f}" in row and f"−{abs(snr['delta']):.2f} dB" in row
+    assert page.evaluate("document.querySelector('.basetbl tr[data-metric=snr_cell_db] .pill').dataset.verdict") == "worse" == snr["verdict"]
+    assert "5 m → 10 m" in page.evaluate("document.querySelector('.basechg').textContent")
+    _set(page, "target.range_m", 3)
+    _settled(page)
+    assert page.evaluate("document.querySelector('.basetbl tr[data-metric=snr_cell_db] .pill').dataset.verdict") == "better"
+    page.click("[data-act=unpin]")
+    assert not page.evaluate("!!document.querySelector('.basetbl')") and page.evaluate("!!document.querySelector('[data-act=pin]')")
+
+
 def test_cancel_stops_the_frame(browser):
     """The desktop backend: the 64-chirp frame takes seconds; cancel ends it
     at once and the page says when."""
@@ -205,6 +342,16 @@ def test_language_theme_and_phone_width(browser):
         assert p.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth") == 0
         p.click('.bnav [data-tab-to="budget"]')
         assert p.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth") == 0
+        # the other pages at this width: four links in the header, nothing wider than the screen
+        assert p.evaluate("document.querySelectorAll('.pnav a').length") == 4
+        for name, sel in (("system", "svg.sys"), ("bands", ".bcards .bcard"), ("sweep", ".swform")):
+            p.click(f"a[data-page={name}]")
+            p.wait_for_selector(sel, timeout=90000)
+            assert p.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth") == 0, name
+            if name == "bands":
+                assert p.evaluate("getComputedStyle(document.querySelector('.btable')).display") == "none"       # cards, not the wide table
+        p.click("a[data-page=workbench]")
+        p.wait_for_selector(".pnav a.on[data-page=workbench]")
         n = p.evaluate("document.querySelectorAll('.fld').length")
         p.click('[data-act=lang][data-v=en]')
         assert p.evaluate("document.querySelector('.params h2').textContent") == "Parameters" and p.evaluate("document.querySelectorAll('.fld').length") == n
