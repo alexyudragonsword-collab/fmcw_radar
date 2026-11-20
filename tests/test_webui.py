@@ -202,6 +202,13 @@ def test_the_system_diagram_draws_the_runs_stages(page):
     assert page.evaluate(_OVERFLOW) == []
     page.click("[data-act=lang][data-v=en]")
     assert page.evaluate(_OVERFLOW) == [] and "conducted" in text("pa")
+    # ... nor in a font wider than the one the sheet was laid out in (another machine's): the line is squeezed, not cut
+    page.evaluate("document.documentElement.style.setProperty('--sans', 'monospace')")
+    for lang in ("zh", "en"):
+        page.click(f"[data-act=lang][data-v={lang}]")
+        assert page.evaluate(_OVERFLOW) == [], lang
+    assert page.evaluate("document.querySelectorAll('svg.sys text[textLength]').length") > 0
+    page.evaluate("document.documentElement.style.removeProperty('--sans')")
     page.click("[data-act=lang][data-v=zh]")
     # a stage and its row in the table below
     assert page.evaluate("document.querySelectorAll('.stages tbody tr').length") == 25
