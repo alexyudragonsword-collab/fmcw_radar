@@ -1,11 +1,11 @@
 ---
 type: project_topic
 status: active
-summary: "图形界面的决定与分层:一份网页界面三个宿主(桌面应用窗口 / 浏览器 / Android WebView),描述 guispec / 计算 guiutil / 分发与队列 webhost、appbridge / 画 webui,页面只画不算;界面方案是'方案 A 的风格 + 方案 B 的九处 + 系统框图页'(合并稿)。P1 已做:guispec(88 个控件 = 配置字段,默认值读出不手填,留空字段背后的数走库自己的查找,条件 when 与读数处 seen)和'每个旋钮拨一格'的测试。拨旋钮摸出四件事:一个没人读的字段、response 引擎静默不做在线校准、IF 高通只在时域引擎里起作用、两个虚拟阵元配 Hann 角窗测角是垃圾值;第二、四件 0.2.22 起由配置层拒绝。"
+summary: "图形界面的决定与分层:一份网页界面三个宿主(桌面应用窗口 / 浏览器 / Android WebView),描述 guispec / 计算 guiutil / 分发与队列 webhost、appbridge / 画 webui,页面只画不算;界面方案是'方案 A 的风格 + 方案 B 的九处 + 系统框图页'(合并稿)。P1 已做(guispec,0.2.21);P2 已做(guiutil、webhost、工作台页与浏览器测试,0.2.23);P3 系统框图 / 频段取舍 / 基线扫描、P4 Android 没做。"
 tags: [gui, guispec, web, android, form, provenance]
 contains: [decision, lesson, pitfall]
 created: "2026-11-19"
-updated: "2026-11-19"
+updated: "2026-11-20"
 related: [architecture-invariants, regulatory-compliance, mimo-angle, chirp-engine]
 authoring_mode: ai_generated
 ---
@@ -16,7 +16,7 @@ authoring_mode: ai_generated
 - **做法照 polar_tx / array_tx**(它们的 `cairn/gui-redesign.md`、`cairn/gui.md`):一份网页界面,桌面应用窗口、浏览器、Android WebView 三个宿主共用;
   分层是 描述(`guispec`)/ 计算(`guiutil`)/ 分发与队列(`webhost`、`appbridge`)/ 画(`webui`)。**页面只画不算**:标签、单位、范围、默认值、哪个控件此刻不起作用,
   都从 Python 来。
-- **形态是实时工作台**:统计引擎快(线性化 chirp 引擎下一份报告 0.1 s,逐周期引擎 8 个 chirp 1.2 s、默认 64 个 3.4 s),拨旋钮、图跟着变;只有时域引擎是长任务
+- **形态是实时工作台**:统计引擎快(线性化 chirp 引擎下一份报告 0.1 s,逐周期引擎 8 个 chirp 1.2 s、默认 64 个 3.4 s;**更正(0.2.23)**:3.4 s 只是第一次与动环路参数时,其余 0.9 s,见 P2 实测),拨旋钮、图跟着变;只有时域引擎是长任务
   (单通道 6.7 s,MIMO 约 30 s),要进度与取消。
 - **界面方案**(2026-11-19 用户定):两份效果图由两个独立的设计按同一份简报、同一份真实数据各出一份;用户选了方案 A 的风格,并要求补入方案 B 可取之处、加一张详细的系统框图。
   合并稿(私有页面)https://claude.ai/artifact/NBod3d8drNbQPbWy6v15k8 ,要点:
@@ -27,7 +27,7 @@ authoring_mode: ai_generated
   - 系统框图页:chirp 发生器 / 射频链路与信道 / 数字处理三条泳道 24 个环节,各带参数、标签与这一级之后的量;电平图;三个引擎各算哪一段;
   - 手机宽度(≤ 760 px)底部导航,页面不横向滚动;中英双语;浅色 / 深色。
   没有采用:单独的"运行(统计)"按钮(工作台是实时的)。还没画:MIMO 测角界面(框图里只是一个虚线框)。
-- **分阶段**,每阶段单独 PR:P0 效果图(已做)→ **P1 界面规格层 guispec + "每个旋钮都拨得动"(已做,0.2.21)** → P2 guiutil(报告 + 图数据 + 引擎行 + 可复现卡)与本地宿主、新工作台
+- **分阶段**,每阶段单独 PR:P0 效果图(已做)→ **P1 界面规格层 guispec + "每个旋钮都拨得动"(已做,0.2.21)** → **P2 guiutil(报告 + 图数据 + 引擎行 + 可复现卡)与本地宿主、工作台页(已做,0.2.23)**
   → P3 系统框图页、频段取舍页、基线 / 扫描 → P4 Android。
 
 ## P1:`guispec.py`(只描述,不算物理)
@@ -79,17 +79,48 @@ polar_tx 的经验:一个摆在那里却不起作用的控件、一个被库静�
 
 另:`sim.time_osr` 是时域引擎的参数,但统计引擎的"期望格点 SNR"按时域引擎看得到的带宽积相噪,所以它也让报告动一点(1.25 → 1.5:`cfar.snr_look_db` 差 0.0014 dB)——设计如此,不是问题。
 
-## 给 P2 留的
+## P2:`guiutil` / `webhost` / 工作台页(0.2.23)
 
-- 库里还没有:配置哈希函数(效果图里用的是规范化 JSON 的 sha256)、CFAR 过门限格的分类(目标主瓣 / 鬼目标 / 泄漏 / 目标多普勒行 / 其余,效果图里是数据脚本按位置贴的)、
-  距离-多普勒图与 L(f) 曲线的"图数据"接口。这些归 `guiutil`。
-- 报告里的 `config` 标签到页面上按 `guispec.tags` 显示;满功率 / 合规回退两列对照要跑两份报告(回退 0 与当前值)。
-- 页面的"此刻不起作用"用 `inert(values)` 的结果,不要在 JS 里重写条件。
+- **`guiutil.py` 只编排库自己的入口,不新算物理**。`run_report(values)` 里的 `report` 就是 `report.build(cfg)`(测试逐值比);满功率一列是同一份配置把回退设成 0
+  再走 `link_budget` / `leakage_budget` / `with_compression` / `compliance_check`(测试要求它等于 `run_statistical(回退 0).budget`);图数据(L(f) 与分项、目标处残余、
+  鬼目标、电平、帧时序)都取自库已经算出的对象。一次运行还带 `tags` / `inert` / `refused` / `resolved`(guispec 的)、13 个 `metrics`、引擎行、可复现卡。
+  P1 说库里缺的三样在这里:`config_hash`(规范化 JSON 的 sha256;填来源表原数与留空哈希相同)、`classify_cells`(过门限格按位置贴标签,顺序:泄漏 → 目标主瓣 →
+  别的目标主瓣 → 鬼目标 → 目标多普勒行 → 其余)、`run_frame`(时域引擎一帧,图按块取最大池化到 ≤ 64×150)。
+- **`webhost.py`:`Api.call(route, req) -> (code, payload)` 是接口,HTTP 只是传输**(标准库 `http.server`,只听 127.0.0.1,只发 `webui/www/` 里的文件)。
+  配置层拒绝的是一个回答(200,`ok: false` + schema 的原话 + 字段),不是错误状态。时域帧是任务:`JobQueue` 进程后端(桌面;取消 = terminate)/ 线程后端
+  (没有多进程的宿主,跑完丢结果);新任务顶掉在跑的;上一帧的耗时作下一帧的 `eta_s`,第一次没有估计就写"没有耗时可估"。P4 的 Android 桥调同一个 `Api`。
+- **页面 `webui/www/`(index.html 0.7 kB、app.js 56 kB、style.css 28 kB)是手写源文件,没有构建步骤、不引任何外部资源**(测试扫三份文件里没有 URL)。
+  它只画:控件清单、标签、单位、置灰原因、被拒选项、每个数都来自 `/api/spec` 与 `/api/run`。改一个数 250 ms 后重算,同时只有一个请求在途(在途时再改,回来后补发最新的)。
+  配置层拒绝时:原话放在页顶、字段标红、上一次合法结果留在屏上、时域按钮禁用。跑过的帧记着自己的配置哈希,参数一变图变淡并写"上一组参数"。
+- **实测耗时**(本机,决定"实时"到什么程度):线性化引擎一份报告 0.2 s;逐周期引擎(默认)第一次 3.2 s,之后只改环路以外的旋钮 0.84–0.92 s(chirp 结果有缓存),
+  改环路参数又是 3.3 s;时域一帧 6.5 s(64 chirp),回传 63 kB;一次运行的 JSON 31–36 kB。
+- **浏览器测试 `tests/test_webui.py`(7 条,Playwright + Chromium,对着真的本地宿主)**:页面上的数等于 `guiutil` 给的;拨一个数结果跟着变、改过的数标 assumed、
+  敲回原数标签复原;拒绝的原话到控件旁、旧结果保留;置灰集合等于 `guispec.inert`;时域任务跑完出图、换参数后标"上一组参数";取消;390 px 底部导航不横向滚动、中英、深浅。
+  没装驱动时跳过;CI 的 `test-gui` 作业装驱动并设 `FMCW_REQUIRE_BROWSER=1`,跳过即红。
+
+### P2 的坑(contains:pitfall)
+
+- **破坏性检查抓到两条"测了但没测到"**:去掉取消里的 `terminate()`,原测试照过(64 chirp 的帧 6.5 s 自己跑完,落在"< 10 s"里)——现在直接断言进程已死且退出码非 0;
+  `guiutil` 把标签写死成默认的,guiutil 的测试照过(基准设置里没改带出处的数)——现在测 12 → 10 dBm 标 assumed、敲回 12 复原。
+- 带 `display` 的类会盖掉 `hidden` 属性:"计算中"的提示一直亮着。每个这样的类配一条 `[hidden]{display:none}`。
+- 完整版 Chromium 会去要 `/favicon.ico`,404 进控制台,"控制台无错误"的断言就红;页面声明一个空图标(`href="data:,"`)。
+- 8 个 chirp 的多普勒格太粗(±12.5 m/s 只有 8 行):泄漏、目标多普勒行会吃掉本该是"其余"的格;分类规则的测试用 64 chirp。
+- `tomllib` 是 3.11 才有的,CI 有 3.10;测试读 `pyproject.toml` 用字符串包含。
+
+## 给 P3 留的
+
+- 没做:系统框图页、频段取舍页、基线 / 扫描、MIMO 测角界面;`target.extra_targets`(表)在页面上只读;页面不能载入 / 导出 YAML。
+- 距离-多普勒图上:多目标时主瓣框是一个包住所有目标的框;泄漏格没有单独的画法(并在"其余"的记号里)。
+- 关掉应用窗口不会停本地服务(Ctrl+C 停)。polar_tx 有"窗口关了就退"的心跳,这里没搬。
+- 默认是逐周期引擎:拨环路参数一次 3.3 s,不算"实时"。页面如实写耗时,没有替用户换引擎。
 
 ## 复现
 
 ```
 pytest tests/test_guispec.py                       # 契约与"每个旋钮拨一格"
+pytest tests/test_guiutil.py tests/test_webhost.py  # 一次运行 = 库自己的入口;Api、任务、取消
+pip install -e ".[gui-test]" && python -m playwright install chromium && pytest tests/test_webui.py   # 页面在真浏览器里
+fmcw-gui            # 应用窗口;--tab 浏览器标签页;--no-open 只起服务(默认 127.0.0.1:8766)
 python -c "from fmcw_radar import guispec as g; print(len(g.controls()), list(g.HIDDEN), sorted(g.inert({})))"
 python -c "import json; from fmcw_radar import guispec as g; print(json.dumps(g.spec(), ensure_ascii=False)[:400])"
 ```

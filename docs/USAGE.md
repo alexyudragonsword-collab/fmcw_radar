@@ -57,12 +57,24 @@ blanking 的时长,0.2.1:距离窗按剩下的样本重配,`cfg.n_blank` 是样�
 - `LOProfile.from_config(cfg)`:`psd(f)` / `l_dbc(f)` 在载波处;`components`(ref / dco / tdc_quant / dco_quant / tdc_jitter 分项)、`without(*names)`、`above(f)`;`lo.profile` 指向 pll_simulator 剖面文件时按 (DCO/f0)² N² 缩放;文件带 `components` 时按它拆分,不带时在 event 引擎下加上 chirp 发生器的两项量化(`file` / `tdc_quant` / `dco_quant`),ideal 引擎下原样。
   `configs/radar_60g_x10lo.yaml` 是同一个雷达换成 mmw60_trx 的 ×10 LO(vendored 的 `pllsim_wu19_x10_60p48g_floor150.yaml`)。
 
-## 图形界面的契约(界面本身还没做)
+## 图形界面
 
-`fmcw_radar.guispec`(0.2.21)描述一个页面可以拨什么、读回什么,不算物理:`controls()`(88 个控件,就是配置字段;默认值读自 `RadarConfig()`)、
-`resolve(cfg, path)`(留空字段背后库实际取的数、出处标签、来源表的键)、`tags(values)`(页面该显示的标签:改过的数是 `assumed`)、
-`inert(values)`(此刻不起作用的控件和原因)、`refused_choices(values)`(此刻配置层会拒绝的选项)、`values_to_config(values)`(经 `config_from_dict`,与读 YAML 同一条路)、`band_switch(values, kind)`、`spec()`(整份契约的 JSON)。
-值一律用配置的 SI 单位,显示单位换算用 `to_display` / `from_display`。
+```bash
+fmcw-gui                 # 本地服务 + 应用窗口(找不到 Chromium 系浏览器就开默认浏览器;FMCW_BROWSER 指定)
+fmcw-gui --tab           # 浏览器标签页
+fmcw-gui --no-open --port 0   # 只起服务,打印地址;Ctrl+C 停
+```
+
+实时工作台:左边 88 个控件就是配置字段,改一个数 250 ms 后统计引擎重算(线性化 chirp 引擎 0.2 s;默认的逐周期引擎动环路参数 3.3 s、其余 0.9 s)。
+每个外部数字旁边是出处标签,点开看来源表的条目;在页面上改过的数标 `assumed`。灰掉的控件写着在什么设置下才起作用;配置层不收的改动,它的原话显示在页顶,上一次合法结果留着。
+距离-多普勒图来自时域引擎的一帧(约 6.5 s),是一个带进度、可取消的任务;统计引擎的结论不依赖它。可复现卡给 seed、配置哈希、vendored pin 与等价的 Python 调用。
+
+分层(页面只画不算):
+- `fmcw_radar.guispec` 描述:`controls()`(默认值读自 `RadarConfig()`)、`resolve(cfg, path)`(留空字段背后库实际取的数、出处标签、来源表的键)、`tags(values)`、
+  `inert(values)`、`refused_choices(values)`、`values_to_config(values)`(经 `config_from_dict`,与读 YAML 同一条路)、`band_switch(values, kind)`、`spec()`。值一律用配置的 SI 单位。
+- `fmcw_radar.guiutil` 计算:`run_report(values)`(其中 `report` 就是 `report.build(cfg)`)、`run_frame(values)`(时域引擎一帧 + 过门限格的分类)、`validate(values)`、`config_hash(cfg)`。
+- `fmcw_radar.webhost` 分发:`Api().call(route, req) -> (code, payload)`;路由 `version` / `spec` / `config` / `sources` / `run` / `validate` / `band` / `frame` / `jobs` / `jobs/<id>` / `jobs/<id>/cancel`,
+  HTTP 下在 `/api/` 之后。不经浏览器也能用:`Api(backend="thread").call("run", {"values": {"target.range_m": 10.0}})`。
 
 ## 工具
 
