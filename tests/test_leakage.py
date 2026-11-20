@@ -261,7 +261,8 @@ def test_recommended_blank_covers_the_clipped_run_and_restores_the_floor(order):
     rel = lambda t: _far_floor_db(t) - t.range_profile_db[i_t]                    # noqa: E731
     assert rel(tm) == pytest.approx(rel(ref), abs=3.0)      # the transient's tail under the window's rising edge: ~2 dB left
     if order >= 2:
-        assert rel(tm0) > rel(tm) + 8.0
+        # 7.5 dB at order 2, 17.2 dB at order 3 (0.2.25, the filter on the waveform grid; 8.0 and 15.7 dB when it ran at the ADC's rate)
+        assert rel(tm0) > rel(tm) + 6.0
     f = tm.extras["targets_found"][0]
     assert f is not None and f[0] == pytest.approx(5.0, abs=0.04)
 

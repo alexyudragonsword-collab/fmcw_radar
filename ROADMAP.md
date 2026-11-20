@@ -107,11 +107,7 @@
    (e) 只读了美国的 §15.255;欧洲(ETSI)等没有条目。61.0–61.5 GHz 档的档外限值、无人机档的高度、换档停 33 ms 没建模。
    复现:`tests/test_compliance.py`;`python examples/09_band_tradeoff.py`;报表的"Regulatory check"一节。
 
-7. **IF 高通单独开时统计引擎不认**(0.2.21 拨旋钮时发现,`tests/test_guispec.py::test_the_high_pass_alone_shows_in_the_time_engine_only`,`cairn/gui.md`)。
-   `leakage.enabled: false` 时 `rx.hpf_corner_hz` / `rx.hpf_order` 怎么改,统计报告逐项不变;时域引擎照样滤。截止 1 MHz、2 阶(目标拍频 1.33 MHz):
-   时域的目标峰 −1.08 dB、底噪 −1.29 dB,统计引擎 0 / 0。统计预算只在泄漏预算里用高通(`hpf_atten_at_target`)。截止远低于拍频(默认 MIMO 配置的 200 kHz:0.002 dB)时没有可见后果。
-   要做:链路预算在没有泄漏时也扣高通对回波与噪声的衰减(开了高通的配置数字会动,单独一轮)。
-8. **每个发射通道只有 2 个 chirp 时,首权为零的多普勒窗只剩一个 chirp**(0.2.22 修角度那一处时量的,没有改):`processing.windows` 用周期形式,hann(2) = [0, 1]。
+7. **每个发射通道只有 2 个 chirp 时,首权为零的多普勒窗只剩一个 chirp**(0.2.22 修角度那一处时量的,没有改):`processing.windows` 用周期形式,hann(2) = [0, 1]。
    `chirp.n_chirps: 2`、默认 Hann:格点 SNR 27.04 dB(就是单个 chirp 的;rect 30.05),两个引擎一致(时域 26.91),所以 SNR 是老实的;
    但多普勒谱是平的,读出来的速度没有意义:+2 m/s 的目标时域引擎读 −12.49 m/s(rect 读 0.0;两个格本来也只能分到 12.49 m/s)。报表里的速度分辨率照样写 12.49 m/s。
    与 0.2.22 拒绝的"2 个虚拟阵元 + Hann 角窗"同源,但后果轻(SNR 对、只是速度读数无意义),测试里常用 2 个 chirp 的短帧求快,所以没有一并拒绝。
@@ -134,6 +130,15 @@
 
 5. **`sim.pn_bins_per_decade` 没有任何引擎读**(0.2.21 拨旋钮时发现):schema 与表单里都有,`grep -rn pn_bins_per_decade src/` 只有这两处;20 / 60 / 120 的报告与时域帧逐位相同。
    界面规格把它放进 `HIDDEN`(不给页面),测试守着它"仍然什么都不动"。要做:从 schema 删掉(配置文件里写了它的会加载失败,要过一次 `schema_version`),或真的接到闭式积分的网格上。
+
+6. **高通让噪底有了斜率之后,还有三处口径没跟上**(0.2.25 把高通放进链路预算时留下的,`cairn/mimo-angle.md` §4):
+   - dBc 类的数(鬼目标、相噪底表)是滤波前的相对电平。图上看到的相对电平还差两处拍频的衰减差:截止 1 MHz、2 阶时,+10 m 的鬼目标(拍频 4.0 MHz)比表里高 1.17 dB。
+     检出数按本地 SNR 算,一阶上不受影响(鬼目标和它邻域的噪声一起少衰)。
+   - 时域引擎的 `snr_cell_db` 是全带平均噪底口径,不是目标处的 SNR:截止 2 MHz、2 阶时低 4.7 dB
+     (`python -c "from fmcw_radar.config import RadarConfig, apply_overrides as o; from fmcw_radar.engine import run_statistical as r; e = r(o(RadarConfig(), {'lo.engine': 'response', 'rx.hpf_corner_hz': 2e6, 'rx.hpf_order': 2})).extras; print(e['snr_cell_local_db'] - e['snr_cell_expected_db'])"`)。
+     统计侧两个都给,时域侧没有本地口径的读数;界面的"时域 vs 统计"比的是全带平均口径。
+   - 飞回瞬态留下的底对"高通与砖墙 IF 谁先"敏感(砖墙是按 chirp 循环的理想滤波器,不是真滤波器):滤波器挪到波形采样率后,示例 08 里 2 阶 200 kHz blank 后的无噪声底 −43.3 → −45.3 dB,
+     测试里 2 阶的 blanking 改善量 8.0 → 7.5 dB。哪一个更接近真实接收机没有依据。`cairn/mimo-angle.md` §4 线性接收机的时域数没有重跑(未核实)。
 
 ## P3 — 能力扩展
 

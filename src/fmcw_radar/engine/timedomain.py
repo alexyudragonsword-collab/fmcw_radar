@@ -6,8 +6,14 @@ to be sampled)::
 
     TX(t) = exp(j [Phi(t) + psi(t)])                  Phi: the ideal sweep, psi: LO error (chirp + phase noise)
     RX(t) = A TX(t - tau(t))                           tau(t) = 2 (R + v t) / c, the carrier term 2 pi f_c tau included
-    beat  = TX conj(RX) + noise -> compression (ahead of the high-pass) -> brick-wall IF filter -> ADC rate
-            -> high-pass -> compression (in band) -> quantiser
+    beat  = TX conj(RX) + noise -> compression (ahead of the high-pass) -> high-pass -> brick-wall IF filter
+            -> ADC rate -> compression (in band) -> quantiser
+
+The high-pass runs on the waveform grid, ahead of the decimation: it is an
+analog filter, and a Butterworth designed at the ADC's rate (where it ran
+until 0.2.25) is a different one -- 5 dB more attenuation at 1.33 MHz for a
+3 MHz corner at 10 MS/s -- while at the waveform's rate it is the closed
+form the budget uses to 0.04 dB.
 
 The ideal part of ``Phi(t) - Phi(t - tau)`` is written out exactly (a
 quadratic in t, nothing is sampled at RF); the LO's error phase ``psi`` is a
@@ -153,7 +159,7 @@ def beat_frame(cfg: RadarConfig, chirp: ChirpResult | None, *, noise: bool = Tru
     vol = lambda dbm: math.sqrt(10.0 ** ((dbm - 30.0) / 10.0) * 50.0)            # noqa: E731
     a1_oob = vol(cfg.frontend_value("p1db_oob_dbm")[0] + g_rx)
     a1_in = vol(cfg.p1db_inband()[0] + g_rx)
-    sos = hpf_sos(cfg.rx.adc_fs_hz, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order) if use_hpf else None
+    sos = hpf_sos(fs_w, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order) if use_hpf else None
     hpf_state = [hpf_initial_state(sos) for _ in range(n_rx)] if use_hpf else None
     x_tx = va.tx.x_m if multi else np.zeros(1)
     x_rx = va.rx.x_m if multi else np.zeros(1)
@@ -200,14 +206,14 @@ def beat_frame(cfg: RadarConfig, chirp: ChirpResult | None, *, noise: bool = Tru
         for n, x in enumerate(ys):
             if use_comp:
                 x = rapp(x, a1_oob, p_rapp)                          # the LNA / mixer: the RF envelope is the beat's
-            spec = np.fft.fft(x)
-            spec = np.where(keep, spec, 0.0)
-            y = np.fft.ifft(spec[idx_adc]) * (n_adc / n_w)
             if use_hpf:
                 if m == 0:
                     # warm the filter up on the first chirp (the receiver has been running), then filter it for real
-                    _, hpf_state[n] = apply_hpf(y, cfg.rx.adc_fs_hz, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order, hpf_state[n], sos)
-                y, hpf_state[n] = apply_hpf(y, cfg.rx.adc_fs_hz, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order, hpf_state[n], sos)
+                    _, hpf_state[n] = apply_hpf(x, fs_w, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order, hpf_state[n], sos)
+                x, hpf_state[n] = apply_hpf(x, fs_w, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order, hpf_state[n], sos)
+            spec = np.fft.fft(x)
+            spec = np.where(keep, spec, 0.0)
+            y = np.fft.ifft(spec[idx_adc]) * (n_adc / n_w)
             if use_comp:
                 y = rapp(y, a1_in, p_rapp)                           # the IF stages after the high-pass
             if quantise:
