@@ -396,3 +396,27 @@ def test_spec_is_json_ready_and_the_metrics_are_in_the_report():
     assert set(g.ENGINES) == {"statistical", "time"} | {f"chirp:{e}" for e in BY["lo.engine"].choices}
     assert all(v[k] for v in g.ENGINES.values() for k in ("zh", "en", "does_zh", "does_en", "covers_zh", "covers_en"))
     assert config_to_dict(RadarConfig())["lo"]["engine"] == "event"
+
+
+def test_the_diagram_the_band_rows_and_the_sweep_name_only_what_exists():
+    """The system diagram's stages (P3): every control line is a control,
+    shown once; every stage sits in a declared lane; the rows of the band
+    table lie inside the 60 GHz window; a sweep steps numeric controls only."""
+    paths = {c.path: c for c in g.controls()}
+    ids = [st["id"] for st in g.STAGES]
+    assert len(ids) == len(set(ids)) == 25 and {st["lane"] for st in g.STAGES} == set(g.LANES)
+    shown = [ln["path"] for st in g.STAGES for ln in st["lines"] if ln["kind"] == "control"]
+    assert set(shown) <= set(paths) and len(shown) == len(set(shown))
+    for st in g.STAGES:
+        lines = st["lines"] + ([st["out"]] if st.get("out") else [])
+        assert lines and all(ln["zh"] and ln["en"] for ln in lines), st["id"]
+        assert all(ln["read"].split(".")[0] in ("report", "plots") and ln["scale"] > 0 for ln in lines if ln["kind"] == "read"), st["id"]
+    # the three optional stages say what puts them in play
+    assert {st["id"] for st in g.STAGES if "active" in st} == {"comp", "leak", "hpf", "dbf"}
+    lo, hi = BANDS["60g_sensing"]
+    assert g.BAND_ROWS[0]["lo_ghz"] is None and all(lo <= 1e9 * r["lo_ghz"] < 1e9 * r["hi_ghz"] <= hi for r in g.BAND_ROWS[1:])
+    sw = g.sweepable()
+    assert set(sw) <= set(g.RANGES) and all(paths[p].kind in ("float", "opt_float", "int", "opt_int") for p in sw) and "target.range_m" in sw
+    s = g.spec()
+    assert [st["id"] for st in s["stages"]] == ids and s["sweepable"] == sw and len(s["band_rows"]) == 5
+    json.dumps(s)

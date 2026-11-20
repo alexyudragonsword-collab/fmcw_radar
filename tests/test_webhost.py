@@ -101,6 +101,58 @@ def test_cancel_terminates_the_process_and_a_new_frame_replaces_the_running_one(
     assert done["status"] == "done" and done["result"]["time_engine"]["n_chirps"] == 8
 
 
+def test_a_sweep_and_the_band_table_are_jobs_with_progress():
+    """Seconds of work under the cycle-accurate engine, so jobs like the
+    frame -- and, unlike the frame, they say how far they are."""
+    api = webhost.Api(backend="thread")
+    code, job = api.call("sweep", {"values": FAST, "path": "target.range_m", "lo": 2.5, "hi": 10.0, "points": 4})
+    assert code == 200 and job["kind"] == "sweep" and job["eta_s"] is None
+    done = _wait(api.queue, job["id"])
+    direct = guiutil.run_sweep(FAST, "target.range_m", 2.5, 10.0, 4)
+    assert done["status"] == "done" and done["progress"] == {"done": 4, "total": 4}
+    assert [p["metrics"] for p in done["result"]["points"]] == [p["metrics"] for p in direct["points"]]
+    code, bands = api.call("bands", {"values": FAST})
+    got = _wait(api.queue, bands["id"])
+    assert got["kind"] == "bands" and got["status"] == "done" and len(got["result"]["rows"]) == 5 and got["progress"] == {"done": 5, "total": 5}
+    # jobs of different kinds do not cancel each other; a second sweep replaces the first
+    code, a = api.call("sweep", {"values": {"lo.engine": "response"}, "path": "target.range_m", "lo": 2.5, "hi": 10.0, "points": 41})
+    code, f = api.call("frame", {"values": FAST})
+    code, b = api.call("sweep", {"values": FAST, "path": "chirp.n_chirps", "lo": 8, "hi": 9, "points": 2})
+    assert _wait(api.queue, a["id"])["status"] == "cancelled" and _wait(api.queue, f["id"])["status"] == "done"
+    assert [p["x"] for p in _wait(api.queue, b["id"])["result"]["points"]] == [8, 9]
+    # on a thread a cancel lands between two points
+    code, long = api.call("sweep", {"values": {"lo.engine": "response"}, "path": "target.range_m", "lo": 2.5, "hi": 10.0, "points": 41})
+    t0 = time.time()
+    while not (api.queue.get(long["id"])["progress"] or {}).get("done") and time.time() - t0 < 30:
+        time.sleep(0.02)
+    api.call(f"jobs/{long['id']}/cancel", {})
+    gone = _wait(api.queue, long["id"], timeout=15)
+    assert gone["status"] == "cancelled" and gone["result"] is None and gone["progress"]["done"] < 41
+    # what cannot be a sweep: a job that says so, or a request that is not one
+    code, bad = api.call("sweep", {"values": FAST, "path": "target.kind", "lo": 1, "hi": 2, "points": 3})
+    assert _wait(api.queue, bad["id"])["status"] == "error" and "not a control a sweep can step" in api.queue.get(bad["id"])["error"]
+    assert api.call("sweep", {"values": FAST})[0] == 400 and api.call("sweep", {"values": FAST, "path": "x", "lo": "a", "hi": 2, "points": 3})[0] == 400
+    assert api.call("bands", {"values": {"mimo.n_rx": 2}})[1]["status"] == "error"
+    # a pinned baseline rides on the run
+    code, run = api.call("run", {"values": FAST})
+    code, cmp_ = api.call("run", {"values": {**FAST, "target.range_m": 10.0}, "baseline": {"values": FAST, "metrics": run["metrics"]}})
+    assert cmp_["baseline"]["metrics"]["snr_cell_db"]["verdict"] == "worse" and "baseline" not in run
+    assert api.call("run", {"values": FAST, "baseline": {"values": FAST}})[0] == 400
+
+
+def test_a_sweep_in_its_own_process_reports_its_progress():
+    api = webhost.Api(backend="process")
+    code, job = api.call("sweep", {"values": FAST, "path": "target.range_m", "lo": 2.5, "hi": 10.0, "points": 6})
+    seen = set()
+    t0 = time.time()
+    while api.queue.get(job["id"])["status"] not in webhost.DONE and time.time() - t0 < 90:
+        seen.add((api.queue.get(job["id"])["progress"] or {}).get("done"))
+        time.sleep(0.01)
+    done = api.queue.get(job["id"])
+    assert done["status"] == "done" and done["progress"] == {"done": 6, "total": 6} and len(done["result"]["points"]) == 6
+    assert len(seen - {None}) >= 2                                                         # it was seen moving
+
+
 @pytest.fixture()
 def server():
     srv = webhost.make_server(0, backend="thread")

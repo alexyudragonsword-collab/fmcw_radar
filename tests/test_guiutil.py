@@ -172,3 +172,128 @@ def test_report_is_unchanged_by_the_page_layer():
     cfg = RadarConfig()
     st = run_statistical(cfg)
     assert guiutil.run_report({})["report"] == guiutil.plain(report(cfg, st))
+
+
+# ---------------------------------------------------------------- P3: the system diagram, the band rows, a sweep, a baseline
+
+@pytest.mark.parametrize("name", ["radar_60g_sensing", "radar_60g_mimo", "radar_60g_dither", "radar_60g_x10lo", "radar_77g_automotive"])
+def test_the_diagram_holds_the_runs_own_numbers(name):
+    """Every stage of the system diagram, for every bundled config: a control
+    line shows what the form holds (or the number behind an empty field), a
+    read line a finite number from the run, and the optional stages are in
+    play exactly when the config uses them."""
+    flat = guispec.values_from_config(load_config(REPO / "configs" / f"{name}.yaml"))
+    flat["chirp.n_chirps"] = 8
+    r = guiutil.run_report(flat)
+    assert r["ok"]
+    by = {c.path: c for c in guispec.controls(guispec.values_to_config(flat))}
+    st = {s["id"]: s for s in r["system"]["stages"]}
+    assert list(st) == [s["id"] for s in guispec.STAGES]
+    for s in st.values():
+        for ln in s["lines"] + ([s["out"]] if s["out"] else []):
+            if ln["kind"] == "control":
+                c = by[ln["path"]]
+                held = r["values"][c.path]
+                assert ln["value"] == guiutil.plain(guispec.to_display(c, c.resolved if held is None and c.source else held)), ln["path"]
+                assert ln["unit"] == c.unit
+            elif ln["kind"] == "read" and s["active"]:
+                if ln["value"] is None:                              # the one number a run may not have: no ghost, no strongest ghost
+                    assert ln["en"] == "strongest ghost" and r["plots"]["ghosts"]["stems"] == []
+                else:
+                    assert isinstance(ln["value"], (int, float)) and np.isfinite(ln["value"]), (s["id"], ln["en"])
+    rep = r["report"]
+    assert st["pa"]["out"]["value"] == rep["compliance"]["conducted_dbm"] and st["txant"]["out"]["value"] == rep["compliance"]["eirp_dbm"]
+    assert st["rfft"]["lines"][2]["value"] == rep["radar"]["range_res_m"] / 1e-2 and st["rfft"]["lines"][2]["unit"] == "cm"
+    assert st["dbf"]["active"] == (name == "radar_60g_mimo") == bool(rep["angle"])
+    assert st["leak"]["active"] == bool(flat["leakage.enabled"]) and st["hpf"]["active"] == (flat["rx.hpf_corner_hz"] > 0)
+    assert st["comp"]["active"] == rep["compliance"]["applies"] == (name != "radar_77g_automotive")
+    assert st["comp"].get("verdict") == rep["compliance"].get("compliant")
+    assert guiutil.pick(r, "report.budget[received power P_r].value") == st["rxant"]["out"]["value"]
+    assert guiutil.pick(r, "report.nothing.here") is None and guiutil.pick(r, "values.target.range_m") == flat["target.range_m"]
+
+
+def test_a_band_row_is_a_config_you_can_be_on():
+    """Each row of the band trade-off is a real config -- the sweep moved, the
+    scenario declared, the transmitter backed off just to the governing
+    tier's limit -- and its numbers are that config's own report.  Checked
+    the way example 09 computes them: the budget with the EIRP capped."""
+    from fmcw_radar.link import link_budget
+
+    b = guiutil.band_tradeoff(FAST)
+    assert b["ok"] and b["applies"] and [r["id"] for r in b["rows"]] == [r["id"] for r in guispec.BAND_ROWS]
+    rows = {r["id"]: r for r in b["rows"]}
+    assert all(r["ok"] and r["compliant"] for r in rows.values()) and rows["current"]["apply"] == {}
+    for r in rows.values():
+        there = guiutil.run_report({**FAST, **r["apply"]})
+        assert there["metrics"] == r["metrics"] and there["repro"]["config_sha256"] == r["config_sha256"]
+        assert r["eirp_dbm"] == pytest.approx(min(r["full_power_eirp_dbm"], r["limit_dbm"]), abs=1e-9)
+        assert r["backoff_db"] == pytest.approx(max(0.0, r["full_power_over_db"]), abs=1e-12)
+        cfg = guispec.values_to_config({**FAST, **r["apply"]})
+        open_ = apply_overrides(cfg, {"frontend.tx_backoff_db": 0.0, "chirp.frame_period_s": None})
+        k = compliance_check(open_)
+        assert k.tier.tier == r["governing"] and k.tier.peak_eirp_limit_dbm == r["limit_dbm"]
+        assert link_budget(open_, eirp_cap_dbm=k.eirp_cap_dbm).snr_cell_db == pytest.approx(r["metrics"]["snr_cell_db"], abs=1e-9)
+        # the detection range is where that budget meets what the map's CFAR needs
+        assert link_budget(cfg, range_m=r["detection_range_m"]).snr_cell_db == pytest.approx(r["metrics"]["snr_pd90_db"], abs=1e-6)
+    # the same sweep under a tier 6 dB higher: 6 dB more SNR; a wider sweep: resolution as 1/B
+    a, o = rows["57_64"], rows["57_64_outdoor_fixed"]
+    assert o["limit_dbm"] - a["limit_dbm"] == 6.0
+    assert o["metrics"]["snr_cell_db"] - a["metrics"]["snr_cell_db"] == pytest.approx(6.0, abs=1e-9)
+    assert rows["current"]["metrics"]["range_res_m"] / a["metrics"]["range_res_m"] == pytest.approx(7.0 / 4.0, rel=1e-9)
+    # the transmit antenna's gain stops moving the SNR once the EIRP is held to the limit; the receive antenna's moves it dB for dB
+    ant = b["antenna"]
+    assert ant[0]["snr_at_limit_db"] == pytest.approx(ant[2]["snr_at_limit_db"], abs=1e-9) and ant[0]["tx_gain_dbi"] == ant[2]["tx_gain_dbi"] - 8
+    assert ant[4]["snr_at_limit_db"] - ant[3]["snr_at_limit_db"] == pytest.approx(4.0, abs=1e-9)
+    assert ant[2]["snr_full_power_db"] - ant[2]["snr_at_limit_db"] == pytest.approx(8.0, abs=1e-9)
+    assert {c["config"] for c in b["bundled"]} == {p.stem for p in (REPO / "configs").glob("*.yaml")}
+    # where the rule does not apply there is no table, and the page is told why
+    car = guiutil.band_tradeoff(guispec.band_switch(FAST, "77g_automotive"))
+    assert car["ok"] and car["applies"] is False and car["rows"] == [] and "57-71 GHz" in car["why"]
+    assert guiutil.band_tradeoff({"mimo.n_rx": 2})["field"] == "mimo.angle_window"
+    json.dumps(b)
+
+
+def test_a_sweep_point_is_a_run_of_its_own_config():
+    seen = []
+    s = guiutil.run_sweep(FAST, "target.range_m", 2.5, 10.0, 4, lambda done, total: seen.append((done, total)))
+    assert s["ok"] and [p["x"] for p in s["points"]] == [2.5, 5.0, 7.5, 10.0] and s["current"] == 5.0 and s["unit"] == "m"
+    assert seen == [(0, 4), (1, 4), (2, 4), (3, 4), (4, 4)]
+    for p in s["points"]:
+        assert p["ok"] and p["metrics"] == guiutil.run_report({**FAST, "target.range_m": p["x"]})["metrics"]
+    # R^-4 and the oxygen over the extra path: twice the range costs 40 log 2 dB plus 2 * 2.5 m of 14.651 dB/km
+    snr = [p["metrics"]["snr_cell_db"] for p in s["points"]]
+    assert snr[0] - snr[1] == pytest.approx(40 * np.log10(2.0) + 2 * 2.5 * 14.651e-3, abs=1e-9)
+    # past the IF band's range the point says so
+    far = guiutil.run_sweep(FAST, "target.range_m", 14.0, 16.0, 2)["points"]
+    assert far[0]["in_if_band"] and not far[1]["in_if_band"]
+    # a value the schema refuses is a point with the schema's sentence
+    bo = guiutil.run_sweep(FAST, "frontend.tx_backoff_db", -2.0, 2.0, 3)["points"]
+    assert not bo[0]["ok"] and bo[0]["field"] == "frontend.tx_backoff_db" and bo[1]["ok"] and bo[2]["ok"]
+    # an integer control steps whole numbers, once each
+    assert [p["x"] for p in guiutil.run_sweep(FAST, "chirp.n_chirps", 8, 10, 5)["points"]] == [8, 9, 10]
+    # the empty field's own number is "current"
+    assert guiutil.run_sweep(FAST, "frontend.nf_db", 10.0, 14.0, 2)["current"] == 12.0
+    for bad in (("target.kind", 1, 2, 3), ("target.range_m", 1, 2, 1), ("target.range_m", 1, 2, guispec.SWEEP_MAX_POINTS + 1), ("target.range_m", 3, 3, 4)):
+        assert guiutil.run_sweep(FAST, *bad)["ok"] is False
+    assert guiutil.run_sweep({"mimo.n_rx": 2}, "target.range_m", 1, 2, 2)["field"] == "mimo.angle_window"
+
+
+def test_a_baseline_says_which_way_each_number_moved(fast):
+    pin = {"values": FAST, "metrics": fast["metrics"]}
+    far = guiutil.run_report({**FAST, "target.range_m": 10.0, "frontend.nf_db": 10.0}, pin)
+    plain_run = guiutil.run_report({**FAST, "target.range_m": 10.0, "frontend.nf_db": 10.0})
+    b = far["baseline"]
+    assert "baseline" not in plain_run and far["metrics"] == plain_run["metrics"]            # pinning changes nothing in the run
+    assert {c["path"]: (c["a"], c["b"]) for c in b["changed"]} == {"target.range_m": (5.0, 10.0), "frontend.nf_db": (None, 10.0)}
+    assert b["config_sha256"] == fast["repro"]["config_sha256"]
+    for name, row in b["metrics"].items():
+        assert row["base"] == fast["metrics"][name] and row["now"] == far["metrics"][name]
+        if row["delta"] is not None:
+            assert row["delta"] == pytest.approx(float(row["now"]) - float(row["base"]))
+    snr, res, pn = b["metrics"]["snr_cell_db"], b["metrics"]["range_res_m"], b["metrics"]["pn_residual_rms_rad"]
+    assert snr["delta"] < 0 and snr["verdict"] == "worse" and res["verdict"] == "same" and pn["delta"] > 0 and pn["verdict"] == "worse"
+    near = guiutil.run_report({**FAST, "target.range_m": 3.0}, pin)["baseline"]["metrics"]
+    assert near["snr_cell_db"]["verdict"] == "better" and near["pn_residual_rms_rad"]["verdict"] == "better"
+    # the run against itself: nothing changed, nothing moved
+    same = guiutil.run_report(FAST, pin)["baseline"]
+    assert same["changed"] == [] and all(r["verdict"] in ("same", None) and r["delta"] in (0.0, None) for r in same["metrics"].values())

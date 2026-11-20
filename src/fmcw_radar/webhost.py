@@ -45,10 +45,33 @@ _TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=
 DONE = ("done", "error", "cancelled")
 
 
-def _worker(conn, values: dict) -> None:
-    """The child process: one frame, the result (or the error) down the pipe."""
+#: what a job can be: the time engine's frame, a sweep of one control, the band trade-off
+KINDS = ("frame", "sweep", "bands")
+
+
+class _Cancelled(Exception):
+    pass
+
+
+def run_job(kind: str, req: dict, progress=None) -> dict:
+    """One job's work, the same on either backend.  ``progress(done, total)``
+    is called between the steps of a sweep and of the band table (the
+    library reports none inside a frame)."""
+    values = req.get("values") or {}
+    if kind == "frame":
+        return guiutil.run_frame(values)
+    if kind == "sweep":
+        return guiutil.run_sweep(values, str(req.get("path")), float(req.get("lo")), float(req.get("hi")), int(req.get("points")), progress)
+    if kind == "bands":
+        return guiutil.band_tradeoff(values, progress)
+    raise ValueError(f"no such job kind: {kind}")
+
+
+def _worker(conn, kind: str, req: dict) -> None:
+    """The child process: one job, its progress and then the result (or the
+    error) down the pipe."""
     try:
-        conn.send(("done", guiutil.run_frame(values)))
+        conn.send(("done", run_job(kind, req, lambda done, total: conn.send(("progress", {"done": done, "total": total})))))
     except Exception as e:                                   # noqa: BLE001 -- whatever it is, the page has to hear of it
         conn.send(("error", f"{type(e).__name__}: {e}"))
     finally:
@@ -85,16 +108,19 @@ class JobQueue:
             d["result"] = job["result"]
         return d
 
-    def submit(self, values: dict) -> dict:
+    def submit(self, values: dict, kind: str = "frame", req: dict | None = None) -> dict:
+        if kind not in KINDS:
+            raise ValueError(f"job kind must be one of {KINDS}, got {kind!r}")
         check = guiutil.validate(values)
         if not check["ok"]:
             raise ValueError(check["error"])
         jid = str(next(self._ids))
-        job = {"id": jid, "status": "queued", "created": time.time(), "started": None, "finished": None, "error": None,
-               "eta_s": self.last_wall_s, "config_sha256": guiutil.config_hash(check["config"]), "result": None,
-               "cancel": False, "_values": dict(values)}
+        job = {"id": jid, "kind": kind, "status": "queued", "created": time.time(), "started": None, "finished": None, "error": None,
+               "eta_s": self.last_wall_s if kind == "frame" else None, "progress": None,
+               "config_sha256": guiutil.config_hash(check["config"]), "result": None,
+               "cancel": False, "_req": {**(req or {}), "values": dict(values)}}
         with self._cv:
-            stale = [j["id"] for j in self.jobs.values() if j["status"] not in DONE]
+            stale = [j["id"] for j in self.jobs.values() if j["status"] not in DONE and j["kind"] == kind]
         for old in stale:
             self.cancel(old)
         with self._cv:
@@ -139,7 +165,8 @@ class JobQueue:
                 job["status"] = "cancelled"
             elif msg == "done" and isinstance(payload, dict) and payload.get("ok"):
                 job["status"], job["result"] = "done", payload
-                self.last_wall_s = payload.get("wall_s") or self.last_wall_s
+                if job["kind"] == "frame":
+                    self.last_wall_s = payload.get("wall_s") or self.last_wall_s
             else:
                 job["status"] = "error"
                 job["error"] = (payload.get("error") if isinstance(payload, dict) else payload) or "the worker ended without a result"
@@ -147,14 +174,21 @@ class JobQueue:
 
     def _run(self, job: dict) -> None:
         if self.backend == "thread":
+            def progress(done, total):                       # between steps: say where it is, and stop if it was cancelled
+                job["progress"] = {"done": done, "total": total}
+                if job["cancel"]:
+                    raise _Cancelled
+
             try:
-                msg, payload = "done", guiutil.run_frame(job["_values"])
+                msg, payload = "done", run_job(job["kind"], job["_req"], progress)
+            except _Cancelled:
+                msg, payload = None, None
             except Exception as e:                           # noqa: BLE001
                 msg, payload = "error", f"{type(e).__name__}: {e}"
             self._finish(job, msg, payload)
             return
         parent, child = self._ctx.Pipe(duplex=False)
-        p = self._ctx.Process(target=_worker, args=(child, job["_values"]), daemon=True)
+        p = self._ctx.Process(target=_worker, args=(child, job["kind"], job["_req"]), daemon=True)
         p.start()
         child.close()
         job["_pid"] = p.pid                                  # only this thread touches the process object (it is not thread-safe)
@@ -168,14 +202,20 @@ class JobQueue:
                     try:
                         msg, payload = parent.recv()
                     except EOFError:
-                        pass
+                        break
+                    if msg == "progress":
+                        job["progress"], msg, payload = payload, None, None
+                        continue
                     break
                 if not p.is_alive():
-                    if parent.poll(0.0):                     # its last word may still be in the pipe
+                    while parent.poll(0.0):                  # its last words may still be in the pipe
                         try:
                             msg, payload = parent.recv()
                         except EOFError:
-                            pass
+                            break
+                        if msg != "progress":
+                            break
+                        job["progress"], msg, payload = payload, None, None
                     break
         finally:
             p.join(5)
@@ -222,8 +262,11 @@ class Api:
         if not isinstance(values, dict):
             return 400, {"error": "values must be a mapping of dotted paths"}
         if route == "run":
+            base = req.get("baseline")
+            if base is not None and not (isinstance(base, dict) and isinstance(base.get("values"), dict) and isinstance(base.get("metrics"), dict)):
+                return 400, {"error": "baseline must be {values, metrics} of an earlier run"}
             with self._run_lock:                             # one statistical run at a time
-                return 200, guiutil.run_report(values)
+                return 200, guiutil.run_report(values, base)
         if route == "validate":
             v = guiutil.validate(values)
             out = {k: v[k] for k in v if k != "config"}
@@ -235,9 +278,15 @@ class Api:
             if kind not in guispec.BANDS:
                 return 400, {"error": f"band must be one of {sorted(guispec.BANDS)}"}
             return 200, {"values": guiutil.plain(guispec.band_switch(values, kind))}
-        if route == "frame":
+        if route in KINDS:
+            extra = {}
+            if route == "sweep":
+                try:
+                    extra = {"path": str(req["path"]), "lo": float(req["lo"]), "hi": float(req["hi"]), "points": int(req["points"])}
+                except (KeyError, TypeError, ValueError):
+                    return 400, {"error": "a sweep needs path, lo, hi (config units) and points"}
             try:
-                return 200, self.queue.submit(values)
+                return 200, self.queue.submit(values, route, extra)
             except ValueError as e:
                 return 200, {"status": "error", "error": str(e)}
         if route.startswith("jobs/") and route.endswith("/cancel"):
@@ -360,7 +409,7 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-__all__ = ["WWW", "JobQueue", "Api", "make_server", "find_app_browser", "main", "dumps"]
+__all__ = ["WWW", "KINDS", "JobQueue", "Api", "run_job", "make_server", "find_app_browser", "main", "dumps"]
 
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -272,6 +272,138 @@ METRICS: dict[str, dict[str, Any]] = {
 }
 
 
+# ---------------------------------------------------------------- the system diagram, the band rows, the sweep
+
+#: the diagram's lanes: what the lane is and which engine computes it
+LANES: dict[str, dict[str, str]] = {
+    "gen": {"zh": "① chirp 发生器:两点调制 ADPLL(vendored polar_tx / pllsim)", "en": "① Chirp generator: two-point ADPLL (vendored polar_tx / pllsim)",
+            "by_zh": "chirp 引擎;两个引擎都读它的误差曲线", "by_en": "chirp engine; both engines read its error curve"},
+    "rf": {"zh": "② 发射 → 信道 → 目标 → 接收", "en": "② Transmit → channel → target → receive",
+           "by_zh": "统计:雷达方程与噪声预算 · 时域:真波形混频", "by_en": "statistical: radar equation and noise budget · time: real waveform and mixing"},
+    "reg": {"zh": "合规检查", "en": "Compliance check", "by_zh": "合规检查:限值全读来源表", "by_en": "compliance check: every limit read from the source table"},
+    "dsp": {"zh": "③ 处理:距离 / 多普勒 FFT、CA-CFAR", "en": "③ Processing: range / Doppler FFT, CA-CFAR",
+            "by_zh": "统计:窗与 CFAR 的闭式 · 时域:真 FFT 与 CFAR", "by_en": "statistical: closed forms of windows and CFAR · time: real FFTs and CFAR"},
+}
+
+
+def _c(path: str, zh: str, en: str) -> dict:
+    """A stage line that is a control: its value, unit and tag are the control's."""
+    return {"kind": "control", "path": path, "zh": zh, "en": en}
+
+
+def _r(read: str, zh: str, en: str, unit: str = "", digits: int = 2, scale: float = 1.0) -> dict:
+    """A stage line read from the run (``report.…`` / ``plots.…``; ``[term]``
+    picks the row of a list whose ``term`` -- or ``offset_m`` -- is that)."""
+    return {"kind": "read", "read": read, "zh": zh, "en": en, "unit": unit, "digits": digits, "scale": scale}
+
+
+def _n(zh: str, en: str) -> dict:
+    return {"kind": "note", "zh": zh, "en": en}
+
+
+_BUD = "report.budget[{}].value"
+#: the chain from the chirp generator to the detections, in signal order.  Every line is a control (shown with the tag
+#: the parameter panel shows), a number read from the run, or a note; ``out`` is the quantity after the stage;
+#: ``active`` names what must be truthy in the run for the stage to be in play (otherwise it is drawn as an option).
+STAGES: tuple[dict[str, Any], ...] = (
+    {"id": "ramp", "lane": "gen", "zh": "斜坡发生(FCW)", "en": "Ramp generator (FCW)", "lines": [
+        _c("band.sweep_hz", "带宽 B", "sweep B"), _c("chirp.duration_s", "斜坡", "ramp"), _c("chirp.n_chirps", "每帧 chirp", "chirps / frame"),
+        _r("report.radar.slope_mhz_per_us", "斜率", "slope", "MHz/µs", 1)]},
+    {"id": "ref", "lane": "gen", "zh": "参考", "en": "Reference", "lines": [
+        _c("lo.fref_hz", "频率", "frequency"), _c("lo.ref_pn_dbchz", "底噪", "floor")]},
+    {"id": "tdc", "lane": "gen", "zh": "TDC(鉴相)", "en": "TDC (phase detector)", "lines": [
+        _c("lo.tdc_res_s", "分辨率", "resolution"), _c("lo.tdc_jitter_s", "抖动", "jitter"), _c("lo.tdc_dither_lsb", "扣除式 dither", "subtr. dither")]},
+    {"id": "lf", "lane": "gen", "zh": "数字环路滤波", "en": "Digital loop filter", "lines": [
+        _c("lo.loop_bw_hz", "带宽", "bandwidth"), _c("lo.phase_margin_deg", "相位裕度", "phase margin")]},
+    {"id": "dco", "lane": "gen", "zh": "DCO", "en": "DCO", "lines": [
+        _r("report.radar.lo_dco_ghz", "频率", "frequency", "GHz", 2), _c("lo.kdco_hz", "Kdco", "Kdco"),
+        _c("lo.dco_pn_dbchz", "点相噪", "spot PN"), _c("lo.dco_pn_floor_dbchz", "底", "floor")]},
+    {"id": "mult", "lane": "gen", "zh": "倍频 ×N", "en": "Multiplier ×N", "lines": [
+        _c("lo.mult", "N", "N"), _n("相噪 +20 log N", "PN +20 log N")]},
+    {"id": "lo", "lane": "gen", "zh": "LO 输出", "en": "LO output", "lines": [
+        _c("band.center_hz", "中心", "centre"), _r("plots.pn.l_1mhz_dbc_hz", "L(1 MHz)", "L(1 MHz)", "dBc/Hz", 2),
+        _r("report.chirp.rms_hz", "频率误差 RMS", "freq. error RMS", "MHz", 3, 1e6), _c("lo.engine", "chirp 引擎", "chirp engine")]},
+    {"id": "split", "lane": "rf", "zh": "功分", "en": "Splitter", "lines": [
+        _n("TX 与 RX 用同一条 LO", "one LO for TX and RX"), _n("(铁律 2)", "(invariant 2)")]},
+    {"id": "pa", "lane": "rf", "zh": "发射机(PA)", "en": "Transmitter (PA)", "lines": [
+        _c("frontend.tx_power_dbm", "能发", "can deliver"), _c("frontend.tx_backoff_db", "回退", "backoff")],
+     "out": _r("report.compliance.conducted_dbm", "传导", "conducted", "dBm", 2)},
+    {"id": "txant", "lane": "rf", "zh": "发射天线", "en": "TX antenna", "lines": [_c("frontend.tx_gain_dbi", "增益", "gain")],
+     "out": _r("report.compliance.eirp_dbm", "EIRP", "EIRP", "dBm", 2)},
+    {"id": "comp", "lane": "reg", "zh": "合规 §15.255(c)(2)", "en": "Compliance §15.255(c)(2)", "verdict": "report.compliance.compliant",
+     "active": "report.compliance.applies", "lines": [
+        _r("report.compliance.limit_dbm", "上限", "limit", "dBm", 0), _r("report.compliance.eirp_margin_db", "裕度", "margin", "dB", 1),
+        _r("report.compliance.max_frame_rate_hz", "最高帧率", "max frame rate", "1/s", 1)]},
+    {"id": "leak", "lane": "rf", "zh": "TX→RX 泄漏", "en": "TX→RX leakage", "active": "values.leakage.enabled", "lines": [
+        _c("leakage.isolation_db", "隔离", "isolation"), _c("leakage.path_delay_s", "延迟", "delay")]},
+    {"id": "chan", "lane": "rf", "zh": "信道(往返)", "en": "Channel (two-way)", "lines": [
+        _r(_BUD.format("free-space path loss (4pi)^3 R^4 / lambda^2"), "路径损耗", "path loss", "dB", 2),
+        _c("channel.oxygen_db_per_km", "氧气", "oxygen"), _r(_BUD.format("oxygen over 2R"), "氧气往返", "oxygen, 2R", "dB", 2),
+        _c("channel.extra_loss_db", "额外损耗", "extra loss"), _r("report.inputs.wavelength_m.value", "λ", "λ", "mm", 3, 1e-3)]},
+    {"id": "tgt", "lane": "rf", "zh": "目标(输入)", "en": "Target (an input)", "lines": [
+        _c("target.kind", "类型", "kind"), _c("target.rcs_dbsm", "RCS", "RCS"), _c("target.range_m", "距离", "range"),
+        _c("target.velocity_mps", "径向速度", "radial velocity"), _r("plots.pn.tau_s", "往返延迟 τ", "round trip τ", "ns", 2, 1e-9),
+        _r("report.target.doppler_hz", "多普勒", "Doppler", "Hz", 1)]},
+    {"id": "rxant", "lane": "rf", "zh": "接收天线", "en": "RX antenna", "lines": [_c("frontend.rx_gain_dbi", "增益", "gain")],
+     "out": _r(_BUD.format("received power P_r"), "P_r", "P_r", "dBm", 2)},
+    {"id": "mix", "lane": "rf", "zh": "LNA + 混频", "en": "LNA + mixer", "lines": [
+        _c("frontend.nf_db", "NF", "NF"), _c("frontend.p1db_oob_dbm", "带外 P1dB", "OOB P1dB"),
+        _r("report.phase_noise.residual_rms_rad", "相噪残余", "PN residual", "rad", 4)],
+     "out": _r("report.target.beat_khz", "拍频", "beat", "kHz", 1)},
+    {"id": "hpf", "lane": "rf", "zh": "IF 高通", "en": "IF high-pass", "active": "values.rx.hpf_corner_hz", "lines": [
+        _c("rx.hpf_corner_hz", "截止", "corner"), _c("rx.hpf_order", "阶数", "order")]},
+    {"id": "ifa", "lane": "rf", "zh": "IF 放大 + 低通", "en": "IF gain + low-pass", "lines": [
+        _c("frontend.rx_gain_db", "到 ADC 增益", "gain to ADC"), _c("frontend.p1db_inband_dbm", "带内 P1dB", "in-band P1dB"),
+        _c("rx.if_bw_hz", "带宽", "bandwidth")]},
+    {"id": "adc", "lane": "rf", "zh": "ADC", "en": "ADC", "lines": [
+        _c("rx.adc_fs_hz", "采样率", "sample rate"), _c("rx.adc_bits", "位数", "bits"), _c("rx.adc_fullscale_dbm", "满幅", "full scale")],
+     "out": _r(_BUD.format("signal at the ADC"), "信号", "signal", "dBm", 2)},
+    {"id": "rfft", "lane": "dsp", "zh": "距离 FFT", "en": "Range FFT", "lines": [
+        _c("processing.window_range", "窗", "window"), _c("processing.range_pad", "零填充 ×", "zero-pad ×"),
+        _r("report.radar.range_res_m", "分辨率", "resolution", "cm", 2, 1e-2), _r("report.radar.max_range_m", "最大距离", "max range", "m", 2)]},
+    {"id": "dfft", "lane": "dsp", "zh": "多普勒 FFT", "en": "Doppler FFT", "lines": [
+        _c("processing.window_doppler", "窗", "window"), _c("processing.doppler_pad", "零填充 ×", "zero-pad ×"),
+        _r("report.radar.velocity_res_mps", "速度分辨率", "velocity res.", "m/s", 3), _r("report.radar.max_velocity_mps", "不模糊速度 ±", "unambiguous ±", "m/s", 2)]},
+    {"id": "rd", "lane": "dsp", "zh": "距离-多普勒图", "en": "Range-Doppler map", "lines": [
+        _r("report.detection.snr_cell_db", "格点 SNR", "cell SNR", "dB", 2),
+        _r("report.phase_noise.floor[1.0].per_cell_dbc", "相噪底 +1 m", "PN floor at +1 m", "dBc/格", 1),
+        _r("plots.ghosts.strongest_dbc", "最强鬼目标", "strongest ghost", "dBc", 2)]},
+    {"id": "cfar", "lane": "dsp", "zh": "CA-CFAR", "en": "CA-CFAR", "lines": [
+        _c("processing.cfar_guard", "保护格", "guard cells"), _c("processing.cfar_train", "训练格", "training cells"),
+        _c("processing.cfar_pfa", "Pfa", "Pfa"), _r("report.cfar.snr_pd90_db", "Pd 0.9 需", "for Pd 0.9", "dB", 2)]},
+    {"id": "det", "lane": "dsp", "zh": "检测结果", "en": "Detections", "lines": [
+        _r("report.cfar.pd_target", "真目标 Pd", "target Pd", "", 3),
+        _r("report.cfar.ghost_detections_per_frame", "鬼目标 / 帧", "ghosts / frame", "", 2),
+        _r("report.cfar.false_alarm_cells_per_frame", "噪声虚警格 / 帧", "noise FA cells / frame", "", 2)]},
+    {"id": "dbf", "lane": "dsp", "zh": "测角 DBF", "en": "Angle (DBF)", "active": "report.angle", "lines": [
+        _c("mimo.n_tx", "TX", "TX"), _c("mimo.n_rx", "RX", "RX"),
+        _r("report.angle.beamwidth_deg", "波束宽", "beamwidth", "°", 2), _r("report.angle.theta_est_deg", "读出角度", "angle read", "°", 2),
+        _r("report.angle.sigma_expected_deg", "期望 σ", "expected σ", "°", 3)]},
+)
+
+#: the rows of the band trade-off: the sweep as configured first, then the alternatives example 09 tabulates
+#: (band edges in GHz and the scenario the tier needs).  The limits are not here: they come from the source table.
+BAND_ROWS: tuple[dict[str, Any], ...] = (
+    {"id": "current", "zh": "当前扫频", "en": "the sweep as configured", "lo_ghz": None, "hi_ghz": None, "scenario": "as_configured"},
+    {"id": "57_59p4_indoor", "zh": "57–59.4 GHz,室内", "en": "57–59.4 GHz, indoor", "lo_ghz": 57.0, "hi_ghz": 59.4, "scenario": "indoor"},
+    {"id": "57_61p56", "zh": "57–61.56 GHz", "en": "57–61.56 GHz", "lo_ghz": 57.0, "hi_ghz": 61.56, "scenario": None},
+    {"id": "57_64", "zh": "57–64 GHz,整段", "en": "57–64 GHz, the whole band", "lo_ghz": 57.0, "hi_ghz": 64.0, "scenario": None},
+    {"id": "57_64_outdoor_fixed", "zh": "57–64 GHz,室外固定", "en": "57–64 GHz, outdoors, fixed", "lo_ghz": 57.0, "hi_ghz": 64.0,
+     "scenario": "outdoor_fixed"},
+)
+
+#: the antenna-gain table of the band page: (transmit, receive) gain steps in dB around the configured pair
+ANTENNA_STEPS: tuple[tuple[float, float], ...] = ((-8.0, 0.0), (-4.0, 0.0), (0.0, 0.0), (0.0, -2.0), (0.0, 2.0))
+
+#: the most points one sweep may ask for (each is a full statistical run)
+SWEEP_MAX_POINTS = 41
+
+
+def sweepable() -> list[str]:
+    """The controls a sweep can step: the numeric ones with a display range."""
+    return [c.path for c in controls() if c.path in RANGES and c.kind in ("float", "opt_float", "int", "opt_int")]
+
+
 # ---------------------------------------------------------------- the controls
 
 @dataclass(frozen=True)
@@ -391,6 +523,8 @@ def spec(cfg: RadarConfig | None = None) -> dict:
             "controls": [asdict(c) for c in controls(cfg)],
             "hidden": dict(HIDDEN), "engines": ENGINES, "metrics": METRICS,
             "bands": {k: list(v) for k, v in BANDS.items()},
+            "lanes": LANES, "stages": [dict(st) for st in STAGES], "band_rows": [dict(r) for r in BAND_ROWS],
+            "sweepable": sweepable(), "sweep_max_points": SWEEP_MAX_POINTS, "antenna_steps": [list(x) for x in ANTENNA_STEPS],
             "tags": {"spec": ["原文已读", "read in the original"], "survey": ["文献转述", "survey, not checked against the original"],
                      "assumed": ["占位 / 设计取舍 / 在界面上改过", "placeholder / design choice / edited on the page"],
                      "derived": ["由 spec 推算", "derived from spec numbers"]}}
