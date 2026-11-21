@@ -195,8 +195,9 @@ def test_ghost_targets_enter_the_false_alarm_account():
     human = run_statistical(base).cfar
     assert backed["ghost_detections_per_frame"] == pytest.approx(0.026, abs=0.005) and backed["pd_target"] > 0.999
     assert [g["level_dbc"] for g in backed["ghosts"]] == [g["level_dbc"] for g in human["ghosts"]]       # the same spurs
-    # 7.9 dB, not 8: the look SNR is the cell's expected one, with the target's own floor under it, and that floor follows the target
-    assert all(g["snr_db"] == pytest.approx(h["snr_db"] - 7.88, abs=0.02) for g, h in zip(backed["ghosts"], human["ghosts"]))
+    # 7.85-7.99 dB, not 8: under each ghost lies the target's LO-noise sideband at the ghost's offset, and that follows the target
+    # (0.2.31: the floor is read where the ghost sits; the one at -5.3 m, mirrored next to the target, has the least of it)
+    assert all(g["snr_db"] == pytest.approx(h["snr_db"] - 7.92, abs=0.08) for g, h in zip(backed["ghosts"], human["ghosts"]))
     assert human["ghosts_vouched"] and human["pd_target"] > 0.999
     assert human["ghost_detections_per_frame"] == pytest.approx(1.40, abs=0.05)
     assert all(-40.0 < g["level_dbc"] < -37.0 for g in human["ghosts"][:3])
@@ -211,7 +212,9 @@ def test_ghost_targets_enter_the_false_alarm_account():
     strong = run_statistical(cfg).cfar
     view = [g for g in strong["ghosts"] if g["in_view"]]
     assert len(view) >= 2 and all(g["pd"] > 0.95 for g in view) and strong["ghost_detections_per_frame"] == pytest.approx(len(view), abs=0.2)
-    assert all(g["snr_db"] == pytest.approx(strong["snr_look_db"] + g["level_dbc"]) for g in view)
+    # under a corner reflector the floor where a ghost sits is the reflector's LO-noise sideband, 12 dB over the floor next to it
+    assert all(g["snr_db"] == pytest.approx(g["level_map_dbc"] - g["floor_dbc"]) and g["level_map_dbc"] == g["level_dbc"] for g in view)
+    assert all(g["floor_dbc"] == pytest.approx(-61.5, abs=0.6) for g in view) and strong["snr_look_db"] == pytest.approx(74.4, abs=0.2)
     tm = run_time(cfg)                                                    # the same noise-on curve the search read
     d = np.array(tm.cfar_detections)
     strongest = max(view, key=lambda g: g["level_dbc"])

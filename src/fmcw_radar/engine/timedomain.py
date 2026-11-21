@@ -49,7 +49,7 @@ from ..mimo import VirtualArray
 from ..phase_noise import RangeCorrelation
 from ..processing.cfar import ca_cfar_2d
 from ..processing.iffilter import apply_hpf, hpf_initial_state, hpf_sos
-from ..processing.rd import (local_noise_floor, noise_floor, power_db, range_axis_m, range_doppler_map, range_fft, read_peak,
+from ..processing.rd import (LOCAL_FLOOR_BINS, local_noise_floor, noise_floor, power_db, range_axis_m, range_doppler_map, range_fft, read_peak,
                              velocity_axis_mps)
 from ..processing.windows import enbw_bins, range_window
 
@@ -411,11 +411,6 @@ def _process_cube(cfg: RadarConfig, cube: np.ndarray, info: dict | None) -> Time
     res.extras["target_angle_spectra"] = spectra
     _target_local_snr(res, p[:, :min(n_if, half)], r_axis, v_axis, excl[0], p_.range_pad)
     return res
-
-
-#: the peak's range neighbourhood for the local floor, in range bins of the unpadded FFT: far enough out for a Hann
-#: main lobe's skirt to be gone, near enough for a tilted floor to be the peak's own (20 bins are 200 kHz of beat)
-LOCAL_FLOOR_BINS = (4, 20)
 
 
 def _target_local_snr(res: TimeResult, p_band: np.ndarray, r_axis: np.ndarray, v_axis: np.ndarray, excl_doppler: int, pad: int) -> None:

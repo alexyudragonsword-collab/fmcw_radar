@@ -33,8 +33,8 @@ from ..phase_noise import RangeCorrelation
 from ..processing.cfar import threshold_factor
 from ..processing.cfarstats import cfar_pd, cfar_snr_for_pd, cfar_statistics, correlation_length
 from ..processing.detection import pd_swerling0, snr_for_pd
-from ..processing.iffilter import hpf_response
-from ..processing.rd import power_db, range_axis_m, range_fft, read_peak, velocity_axis_mps
+from ..processing.iffilter import hpf_attenuation_db, hpf_response
+from ..processing.rd import LOCAL_FLOOR_BINS, power_db, range_axis_m, range_fft, read_peak, velocity_axis_mps
 from ..processing.windows import (coherent_gain_db, enbw_bins, mainlobe_width_bins, peak_sidelobe_db, range_window, spectrum_db,
                                   window)
 
@@ -102,9 +102,43 @@ def pn_floor_mean_cell(cfg: RadarConfig, rc: RangeCorrelation, exclude_m: float)
     n_if = int(cfg.rx.if_bw_hz / df)
     offs = (np.arange(n_if) - round(cfg.beat_hz() / df)) * df
     dr = np.abs(offs) / cfg.slope_hz_per_s * C0 / 2.0
+    bins = np.arange(n_if)[dr > exclude_m]
     offs = offs[dr > exclude_m]
     enbw = enbw_bins(range_window(cfg.processing.window_range, n, cfg.n_blank)) * df
     lvl = beat_sideband(cfg, rc).sidelobe_dbc(offs, enbw) + rd_cell_pn_offset_db(cfg)
+    if cfg.rx.hpf_corner_hz > 0.0:
+        # the sideband is part of the beat signal: each bin of it passes the IF high-pass at its own frequency
+        f = np.maximum(bins, 1) * df
+        lvl = lvl + (hpf_attenuation_db(cfg.beat_hz(), cfg.rx.hpf_corner_hz, cfg.rx.hpf_order)
+                     + 20.0 * np.log10(hpf_response(f, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order)))
+    return float(np.mean(10.0 ** (lvl / 10.0)))
+
+
+def pn_floor_local_cell(cfg: RadarConfig, rc: RangeCorrelation, range_m: float | None = None, sb=None) -> float:
+    """The phase-noise floor per range-Doppler cell in the range
+    neighbourhood of ``range_m`` (the target's own when ``None``), relative
+    to the target's peak (linear): the mean over the bins
+    ``LOCAL_FLOOR_BINS`` away on either side, the cells the time engine's
+    local floor and a CFAR's training cells read.
+
+    Around the target that is far under the map-wide mean -- the round trip
+    cancels the LO's noise close to the carrier, which is where these bins
+    are -- and around a ghost it is the target's sideband at the ghost's
+    offset.  With the IF high-pass on each bin passes it at its own beat."""
+    df = cfg.rx.adc_fs_hz / cfg.n_samples
+    centre = cfg.beat_hz() if range_m is None else cfg.slope_hz_per_s * cfg.tau_s(range_m)
+    k = np.arange(LOCAL_FLOOR_BINS[0], LOCAL_FLOOR_BINS[1] + 1) * df
+    f = np.abs(np.concatenate([centre - k[::-1], centre + k]))               # under zero folds to its mirror
+    f = f[(f > 0.5 * df) & (f < cfg.rx.if_bw_hz)]
+    offs = f - cfg.beat_hz()
+    offs = offs[np.abs(offs) >= LOCAL_FLOOR_BINS[0] * df]                    # never the target's own lobe
+    if offs.size == 0:
+        return 0.0
+    enbw = enbw_bins(range_window(cfg.processing.window_range, cfg.n_samples, cfg.n_blank)) * df
+    lvl = (beat_sideband(cfg, rc) if sb is None else sb).sidelobe_dbc(offs, enbw) + rd_cell_pn_offset_db(cfg)
+    if cfg.rx.hpf_corner_hz > 0.0:
+        lvl = lvl + (hpf_attenuation_db(cfg.beat_hz(), cfg.rx.hpf_corner_hz, cfg.rx.hpf_order)
+                     + 20.0 * np.log10(hpf_response(cfg.beat_hz() + offs, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order)))
     return float(np.mean(10.0 ** (lvl / 10.0)))
 
 
@@ -381,7 +415,37 @@ def angle_metrics(cfg: RadarConfig, snr_cell_db: float, snr_chirp_db: float | No
             "max_velocity_mps": cfg.max_velocity_mps, **sq, **budget, **look}
 
 
-def cfar_detection(cfg: RadarConfig, res: "StatResult") -> dict:
+def hpf_map_shift_db(cfg: RadarConfig, range_m: float) -> float:
+    """What the IF high-pass adds to the level of a line at ``range_m``
+    relative to the target's peak [dB]; 0 without the filter.  The levels in
+    dBc (ghost targets, the phase-noise floor) are those of the beat signal
+    ahead of the filter; the line and the target then pass it at their own
+    beats, so on the map the line stands ``A(f_target) - A(f_line)`` higher
+    -- lower when it sits nearer than the target.  A range under zero folds
+    to its mirror, and no line sits closer to DC than one range bin."""
+    if cfg.rx.hpf_corner_hz <= 0.0:
+        return 0.0
+    f = max(abs(cfg.slope_hz_per_s * cfg.tau_s(range_m)), 1.0 / cfg.chirp.duration_s)
+    return (hpf_attenuation_db(cfg.beat_hz(), cfg.rx.hpf_corner_hz, cfg.rx.hpf_order)
+            - hpf_attenuation_db(f, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order))
+
+
+def hpf_noise_shift_db(cfg: RadarConfig, budget: LinkBudget, range_m: float) -> float:
+    """The noise floor at the beat of ``range_m`` over the floor at the
+    target's beat [dB]; 0 without the IF high-pass.  The thermal noise takes
+    the filter's |H(f)|^2 at each beat, the ADC's quantisation noise none of
+    it: nearer than the corner the floor falls only as far as the
+    quantisation noise, farther out it rises by what the target's beat lost."""
+    if cfg.rx.hpf_corner_hz <= 0.0:
+        return 0.0
+    f = max(abs(cfg.slope_hz_per_s * cfg.tau_s(range_m)), 1.0 / cfg.chirp.duration_s)
+    thermal_flat = 10.0 ** ((budget.n0_thermal_adc_dbm_hz + budget.hpf_db) / 10.0)       # ahead of the filter
+    quant = 10.0 ** (budget.n0_quant_adc_dbm_hz / 10.0)
+    h2 = 10.0 ** (-hpf_attenuation_db(f, cfg.rx.hpf_corner_hz, cfg.rx.hpf_order) / 10.0)
+    return 10.0 * math.log10((thermal_flat * h2 + quant) / 10.0 ** (budget.n0_total_adc_dbm_hz / 10.0))
+
+
+def cfar_detection(cfg: RadarConfig, res: "StatResult", rc: RangeCorrelation | None = None) -> dict:
     """What the map's CA-CFAR does with what is really on it: the primary
     target's detection probability at its processed per-look SNR (the
     threshold's fluctuation and the target's own leak into its training
@@ -389,19 +453,31 @@ def cfar_detection(cfg: RadarConfig, res: "StatResult") -> dict:
     noise level, and the deterministic spurs of the chirp -- every listed
     ghost target as a steady target at ``SNR + level``, its Pd, and their
     sum over the ghosts in view: the detections per frame that are neither
-    targets nor noise."""
+    targets nor noise.  With the IF high-pass on a ghost is where the map
+    shows it: ``level_map_dbc`` is its level against the target's peak after
+    both passed the filter at their own beats, and its SNR is taken against
+    the noise at its own beat (``noise_shift_db`` over the target's)."""
     cf = res.cfar
     k = cf["n_looks"]
     # the CFAR's training cells are the target's neighbours: its SNR against the noise where it sits
     snr_look = res.angle["snr_look_db"] if k > 1 and res.angle else res.extras["snr_cell_local_db"]
     out = {"snr_look_db": snr_look, "pd_target": float(cfar_pd(snr_look, cf)[0]), "snr_pd90_db": cfar_snr_for_pd(0.9, cf)}
+    rc = RangeCorrelation(LOProfile.from_config(cfg), cfg.tau_s()) if rc is None else rc
+    sb = beat_sideband(cfg, rc)
     if k == 1:
         out["cfar_loss_db"] = out["snr_pd90_db"] - snr_for_pd(0.9, cfg.processing.cfar_pfa)
     rows = []
     for off, lvl in res.nonlinearity.get("ghosts") or []:
         r = cfg.target.range_m + off
-        rows.append({"offset_m": off, "range_m": r, "level_dbc": lvl, "snr_db": snr_look + lvl,
-                     "pd": float(cfar_pd(snr_look + lvl, cf)[0]), "in_view": bool(0.0 < r < cfg.max_range_m)})
+        # where the map shows it, over the floor where it sits: the target's own floor moved to the ghost's beat,
+        # plus the target's LO-noise sideband at the ghost's offset (both relative to the target's peak)
+        on_map, shift = lvl + hpf_map_shift_db(cfg, r), hpf_noise_shift_db(cfg, res.budget, r)
+        pn_here = pn_floor_local_cell(cfg, rc, r, sb)
+        floor = 10.0 * math.log10(10.0 ** ((shift - snr_look) / 10.0) + pn_here)
+        snr = on_map - floor
+        rows.append({"offset_m": off, "range_m": r, "level_dbc": lvl, "level_map_dbc": on_map, "floor_dbc": floor,
+                     "noise_shift_db": shift, "pn_floor_dbc": 10.0 * math.log10(max(pn_here, 1e-300)),
+                     "snr_db": snr, "pd": float(cfar_pd(snr, cf)[0]), "in_view": bool(0.0 < r < cfg.max_range_m)})
     out["ghosts"] = rows
     out["ghost_detections_per_frame"] = float(sum(g["pd"] for g in rows if g["in_view"]))
     out["ghosts_vouched"] = bool(res.nonlinearity.get("ghosts_vouched", False))
@@ -473,7 +549,9 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
     # it over the band, the CFAR sees it where the target is.  Both are kept; without the filter they are one number.
     tilt = hpf_floor_tilt(cfg, budget)
     res.extras["hpf_floor_tilt_db"] = 10.0 * math.log10(tilt)
-    res.extras["snr_cell_local_db"] = (-10.0 * math.log10(thermal_cell + pn_cell)
+    pn_local = pn_floor_local_cell(cfg, rc)
+    res.extras["pn_cell_local_dbc"] = 10.0 * math.log10(max(pn_local, 1e-300))
+    res.extras["snr_cell_local_db"] = (-10.0 * math.log10(thermal_cell + pn_local)
                                        + res.extras["pn_carrier_loss_db"])
     res.extras["snr_cell_expected_db"] = (-10.0 * math.log10(thermal_cell * tilt + pn_cell)
                                           + res.extras["pn_carrier_loss_db"])
@@ -528,7 +606,7 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
             if dithered:
                 res.nonlinearity.update({"tdc_dither_lsb": cfg.lo.tdc_dither_lsb, "ghost_noise_on": bool(live.noise)})
         res.extras["nonlinearity_profile"] = (nl["axis_m"], nl["profile_db"])
-    res.cfar.update(cfar_detection(cfg, res))
+    res.cfar.update(cfar_detection(cfg, res, rc))
     comp = compliance_check(cfg)
     res.compliance = comp.as_dict()
     if comp.eirp_cap_dbm is not None:

@@ -195,9 +195,9 @@ function ghostList(r){
   const g=r.cfar.ghosts||[]; if(!g.length) return '';
   const per = i => r.cells ? r.cells.filter(c=>c.kind==='ghost' && c.ghost_index===i).length : null;
   const mk=(shape)=>`<svg viewBox="0 0 14 14">${shape}</svg>`;
-  const rows=[`<tr class="key"><td>${mk('<rect x="2" y="3" width="10" height="8" rx="2" class="tgt"/>')} ${L('真目标','true target')}</td><td class="n">${f(r.time?r.time.peak_range_interp_m:r.target.range_m,2)}</td><td class="n">${f(0,1)}</td><td class="n">${f(r.cfar.snr_look_db,1)}</td><td class="n">${f(r.cfar.pd_target,3)}</td><td class="n">${r.counts?r.counts.target_lobe:'—'}</td></tr>`]
-   .concat(g.map((x,i)=>`<tr class="${x.in_view?'':'dim'}"><td>${mk(`<path d="M7 1.5 12.5 7 7 12.5 1.5 7Z" class="${per(i)?'gh':'ghx'}"/>`)} ${L('鬼目标','ghost')} G${i+1}${x.in_view?'':` <span class="oov">${L('图外','out of view')}</span>`}</td><td class="n">${f(x.range_m,2)}</td><td class="n">${f(x.level_dbc,1)}</td><td class="n">${f(x.snr_db,1)}</td><td class="n">${x.pd<0.001?x.pd.toExponential(1):x.pd.toFixed(3)}</td><td class="n">${x.in_view && per(i)!==null?per(i):'—'}</td></tr>`)).join('');
-  return `<h3>${L('检出清单','Detection list')}</h3><div class="tblwrap"><table class="tbl dlist"><thead><tr><th></th><th class="n">${L('距离 m','range m')}</th><th class="n">${L('电平 dBc','level dBc')}</th><th class="n">SNR dB</th><th class="n">Pd</th><th class="n">${L('这一帧过门限格','cells this frame')}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  const rows=[`<tr class="key"><td>${mk('<rect x="2" y="3" width="10" height="8" rx="2" class="tgt"/>')} ${L('真目标','true target')}</td><td class="n">${f(r.time?r.time.peak_range_interp_m:r.target.range_m,2)}</td><td class="n">${f(0,1)}</td><td class="n">${f(-r.cfar.snr_look_db,1)}</td><td class="n">${f(r.cfar.snr_look_db,1)}</td><td class="n">${f(r.cfar.pd_target,3)}</td><td class="n">${r.counts?r.counts.target_lobe:'—'}</td></tr>`]
+   .concat(g.map((x,i)=>`<tr class="${x.in_view?'':'dim'}"><td>${mk(`<path d="M7 1.5 12.5 7 7 12.5 1.5 7Z" class="${per(i)?'gh':'ghx'}"/>`)} ${L('鬼目标','ghost')} G${i+1}${x.in_view?'':` <span class="oov">${L('图外','out of view')}</span>`}</td><td class="n">${f(x.range_m,2)}</td><td class="n"${x.level_map_dbc!==x.level_dbc?` title="${L('滤波前','ahead of the filter')} ${f(x.level_dbc,1)} dBc"`:''}>${f(x.level_map_dbc,1)}</td><td class="n">${f(x.floor_dbc,1)}</td><td class="n">${f(x.snr_db,1)}</td><td class="n">${x.pd<0.001?x.pd.toExponential(1):x.pd.toFixed(3)}</td><td class="n">${x.in_view && per(i)!==null?per(i):'—'}</td></tr>`)).join('');
+  return `<h3>${L('检出清单','Detection list')}</h3><div class="tblwrap"><table class="tbl dlist"><thead><tr><th></th><th class="n">${L('距离 m','range m')}</th><th class="n">${g.some(x=>x.level_map_dbc!==x.level_dbc)?L('图上电平 dBc','level on the map dBc'):L('电平 dBc','level dBc')}</th><th class="n">${L('所在处噪底 dBc','floor there dBc')}</th><th class="n">SNR dB</th><th class="n">Pd</th><th class="n">${L('这一帧过门限格','cells this frame')}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 /* ---------- budget ---------- */
@@ -329,7 +329,7 @@ function ghostSvg(w){
 function pnCard(){
   const r=R(); const g=r.plots.ghosts; const lv=g.stems.map(x=>x.level_dbc); const pds=(r.cfar.ghosts||[]).map(x=>x.pd);
   const cd=S.spec.controls.find(c=>c.path==='lo.tdc_dither_lsb'); const dl=S.values['lo.tdc_dither_lsb']||0;
-  const row=(lab,v)=>`<tr><td>${lab}</td><td class="n">${v}</td></tr>`;
+  const row=(lab,v)=>`<tr><td>${lab}</td><td class="n">${v}</td></tr>`; const hp=r.pn.floor.some(x=>x.map_shift_db);
   return `<div class="card span2" data-tab="pn">
    <div class="hdr"><div><h2>${L('相噪与鬼目标','Phase noise & ghosts')}</h2>
     <p class="sub">${L(`TX / RX 共用 LO,经往返延迟 τ = ${f(r.pnc.tau_s*1e9,2)} ns 相关抵消:LO 积分相位 ${f(r.pn.lo_rms_rad,4)} rad → 残余 ${f(r.pn.residual_rms_rad,4)} rad。`,`TX and RX share one LO; correlation over τ = ${f(r.pnc.tau_s*1e9,2)} ns: LO integrated phase ${f(r.pn.lo_rms_rad,4)} rad → residual ${f(r.pn.residual_rms_rad,4)} rad.`)}</p></div>
@@ -351,8 +351,9 @@ function pnCard(){
      </tbody></table></div></div>
     <div><h3>${L('L(f):LO 与目标处残余','L(f): the LO and its residual at the target')}</h3><div class="chart" data-chart="lf"></div><div class="legend">${lfLegend(dl>0)}</div></div>
     <div><h3>${L('目标旁的相噪底','Phase-noise floor beside the target')}</h3>
-     <div class="tblwrap"><table class="tbl"><thead><tr><th>${L('离目标','offset')}</th><th class="n">${L('每距离格','per range bin')}</th><th class="n">${L('每距离-多普勒格','per R-D cell')}</th></tr></thead><tbody>
-     ${r.pn.floor.map(x=>`<tr><td class="num">${x.offset_m} m</td><td class="n">${f(x.per_bin_dbc,2)} dBc</td><td class="n">${f(x.per_cell_dbc,2)} dBc</td></tr>`).join('')}</tbody></table></div>
+     <div class="tblwrap"><table class="tbl"><thead><tr><th>${L('离目标','offset')}</th><th class="n">${L('每距离格','per range bin')}</th><th class="n">${L('每距离-多普勒格','per R-D cell')}</th>${hp?`<th class="n">${L('图上(过高通后)','on the map (behind the high-pass)')}</th>`:''}</tr></thead><tbody>
+     ${r.pn.floor.map(x=>`<tr><td class="num">${x.offset_m} m</td><td class="n">${f(x.per_bin_dbc,2)} dBc</td><td class="n">${f(x.per_cell_dbc,2)} dBc</td>${hp?`<td class="n">${f(x.per_cell_map_dbc,2)} dBc</td>`:''}</tr>`).join('')}</tbody></table></div>
+     ${hp?`<p class="sub">${L('dBc 是滤波前拍频信号里的相对电平;图上旁瓣和目标各自在自己的拍频处过高通,比目标远的抬高、近的压低。鬼目标图同理,图上的值见距离-多普勒页的检出清单。','Levels in dBc are the beat signal’s ahead of the filter; on the map a sideband and the target each pass the high-pass at their own beat, so what lies farther out than the target stands higher and what lies nearer lower. The same holds for the ghost plot; the detection list on the range-Doppler page has the levels on the map.')}</p>`:''}
      ${r.warnings.length?`<div class="note"><b>${L('库的提示(原话)','Notes from the library (verbatim)')}</b>${r.warnings.map(x=>`<details class="orig"><summary>${esc(x.slice(0,90))}…</summary>${esc(x)}</details>`).join('')}</div>`:''}</div>
    </div></div>`;
 }

@@ -28,7 +28,8 @@ blanking 的时长,0.2.1:距离窗按剩下的样本重配,`cfg.n_blank` 是样�
   `nonlinearity`、`chirp`、`extras["snr_cell_expected_db"]`(扣格点失配、带内相噪、拍频音相干损失后时域引擎该读到的数);
   里程碑 2:`targets`(每目标一行:电平、格点 SNR、最强他者的裙边、`masked`)、`angle`(孔径、波束宽、CRLB、TDM 偏差、互耦偏差、斜视;0.2.2 起还有本估计器的期望散布 `sigma_expected_deg` 与四个因子 `factor_*`)、`leakage`(`LeakageBudget`)、
   `cfar`(0.2.3:训练集有效格数、与被测格的相关、每格精确 Pfa、带内格数 / 独立观测数 / 每帧期望虚警格;0.2.4:`n_looks`、`pd_target`、`snr_pd90_db`、
-  `cfar_loss_db`、`ghosts`(每个鬼目标的 SNR 与 Pd)、`ghost_detections_per_frame`)。
+  `cfar_loss_db`、`ghosts`(每个鬼目标的 SNR 与 Pd;0.2.31 起每行有滤波前的 `level_dbc`、图上的 `level_map_dbc`、所在处噪底 `floor_dbc`,SNR = 图上电平 − 所在处噪底)、`ghost_detections_per_frame`)。
+  0.2.31:`extras["snr_cell_local_db"]` 读目标邻域自己的相噪底(`extras["pn_cell_local_dbc"]`),全图平均的在 `pn_cell_mean_dbc`;`hpf_map_shift_db(cfg, range_m)` 给 IF 高通让某距离处的线相对目标峰多出来的 dB。
 - `run_time(cfg, chirp=None, chirp_noise=None, noise=True, phase_noise=True, quantise=True, leakage=True, hpf=True)` → `TimeResult`(`chirp_noise`:
   逐周期引擎带噪声跑,环路到 fref/2 的噪声由它带、TDC 抖动把量化打散、剖面只合成 fref/2 以上;缺省在 event 引擎且没有 `lo.profile` 文件时为真。
   `extras["lo_noise_split"]` 写明这一帧怎么分的):`rd_db`、轴、峰值位置、`snr_cell_db`、
