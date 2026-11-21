@@ -394,7 +394,7 @@ const TABS = [['results','结果','Results'],['params','参数','Params'],['budg
 function bnav(){ return `<nav class="bnav" aria-label="sections">${TABS.map(([k,zh,en])=>`<button data-act="mtab" data-tab-to="${k}" class="${S.mtab===k?'on':''}">${IC[k]}<span>${L(zh,en)}</span></button>`).join('')}</nav>`; }
 function workbench(){
   const stale = S.error ? `<div class="refusal" data-tab="results params budget pn"><b>${L('配置层不接受这组参数','The config refuses these settings')}</b><span>${esc(S.error.error)}</span><span class="spacer"></span><span style="color:var(--muted)">${L('下面仍是上一组合法参数的结果。','Below is still the last legal run.')}</span></div>` : '';
-  return `<div class="wb"><div class="wb-in" data-mtab="${S.mtab}">${paramsPanel()}<div class="main">${stale}${RUN ? kpis()+previewBar()+baselineCard()+runbar()+rdCard()+budgetCard()+complianceCard()+pnCard()+timeCard()+reproCard() : `<div class="empty span2">${L('计算中…','computing…')}</div>`}</div>${bnav()}</div></div>`;
+  return `<div class="wb"><div class="wb-in" data-mtab="${S.mtab}">${paramsPanel()}<div class="main">${stale}${RUN ? kpis()+previewBar()+baselineCard()+runbar()+rdCard()+angleCard()+budgetCard()+complianceCard()+pnCard()+timeCard()+reproCard() : `<div class="empty span2">${L('计算中…','computing…')}</div>`}</div>${bnav()}</div></div>`;
 }
 function renderTop(){
   document.getElementById('langseg').innerHTML = `<button data-act="lang" data-v="zh" class="${S.lang==='zh'?'on':''}">中</button><button data-act="lang" data-v="en" class="${S.lang==='en'?'on':''}">EN</button>`;
@@ -429,6 +429,8 @@ function drawCharts(){
     else if(k==='bands'){ if(S.bands && S.bands.applies) el.innerHTML=bandsSvg(w); }
     else if(k==='btiers'){ const r=S.bands && S.bands.rows.find(x=>x.id===S.band); if(r) el.innerHTML=tiersSvg(w, r.sweep_ghz, r.governing, r.tiers); }
     else if(k==='sweep'){ if(S.sweep) el.innerHTML=sweepSvg(w); }
+    else if(k==='array') el.innerHTML=arraySvg(w);
+    else if(k==='angle') el.innerHTML=angleSvg(w);
   });
 }
 

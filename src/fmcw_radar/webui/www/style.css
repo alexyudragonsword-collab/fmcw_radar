@@ -431,3 +431,15 @@ svg .swx{fill:none;stroke:var(--bad);stroke-width:2}
 .yamlmsg{font-size:12px;margin:0 0 8px;color:var(--muted);overflow-wrap:anywhere}
 .yamlmsg.bad{color:var(--bad)}
 .btn[disabled]{opacity:.5;cursor:not-allowed}
+
+/* ---- the angle card ---- */
+.anggrid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px;align-items:start}
+@container wb (max-width:900px){ .anggrid{grid-template-columns:minmax(0,1fr)} }
+svg .el.tx{fill:var(--c3)} svg .el.rx{fill:var(--accent)} svg .el.vx{fill:var(--c2)}
+svg .an0{fill:none;stroke:var(--muted-mark);stroke-width:1.3;stroke-dasharray:4 3}
+svg .an1{fill:none;stroke:var(--accent);stroke-width:2}
+svg .an2{fill:none;stroke:var(--c3);stroke-width:1.6}
+svg .anr{fill:var(--accent)}
+.angtbl td.nt{color:var(--muted);font-size:11.5px}
+.angtbl td:first-child{min-width:130px}
+.angcard h3{margin:14px 0 6px;font-size:13px}

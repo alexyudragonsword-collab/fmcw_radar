@@ -392,15 +392,19 @@ def _process_cube(cfg: RadarConfig, cube: np.ndarray, info: dict | None) -> Time
     found = found_targets(cfg, p[:, :half], r_axis[:half], v_axis)
     # the angle of every target found: the DBF estimate at its own cell
     out = []
+    spectra = []                                              # each found target's angle spectrum at its own cell (u, dB)
     for f_ in found:
         if f_ is None:
             out.append(None)
+            spectra.append(None)
             continue
         jj = int(np.argmin(np.abs(r_axis[:half] - f_[0])))
         ii = int(np.argmin(np.abs(v_axis - f_[1])))
         e = va.estimate(maps[:, ii, :, jj].ravel(), doppler_fine_hz(rmaps[:, :, :, jj], pri_tx, float(fd[ii])))
         out.append(f_ + (e["theta_deg"],))
+        spectra.append((e["u_grid"], e["spectrum_db"]))
     res.extras["targets_found"] = out
+    res.extras["target_angle_spectra"] = spectra
     _target_local_snr(res, p[:, :min(n_if, half)], r_axis, v_axis, excl[0], p_.range_pad)
     return res
 

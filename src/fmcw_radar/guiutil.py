@@ -149,6 +149,28 @@ def _pn_curves(cfg: RadarConfig) -> dict:
             "l_1mhz_dbc_hz": float(prof.l_dbc(1e6)), "tau_s": 2.0 * cfg.target.range_m / C0, "source": prof.source}
 
 
+def _angle_plot(cfg: RadarConfig) -> dict | None:
+    """The MIMO array as the angle estimate sees it (None for one TX, one
+    RX): where the transmit, receive and virtual elements sit, in
+    wavelengths, and the beamformer's spectrum over ``u = sin(theta)`` for
+    the primary target -- the config's array (its coupling as configured)
+    and the same array with no coupling, to see what the coupling does to
+    it.  ``VirtualArray``'s own numbers; nothing is computed here."""
+    if cfg.mimo.n_virtual < 2:
+        return None
+    from .mimo import VirtualArray
+
+    va = VirtualArray(cfg)
+    th, fd = cfg.target.angle_deg, cfg.doppler_hz()
+    est = va.estimate(va.snapshot(th, fd, coupled=True), fd)
+    clean = va.estimate(va.snapshot(th, fd, coupled=False), fd)
+    lam = va.wavelength_m
+    return {"tx_lambda": va.tx.x_m / lam, "rx_lambda": va.rx.x_m / lam, "virtual_lambda": va.x_v / lam, "filled": bool(va.filled),
+            "aperture_lambda": va.aperture_m / lam, "u": est["u_grid"], "spectrum_db": np.maximum(est["spectrum_db"], -80.0),
+            "spectrum_no_coupling_db": np.maximum(clean["spectrum_db"], -80.0), "u_target": math.sin(math.radians(th)),
+            "u_read": est["u"], "u_read_no_coupling": clean["u"], "coupled": va.coupling is not None}
+
+
 def _levels(rep: dict, full: dict | None, k: dict) -> list[dict]:
     """The signal from the transmitter to the ADC: what it can deliver, after
     the backoff, EIRP, at the receive antenna, at the ADC -- now and (when
@@ -225,6 +247,7 @@ def run_report(values: dict[str, Any], baseline: dict | None = None, preview: bo
                    "strongest_dbc": max((g[1] for g in (nl.get("ghosts") or [])), default=None),
                    "list": (rep.get("cfar") or {}).get("ghosts") or []},
         "levels": _levels(rep, full, k),
+        "angle": plain(_angle_plot(run_cfg)),
         "timing": {"frame_on_s": k.get("frame_on_s"), "frame_period_s": k.get("frame_period_s"),
                    "off_time_required_s": k.get("off_time_required_s"), "off_time_have_s": None if gov is None else gov.get("off_time_have_s"),
                    "window_s": 0.033},
@@ -472,6 +495,24 @@ def run_sweep(values: dict[str, Any], path: str, lo: float, hi: float, points: i
             "config_sha256": config_hash(v["config"]), "wall_s": round(time.perf_counter() - t0, 3)}
 
 
+def _frame_angle(cfg: RadarConfig, tm) -> dict | None:
+    """What the time engine read of the angles (None for a single channel):
+    every configured target with where it was found and the angle its own
+    cell gave, and the primary target's spectrum there."""
+    found = tm.extras.get("targets_found")
+    spectra = tm.extras.get("target_angle_spectra")
+    if cfg.mimo.n_virtual < 2 or found is None or spectra is None:
+        return None
+    rows = []
+    for t, f_ in zip(cfg.targets, found):
+        rows.append({"range_m": t.range_m, "velocity_mps": t.velocity_mps, "angle_deg": t.angle_deg, "found": f_ is not None,
+                     "found_range_m": None if f_ is None else f_[0], "level_db": None if f_ is None else f_[2],
+                     "angle_read_deg": None if f_ is None else f_[3]})
+    first = spectra[0]
+    return {"targets": rows, "u": None if first is None else first[0],
+            "spectrum_db": None if first is None else np.maximum(first[1], -80.0)}
+
+
 # ---------------------------------------------------------------- a config file in, a config file out
 
 #: the largest YAML text ``load_yaml`` will parse (a full config is 3 kB)
@@ -621,6 +662,7 @@ def run_frame(values: dict[str, Any], rows: int = 64, cols: int = 150) -> dict:
                    "max_range_m": st.extras["max_range_m"]},
         "cells": cells, "cell_counts": counts,
         "ghosts": ghosts,
+        "angle": _frame_angle(cfg, tm),
         "time_engine": {"n_chirps": tm.n_chirps, "samples_per_chirp": tm.extras.get("n_wave"), "envelope_fs_hz": tm.extras.get("fs_wave_hz"),
                         "peak_range_m": tm.peak_range_m, "peak_range_interp_m": tm.extras.get("peak_range_interp_m"),
                         "peak_velocity_mps": tm.peak_velocity_mps, "snr_cell_db": tm.snr_cell_db,
