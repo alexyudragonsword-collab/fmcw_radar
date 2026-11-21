@@ -96,11 +96,11 @@ function kpis(){
 /* ---------- engines and the time-engine job ---------- */
 function runbar(){
   const r=R(), E=S.spec.engines; const st=r.engines.find(e=>e.id==='statistical'), ch=r.engines.find(e=>e.id.startsWith('chirp:')); const t=r.time;
-  const d = t && t.snr_difference_db;
+  const loc = t && t.snr_local_difference_db!=null; const d = t && (loc ? t.snr_local_difference_db : t.snr_difference_db);
   const eng=(id,cls,extra)=>`<div class="eng ${cls}"><b>${L(E[id].zh,E[id].en)} ${extra.badge||''} <span class="num r1">${extra.time||''}</span></b><span class="r">${L(E[id].does_zh,E[id].does_en)} ${extra.line||''}</span><span class="r scope"><i>${L('结论适用','Covers')}</i>${L(E[id].covers_zh,E[id].covers_en)}</span></div>`;
   return `<div class="card span2" data-tab="results"><div class="runbar"><div class="engrow">
     ${eng('statistical','main',{time:`${st.wall_s} s`})}
-    ${eng('time','',{time:t?`${r.frame.wall_s} s`:'', line: t ? `<span class="pill ${Math.abs(d)<1?'ok':'bad'}" style="font-size:11px">${L('差','diff')} ${fs(d,2)} dB</span> ${L('格点 SNR 实测','measured')} <span class="num">${f(t.snr_cell_db)}</span> / ${L('统计期望','expected')} <span class="num">${f(t.snr_cell_expected_db)} dB</span>${r.frameStale?` <span class="pill warn" style="font-size:11px">${L('属于上一组参数','from other settings')}</span>`:''}` : `<span class="pill neu" style="font-size:11px">${L('这组参数还没跑','not run for these settings')}</span>`})}
+    ${eng('time','',{time:t?`${r.frame.wall_s} s`:'', line: t ? `<span class="pill ${Math.abs(d)<1?'ok':'bad'}" style="font-size:11px">${L('差','diff')} ${fs(d,2)} dB</span> ${L('目标格点 SNR 实测','target cell SNR measured')} <span class="num">${f(loc?t.snr_cell_local_db:t.snr_cell_db)}</span> / ${L('统计期望','expected')} <span class="num">${f(loc?t.snr_cell_local_expected_db:t.snr_cell_expected_db)} dB</span>${r.frameStale?` <span class="pill warn" style="font-size:11px">${L('属于上一组参数','from other settings')}</span>`:''}` : `<span class="pill neu" style="font-size:11px">${L('这组参数还没跑','not run for these settings')}</span>`})}
     ${eng(ch.id,'',{badge: ch.vouches_for_spurs?`<span class="pill ok" style="font-size:11px">${L('可为杂散背书','vouches for spurs')}</span>`:`<span class="pill warn" style="font-size:11px">${L('不能背书杂散','cannot vouch for spurs')}</span>`, line: ch.rms_hz!=null?`${L('频率误差','freq. error')} RMS <span class="num">${f(ch.rms_hz/1e6,3)} MHz</span>`:''})}
    </div><div class="job" id="jobslot">${jobHtml()}</div></div></div>`;
 }
@@ -357,8 +357,11 @@ function timeCard(){
   return `<div class="card ${r.frameStale?'dim':''}" data-tab="results"><h2>${L('一致性:时域 vs 统计','Consistency: time vs statistical')}</h2>
    <p class="sub">${L('时域引擎不出结论,只核对统计引擎。','The time engine draws no conclusions; it checks the statistical one.')}</p>
    <table class="tbl"><thead><tr><th></th><th class="n">${L('统计(期望)','statistical')}</th><th class="n">${L('时域(实测)','time (measured)')}</th></tr></thead><tbody>
-   <tr class="key"><td>${L('格点 SNR','cell SNR')}</td><td class="n">${f(t.snr_cell_expected_db)} dB</td><td class="n">${f(t.snr_cell_db)} dB</td></tr>
-   <tr><td>${L('差','difference')}</td><td></td><td class="n">${fs(t.snr_difference_db,2)} dB</td></tr>
+   <tr class="key" data-row="local"><td>${L('目标格点 SNR · 目标处的噪底','target cell SNR · the floor where the target is')}</td><td class="n">${f(t.snr_cell_local_expected_db)} dB</td><td class="n">${f(t.snr_cell_local_db)} dB</td></tr>
+   <tr><td>${L('差','difference')}</td><td></td><td class="n">${t.snr_local_difference_db==null?'—':fs(t.snr_local_difference_db,2)+' dB'}</td></tr>
+   ${t.peak_is_target===false ? `<tr data-row="band"><td colspan="3" style="color:var(--muted)">${L(`图上最高的峰不是目标(是泄漏):"峰 / 全带平均噪底"读出 ${f(t.snr_cell_db)} dB,那是泄漏的,不与目标的期望值比。`,`The map's highest peak is not the target (it is the leakage): "peak over the band's mean floor" reads ${f(t.snr_cell_db)} dB, the leakage's, and is not compared with the target's expectation.`)}</td></tr>`
+     : `<tr data-row="band"><td>${L('图上的峰 · 全带平均噪底','map peak · floor averaged over the band')}</td><td class="n">${f(t.snr_cell_expected_db)} dB</td><td class="n">${f(t.snr_cell_db)} dB</td></tr>
+   <tr><td>${L('差','difference')}</td><td></td><td class="n">${fs(t.snr_difference_db,2)} dB</td></tr>`}
    <tr><td>${L('峰值位置','peak')}</td><td class="n">${r.target.range_m} m · ${r.target.velocity_mps} m/s</td><td class="n">${f(t.peak_range_interp_m,3)} m · ${f(t.peak_velocity_mps,2)} m/s</td></tr>
    <tr><td>${L('−3 dB 宽度','−3 dB width')}</td><td class="n">${r.nonlin.width_3db_m==null?'—':f(r.nonlin.width_3db_m*100,2)+' cm'}</td><td class="n">${f(t.width_3db_m*100,2)} cm</td></tr>
    <tr><td>${L('CFAR 过门限格','CFAR cells')}</td><td class="n">—</td><td class="n">${r.cells.length}</td></tr>

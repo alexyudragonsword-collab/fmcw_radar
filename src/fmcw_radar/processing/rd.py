@@ -89,5 +89,23 @@ def noise_floor(power_map: np.ndarray, peak_rc: tuple[int, int], exclude: tuple[
     return float(np.mean(power_map[mask]))
 
 
+def local_noise_floor(power_map: np.ndarray, peak_rc: tuple[int, int], exclude_doppler: int, r_in: int, r_out: int) -> float:
+    """Mean cell power in the peak's own range neighbourhood: the range
+    bins ``r_in`` to ``r_out`` away from it on either side (inside the map),
+    in the Doppler rows farther than ``exclude_doppler`` from its row.
+
+    Those cells hold the noise at the peak's beat frequency, to within the
+    few bins' offset -- which is what a noise floor that is not flat (the
+    IF high-pass tilts it) asks for, and what a CFAR's training cells see.
+    The peak's own Doppler rows are left out because its range sidelobes
+    live there; in the others it has only the product of both windows'
+    sidelobes.  NaN when the map leaves no such cell."""
+    m, n = power_map.shape
+    d_i = np.abs((np.arange(m) - peak_rc[0] + m // 2) % m - m // 2)
+    d_j = np.abs(np.arange(n) - peak_rc[1])
+    mask = (d_i[:, None] > exclude_doppler) & (d_j[None, :] >= r_in) & (d_j[None, :] <= r_out)
+    return float(np.mean(power_map[mask])) if np.any(mask) else float("nan")
+
+
 __all__ = ["range_fft", "doppler_fft", "range_doppler_map", "range_axis_m", "velocity_axis_mps", "power_db",
-           "read_peak", "noise_floor"]
+           "read_peak", "noise_floor", "local_noise_floor"]

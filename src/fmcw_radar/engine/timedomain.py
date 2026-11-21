@@ -49,7 +49,7 @@ from ..mimo import VirtualArray
 from ..phase_noise import RangeCorrelation
 from ..processing.cfar import ca_cfar_2d
 from ..processing.iffilter import apply_hpf, hpf_initial_state, hpf_sos
-from ..processing.rd import (noise_floor, power_db, range_axis_m, range_doppler_map, range_fft, read_peak,
+from ..processing.rd import (local_noise_floor, noise_floor, power_db, range_axis_m, range_doppler_map, range_fft, read_peak,
                              velocity_axis_mps)
 from ..processing.windows import enbw_bins, range_window
 
@@ -64,7 +64,7 @@ class TimeResult:
     velocity_axis_mps: np.ndarray
     peak_range_m: float
     peak_velocity_mps: float
-    snr_cell_db: float                  # peak over the mean noise cell, away from the target
+    snr_cell_db: float                  # peak over the mean noise cell of the whole IF band, away from the target
     n_chirps: int
     range_profile_db: np.ndarray        # the last chirp's range profile [dB], padded
     range_profile_axis_m: np.ndarray
@@ -72,6 +72,8 @@ class TimeResult:
     width_rayleigh_m: float
     peak_sidelobe_db: float
     cfar_detections: list = field(default_factory=list)
+    snr_cell_local_db: float = float("nan")   # peak over the noise in its own range neighbourhood (0.2.27): the two differ
+                                              # when the floor is not flat -- the IF high-pass tilts it
     extras: dict = field(default_factory=dict)
 
 
@@ -278,6 +280,7 @@ def process_frame(cfg: RadarConfig, frame: np.ndarray, info: dict | None = None)
     if info:
         res.extras.update({k: v for k, v in info.items() if k != "budget"})
     res.extras["targets_found"] = found_targets(cfg, p[:, :half], r_axis[:half], v_axis)
+    _target_local_snr(res, p[:, :min(n_if, half)], r_axis, v_axis, excl[0], cfg.processing.range_pad)
     return res
 
 
@@ -398,7 +401,35 @@ def _process_cube(cfg: RadarConfig, cube: np.ndarray, info: dict | None) -> Time
         e = va.estimate(maps[:, ii, :, jj].ravel(), doppler_fine_hz(rmaps[:, :, :, jj], pri_tx, float(fd[ii])))
         out.append(f_ + (e["theta_deg"],))
     res.extras["targets_found"] = out
+    _target_local_snr(res, p[:, :min(n_if, half)], r_axis, v_axis, excl[0], p_.range_pad)
     return res
+
+
+#: the peak's range neighbourhood for the local floor, in range bins of the unpadded FFT: far enough out for a Hann
+#: main lobe's skirt to be gone, near enough for a tilted floor to be the peak's own (20 bins are 200 kHz of beat)
+LOCAL_FLOOR_BINS = (4, 20)
+
+
+def _target_local_snr(res: TimeResult, p_band: np.ndarray, r_axis: np.ndarray, v_axis: np.ndarray, excl_doppler: int, pad: int) -> None:
+    """``res.snr_cell_local_db``: the primary target's cell -- where
+    ``found_targets`` saw it; the map's peak when it did not -- over the
+    noise in that cell's own range neighbourhood.
+
+    The map's peak is not always the target (with the TX leakage on it is
+    the leakage, 21 dB above a human at 5 m in the MIMO config), and the
+    floor is not always flat (the IF high-pass); this is the reading that
+    stays the target's own SNR in both cases.  On a K-look map (the MIMO
+    cube's sum over its virtual channels) it is the per-look SNR."""
+    i, j = res.extras["peak_rc"]
+    found = res.extras.get("targets_found") or [None]
+    on_peak = True
+    if found[0] is not None:
+        jt, it = int(np.argmin(np.abs(r_axis - found[0][0]))), int(np.argmin(np.abs(v_axis - found[0][1])))
+        on_peak = abs(jt - j) <= 3 * pad and abs(it - i) <= 2
+        i, j = it, jt
+    floor = local_noise_floor(p_band, (i, j), excl_doppler, LOCAL_FLOOR_BINS[0] * pad, LOCAL_FLOOR_BINS[1] * pad) if j < p_band.shape[1] else float("nan")
+    res.snr_cell_local_db = 10.0 * math.log10(p_band[i, j] / floor) if floor > 0.0 else float("nan")
+    res.extras.update({"noise_floor_local": floor, "local_cell": (i, j), "peak_is_target": bool(on_peak and found[0] is not None)})
 
 
 def run_time(cfg: RadarConfig, chirp: ChirpResult | None = None, chirp_noise: bool | None = None, **kw) -> TimeResult:

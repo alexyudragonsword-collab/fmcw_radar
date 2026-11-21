@@ -362,3 +362,14 @@ def test_a_file_that_is_not_a_config_says_why():
     assert guiutil.export_yaml({"mimo.n_rx": 2})["field"] == "mimo.angle_window"
     # an empty file is the default config, as it is for load_config
     assert guispec.values_to_config(guiutil.load_yaml("{}")["values"]) == RadarConfig()
+
+
+def test_the_frame_compares_the_targets_own_snr():
+    """What the page puts beside the time engine: the target's cell over the
+    noise where it sits, against the statistical engine's local SNR -- also
+    when the map's highest peak is the leakage."""
+    plain_ = guiutil.run_frame(FAST)["time_engine"]
+    assert plain_["peak_is_target"] is True and abs(plain_["snr_local_difference_db"]) < 1.0
+    assert plain_["snr_cell_local_expected_db"] == run_statistical(apply_overrides(RadarConfig(), FAST)).extras["snr_cell_local_db"]
+    leak = guiutil.run_frame({**FAST, "chirp.n_chirps": 16, "leakage.enabled": True, "rx.hpf_corner_hz": 200e3, "rx.hpf_order": 2})["time_engine"]
+    assert leak["peak_is_target"] is False and abs(leak["snr_local_difference_db"]) < 1.0 and leak["snr_difference_db"] > 15.0

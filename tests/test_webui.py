@@ -155,7 +155,8 @@ def test_the_time_engine_is_a_job_and_its_frame_knows_its_settings(page):
     page.wait_for_selector('[data-chart="rd"] svg', timeout=60000)
     assert page.evaluate("document.querySelectorAll('[data-chart=\"rd\"] .heat rect').length") > 100
     f = guiutil.run_frame(FAST)
-    assert f"{f['time_engine']['snr_cell_db']:.2f}" in page.evaluate("document.querySelector('.engrow').textContent")
+    assert f"{f['time_engine']['snr_cell_local_db']:.2f}" in page.evaluate("document.querySelector('.engrow').textContent")
+    assert f"{f['time_engine']['snr_cell_db']:.2f}" in page.evaluate("document.querySelector('[data-row=band]').textContent")     # the map-wide reading, in the card below
     assert page.evaluate("document.querySelector('.dlist tbody tr td:last-child').textContent") == str(f["cell_counts"]["target_lobe"])
     # another setting: the frame on screen is no longer this config's, and says so
     _set(page, "target.range_m", 7)
