@@ -426,6 +426,41 @@ def test_a_config_file_goes_out_of_the_page_and_comes_back(page, tmp_path):
     assert "radar_60g_mimo.yaml" in page.evaluate("document.querySelector('.yamlmsg').textContent")
 
 
+def test_the_angle_card_is_there_for_a_mimo_array_only(page):
+    _set(page, "lo.engine", "response")
+    _settled(page)
+    assert not page.evaluate("!!document.querySelector('.angcard')")                              # one TX, one RX: no angle to read
+    page.select_option("[data-yaml=bundled]", "radar_60g_mimo")
+    page.wait_for_function("document.querySelector('[data-path=\"mimo.n_rx\"]') && document.querySelector('[data-path=\"mimo.n_rx\"]').value === '4'", timeout=60000)
+    _set(page, "lo.engine", "response")
+    _set(page, "chirp.n_chirps", 8)
+    _settled(page)
+    from fmcw_radar.config import apply_overrides, load_config
+
+    flat = guispec.values_from_config(apply_overrides(load_config("configs/radar_60g_mimo.yaml"), {"lo.engine": "response", "chirp.n_chirps": 8}))
+    g = guiutil.run_report(flat)["report"]["angle"]
+    page.wait_for_selector(".angcard")
+    card = page.evaluate("document.querySelector('.angcard').textContent")
+    assert f"{g['theta_est_deg']:.2f}°" in card and f"{g['beamwidth_deg']:.2f}°" in card and f"{g['sigma_expected_deg']:.3f}°" in card
+    assert "2 发 × 4 收 = 8 个虚拟阵元" in card and "survey" in card
+    # the array: two transmitters, four receivers, eight virtual elements; the spectrum with and without the coupling
+    assert page.evaluate("['tx','rx','vx'].map(c => document.querySelectorAll('[data-chart=array] .el.' + c).length)") == [2, 4, 8]
+    assert page.evaluate("['an1','an0','an2'].map(c => document.querySelectorAll('[data-chart=angle] .' + c).length)") == [1, 1, 0]
+    assert not page.evaluate("!!document.querySelector('.angt')")
+    # a frame: the time engine's spectrum joins, and the angle it read at each target's own cell
+    page.click("[data-act=frame]")
+    page.wait_for_selector("[data-chart=angle] .an2", timeout=120000)
+    f = guiutil.run_frame(flat)["angle"]["targets"]
+    rows = page.evaluate("[...document.querySelectorAll('.angt tbody tr')].map(r => r.cells[2].textContent)")
+    assert rows == [f"{t['angle_read_deg']:.2f}°".replace("-", "−") for t in f]
+    # other settings: that frame's spectrum is not this array's any more
+    page.evaluate("document.querySelectorAll('details').forEach(d => d.open = true)")
+    _set(page, "target.angle_deg", 30)
+    _settled(page)
+    assert page.evaluate("document.querySelectorAll('[data-chart=angle] .an2').length") == 0 and not page.evaluate("!!document.querySelector('.angt')")
+    assert page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth") == 0
+
+
 def test_cancel_stops_the_frame(browser):
     """The desktop backend: the 64-chirp frame takes seconds; cancel ends it
     at once and the page says when."""

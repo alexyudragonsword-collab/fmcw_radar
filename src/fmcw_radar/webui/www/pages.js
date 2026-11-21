@@ -300,6 +300,65 @@ function sweepPage(){
   </div>`;
 }
 
+/* ---------- the angle estimate (a card on the workbench, a MIMO array only) ---------- */
+const udeg = u => Math.asin(Math.max(-1, Math.min(1, u)))*180/Math.PI;      // the axis is u = sin(theta); its labels are degrees
+function arraySvg(w){
+  const a=S.run.plots.angle; const all=a.virtual_lambda.concat(a.tx_lambda, a.rx_lambda); const lo=Math.min(...all)-0.5, hi=Math.max(...all)+0.5;
+  const ml=86, mr=14; const pw=w-ml-mr; const X=v=>ml+(v-lo)/(hi-lo)*pw;
+  const rows=[[L('发射','TX'),a.tx_lambda,'tx'],[L('接收','RX'),a.rx_lambda,'rx'],[L('虚拟','virtual'),a.virtual_lambda,'vx']]; const H=rows.length*26+34;
+  let s=`<svg viewBox="0 0 ${w} ${H}" width="${w}" height="${H}" role="img" aria-label="${L('阵列几何','array geometry')}">`;
+  const st=nice((hi-lo)/(w<420?4:8)); for(let v=Math.ceil(lo/st)*st; v<=hi+1e-9; v+=st){ s+=`<line x1="${X(v)}" x2="${X(v)}" y1="6" y2="${H-24}" class="grid"/><text x="${X(v)}" y="${H-10}" text-anchor="middle">${numv(+v.toPrecision(6))}</text>`; }
+  s+=`<text x="4" y="${H-10}" style="font-size:10px">${L('位置 [λ]','position [λ]')}</text>`;
+  rows.forEach(([lab,xs,cls],i)=>{ const y=18+i*26; s+=`<text x="4" y="${y+4}" class="lbl">${lab} <tspan style="font-weight:400;fill:var(--muted)">× ${xs.length}</tspan></text><line x1="${ml}" x2="${ml+pw}" y1="${y}" y2="${y}" class="grid"/>`
+    + xs.map(x=>cls==='tx'?`<path d="M${X(x)-5} ${y+5}L${X(x)} ${y-6}L${X(x)+5} ${y+5}z" class="el ${cls}"/>`:`<circle cx="${X(x)}" cy="${y}" r="${cls==='vx'?4:5}" class="el ${cls}"/>`).join(''); });
+  return s+'</svg>';
+}
+function frameAngle(){ const f=S.frame; return f && !R().frameStale && f.angle && f.angle.u ? f.angle : null; }
+function angleSvg(w){
+  const a=S.run.plots.angle, fa=frameAngle(); const ml=40, mr=12, mt=14, mb=34; const pw=w-ml-mr, ph=Math.min(250, Math.max(170, w*0.4)); const H=ph+mt+mb; const y0=-60;
+  const X=u=>ml+(u+1)/2*pw, Y=v=>mt+(0-Math.max(v,y0))/(0-y0)*ph;
+  let s=`<svg viewBox="0 0 ${w} ${H}" width="${w}" height="${H}" role="img" aria-label="${L('角谱','angle spectrum')}">`;
+  for(let v=0; v>=y0; v-=10){ s+=`<line x1="${ml}" x2="${ml+pw}" y1="${Y(v)}" y2="${Y(v)}" class="grid"/><text x="${ml-6}" y="${Y(v)+3.5}" text-anchor="end">${f(v,0)}</text>`; }
+  for(const d of (w<420?[-90,-30,0,30,90]:[-90,-60,-30,-15,0,15,30,60,90])){ const u=Math.sin(d*Math.PI/180); s+=`<line x1="${X(u)}" x2="${X(u)}" y1="${mt}" y2="${mt+ph}" class="grid"/><text x="${X(u)}" y="${mt+ph+15}" text-anchor="middle">${f(d,0)}°</text>`; }
+  s+=`<text x="${ml+pw/2}" y="${H-4}" text-anchor="middle">${L('角度(横轴按 u = sin θ 等距)','angle (the axis is even in u = sin θ)')}</text><text x="4" y="${mt-3}" style="font-size:10px">dB</text>`;
+  const line=(u,db,cls)=>`<polyline points="${u.map((x,i)=>`${X(x).toFixed(1)},${Y(db[i]).toFixed(1)}`).join(' ')}" class="${cls}"/>`;
+  s+=`<line x1="${X(a.u_target)}" x2="${X(a.u_target)}" y1="${mt}" y2="${mt+ph}" class="lim"/><text x="${X(a.u_target)+4}" y="${mt+10}" class="halo" style="font-size:10px">${L('目标','target')} ${f(udeg(a.u_target),1)}°</text>`;
+  if(a.coupled) s+=line(a.u, a.spectrum_no_coupling_db, 'an0');
+  s+=line(a.u, a.spectrum_db, 'an1');
+  if(fa) s+=line(fa.u, fa.spectrum_db, 'an2');
+  s+=`<path d="M${X(a.u_read)-5} ${mt-2}L${X(a.u_read)+5} ${mt-2}L${X(a.u_read)} ${mt+7}z" class="anr"><title>${f(udeg(a.u_read),2)}°</title></path>`;
+  return s+'</svg>';
+}
+function angleCard(){
+  const a=S.run.plots.angle; if(!a) return '';
+  const g=S.run.report.angle, v=S.run.values, fa=frameAngle(); const pv=S.run.preview;
+  const row=(k,val,note)=>`<tr><td>${k}</td><td class="n">${val}</td><td class="nt">${note||''}</td></tr>`;
+  const t0 = fa && fa.targets[0] && fa.targets[0].found ? fa.targets[0] : null;
+  const fac=[['factor_element_pattern',L('阵元方向图','element pattern')],['factor_scalloping',L('格点刻度损失','scalloping')],['factor_angle_window',L('角窗','angle window')],['factor_doppler_estimate',L('多普勒估计','Doppler estimate')]]
+    .filter(([k])=>g[k]!=null).map(([k,n])=>`${n} ×${f(g[k],3)}`).join(' · ');
+  const rows=[
+    row(L('目标角度(输入)','target angle (input)'), `${f(v['target.angle_deg'],1)}°`),
+    row(L('读出角度 · 统计','angle read · statistical'), `<b>${f(g.theta_est_deg,2)}°</b>`, L(`互耦偏置 ${fs(g.coupling_bias_deg,3)}°(${g.coupling_source}${g.coupling_calibrated?L(',已校准',', calibrated'):''})`,`coupling bias ${fs(g.coupling_bias_deg,3)}° (${g.coupling_source}${g.coupling_calibrated?', calibrated':''})`)),
+    row(L('读出角度 · 时域','angle read · time engine'), t0?`<b>${f(t0.angle_read_deg,2)}°</b>`:'—', t0?'':L('这组参数的时域帧还没跑','no time-engine frame for these settings')),
+    row(L('不做 TDM 多普勒补偿时的偏置','bias without the TDM Doppler compensation'), `${fs(g.tdm_bias_uncompensated_deg,2)}°`, v['mimo.tdm_doppler_compensation']?L('补偿开着','compensation on'):L('补偿关着:读数带这项偏置','compensation off: the reading carries it')),
+    row(L('波束宽(−3 dB)','beamwidth (−3 dB)'), `${f(g.beamwidth_deg,2)}°`, L(`孔径 ${f(a.aperture_lambda,2)} λ`,`aperture ${f(a.aperture_lambda,2)} λ`)),
+    row(L('峰旁瓣','peak sidelobe'), `${f(g.peak_sidelobe_db,1)} dB`, `${L('角窗','angle window')} ${v['mimo.angle_window']}`),
+    row(L('CRLB σ','CRLB σ'), `${f(g.sigma_crlb_deg!=null?g.sigma_crlb_deg:g.crlb_sigma_deg,3)}°`, L(`每阵元格点 SNR ${f(g.snr_element_cell_db!=null?g.snr_element_cell_db:g.snr_element_db,2)} dB`,`per-element cell SNR ${f(g.snr_element_cell_db!=null?g.snr_element_cell_db:g.snr_element_db,2)} dB`)),
+    g.sigma_expected_deg!=null ? row(L('估计器的期望 σ','the estimator\'s expected σ'), `<b>${f(g.sigma_expected_deg,3)}°</b>`, fac) : '',
+    row(L('TDM 不模糊速度','TDM unambiguous velocity'), `±${f(g.max_velocity_mps,2)} m/s`, L(`${v['mimo.n_tx']} 路发射轮流`,`${v['mimo.n_tx']} transmitters in turn`)),
+  ].join('');
+  const tg = fa ? `<h3>${L('时域引擎在每个目标自己的格上读出的角度','The angle the time engine read at each target\'s own cell')}</h3><div class="tblwrap"><table class="tbl angt"><thead><tr><th class="n">${L('距离 m','range m')}</th><th class="n">${L('配置的角度','configured')}</th><th class="n">${L('读出','read')}</th><th class="n">${L('差','difference')}</th><th class="n">${L('电平 dB','level dB')}</th></tr></thead><tbody>${fa.targets.map(t=>t.found?`<tr><td class="n">${f(t.range_m,2)}</td><td class="n">${f(t.angle_deg,1)}°</td><td class="n">${f(t.angle_read_deg,2)}°</td><td class="n">${fs(t.angle_read_deg-t.angle_deg,2)}°</td><td class="n">${f(t.level_db,1)}</td></tr>`:`<tr class="dim"><td class="n">${f(t.range_m,2)}</td><td class="n">${f(t.angle_deg,1)}°</td><td colspan="3">${L('没有找到','not found')}</td></tr>`).join('')}</tbody></table></div>` : '';
+  return `<div class="card span2 angcard" data-tab="results"><h2>${L('测角:TDM-MIMO 虚拟阵列','Angle: the TDM-MIMO virtual array')} ${pv?`<span class="pill warn" style="font-size:11px">${L('预览','preview')}</span>`:''}</h2>
+   <p class="sub">${L(`${v['mimo.n_tx']} 发 × ${v['mimo.n_rx']} 收 = ${g.n_virtual} 个虚拟阵元,${a.filled?'填满的均匀线阵':'稀疏线阵'}。角谱是主目标的:数字波束形成在虚拟阵元上做一次加窗的 DFT。`,`${v['mimo.n_tx']} TX × ${v['mimo.n_rx']} RX = ${g.n_virtual} virtual elements, ${a.filled?'a filled uniform line':'a sparse line'}. The spectrum is the primary target's: digital beamforming is one windowed DFT over the virtual elements.`)}</p>
+   <div class="anggrid"><div>
+     <div class="chart" data-chart="array"></div>
+     <div class="chart" data-chart="angle" style="margin-top:8px"></div>
+     <div class="legend"><span><span class="sw-line" style="border-color:var(--accent)"></span>${L('统计引擎(按配置的互耦)','statistical (coupling as configured)')}</span>${a.coupled?`<span><span class="sw-line" style="border-color:var(--muted-mark);border-top-style:dashed"></span>${L('同一阵列,无互耦','the same array, no coupling')}</span>`:''}${fa?`<span><span class="sw-line" style="border-color:var(--c3)"></span>${L('时域引擎这一帧','this frame of the time engine')}</span>`:''}<span>▼ ${L('读出的角度','the angle read')}</span></div>
+    </div><div>
+     <div class="tblwrap"><table class="tbl angtbl"><tbody>${rows}</tbody></table></div>${tg}
+    </div></div></div>`;
+}
+
 /* ---------- the pinned baseline (a card on the workbench) ---------- */
 function baselineCard(){
   if(!S.baseline) return `<div class="card span2 basebar" data-tab="results"><div class="baserow"><span class="sub" style="margin:0">${L('把当前这一组参数钉成基线,之后每次改动都对着它比:哪些控件变了、每个结论数朝哪边动。','Pin the current settings as a baseline; every later change is compared against it: which controls differ, and which way each headline number moved.')}</span><button class="btn sm" data-act="pin" ${S.run&&S.run.preview?'disabled':''}>${L('设为基线','Pin as baseline')}</button></div></div>`;

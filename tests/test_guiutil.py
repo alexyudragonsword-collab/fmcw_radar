@@ -373,3 +373,42 @@ def test_the_frame_compares_the_targets_own_snr():
     assert plain_["snr_cell_local_expected_db"] == run_statistical(apply_overrides(RadarConfig(), FAST)).extras["snr_cell_local_db"]
     leak = guiutil.run_frame({**FAST, "chirp.n_chirps": 16, "leakage.enabled": True, "rx.hpf_corner_hz": 200e3, "rx.hpf_order": 2})["time_engine"]
     assert leak["peak_is_target"] is False and abs(leak["snr_local_difference_db"]) < 1.0 and leak["snr_difference_db"] > 15.0
+
+
+# ---------------------------------------------------------------- the angle card's numbers (a MIMO array only)
+
+def test_the_angle_plot_is_the_virtual_arrays_own():
+    """One TX and one RX: nothing to plot.  A MIMO array: the element
+    positions (the virtual ones are the sums of a transmit and a receive
+    position), and the beamformer's spectrum for the primary target as the
+    library's estimator sees it -- with the coupling as configured, and with
+    none, where the reading is the target's angle."""
+    from fmcw_radar.mimo import VirtualArray
+
+    assert guiutil.run_report(FAST)["plots"]["angle"] is None and guiutil.run_frame(FAST)["angle"] is None
+    cfg = apply_overrides(load_config(REPO / "configs" / "radar_60g_mimo.yaml"), {"lo.engine": "response", "chirp.n_chirps": 8})
+    flat = guispec.values_from_config(cfg)
+    r = guiutil.run_report(flat)
+    a, g = r["plots"]["angle"], r["report"]["angle"]
+    assert sorted(a["virtual_lambda"]) == pytest.approx(sorted(t + x for t in a["tx_lambda"] for x in a["rx_lambda"]))
+    assert len(a["tx_lambda"]) == 2 and len(a["rx_lambda"]) == 4 and len(a["virtual_lambda"]) == g["n_virtual"] == 8 and a["filled"]
+    assert np.diff(sorted(a["virtual_lambda"])) == pytest.approx(0.5)                          # a filled half-wavelength line
+    va = VirtualArray(cfg)
+    assert a["aperture_lambda"] == pytest.approx(va.aperture_m / va.wavelength_m) and a["u"] == pytest.approx(va.u_grid())
+    deg = lambda u: float(np.degrees(np.arcsin(u)))                                           # noqa: E731
+    assert deg(a["u_read"]) == pytest.approx(g["theta_est_deg"], abs=1e-9) and a["u_target"] == pytest.approx(np.sin(np.radians(20.0)))
+    assert deg(a["u_read_no_coupling"]) == pytest.approx(20.0, abs=0.01)                      # the bias is the coupling's
+    assert g["theta_est_deg"] - 20.0 == pytest.approx(g["coupling_bias_deg"], abs=0.01) and a["coupled"] is True
+    for key in ("spectrum_db", "spectrum_no_coupling_db"):
+        sp = np.array(a[key])
+        assert sp.max() == pytest.approx(0.0, abs=1e-9) and sp.min() >= -80.0 and abs(a["u"][int(sp.argmax())] - a["u_read"]) < 2.0 / len(a["u"])
+    # the coupling fills the sidelobes in: the highest one is far above the clean array's
+    far = np.abs(np.array(a["u"]) - a["u_read"]) > 0.6
+    assert np.array(a["spectrum_db"])[far].max() > np.array(a["spectrum_no_coupling_db"])[far].max() + 8.0
+    # the time engine: every configured target, the angle read at its own cell, the primary's spectrum there
+    f = guiutil.run_frame(flat)["angle"]
+    assert [(t["range_m"], t["angle_deg"], t["found"]) for t in f["targets"]] == [(5.0, 20.0, True), (5.3, -10.0, True)]
+    assert f["targets"][0]["angle_read_deg"] == pytest.approx(g["theta_est_deg"], abs=0.5) and f["targets"][1]["angle_read_deg"] == pytest.approx(-10.0, abs=0.6)
+    assert abs(f["u"][int(np.argmax(f["spectrum_db"]))] - a["u_read"]) < 2.0 / len(f["u"])
+    no_coupling = guiutil.run_report({**flat, "mimo.coupling.source": "none"})["plots"]["angle"]
+    assert no_coupling["coupled"] is False and no_coupling["spectrum_db"] == no_coupling["spectrum_no_coupling_db"]
