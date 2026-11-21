@@ -95,3 +95,22 @@ def test_detection_probability_is_marcum_q():
     assert float(pd_swerling0(13.2, 1e-6)) == pytest.approx(0.9, abs=0.03)
     assert float(pd_swerling0(30.0, 1e-6)) == pytest.approx(1.0, abs=1e-9)
     assert snr_for_pd(0.9, 1e-6) == pytest.approx(13.2, abs=0.3)
+
+
+def test_a_survival_function_that_is_not_a_probability_is_put_right(monkeypatch):
+    """SciPy 1.8.1 (the phone's) returns -1.66e-06 from ``ncx2.sf`` once the
+    argument and the non-centrality are around 1e9, where the answer is 1 or
+    0; the guard takes the normal limit there and nothing else."""
+    from fmcw_radar.processing import detection as d
+
+    x = np.array([40.0, 5.0e8, 2.0e9, 1.0e9])
+    nc = np.array([20.0, 1.0e9, 1.0e9, 1.0e9])
+    ordinary = d.ncx2.sf(x[:1], 16, nc[:1])                                                           # any SciPy gets this one right
+    assert 0.0 < ordinary[0] < 1.0 and np.array_equal(d.ncx2_sf(x[:1], 16, nc[:1]), ordinary)       # a probability: untouched, bit for bit
+
+    def old_scipy(x_, df, nc_):                                                                        # what 1.8.1 does at the other three
+        return np.array([ordinary[0], -1.66099968290645e-06, float("nan"), 1.5])
+
+    monkeypatch.setattr(d.ncx2, "sf", old_scipy)
+    fixed = d.ncx2_sf(x, 16, nc)
+    assert fixed[0] == ordinary[0] and fixed[1] == 1.0 and fixed[2] == 0.0 and fixed[3] == pytest.approx(0.5, abs=1e-3)

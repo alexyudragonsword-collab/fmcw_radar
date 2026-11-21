@@ -68,3 +68,15 @@ def test_the_page_speaks_the_bridge_and_is_ready_for_a_phone():
     wf = _read(REPO / ".github/workflows/android.yml")
     for f in sorted(p.name for p in WWW.iterdir()):
         assert f in wf, f
+
+
+def test_the_wheels_the_apk_ships_are_the_ones_ci_tests_on():
+    """Chaquopy's repository decides which numpy and scipy the phone gets
+    (1.26.2 and 1.8.1 for Python 3.10), not the library's declared floors:
+    the APK workflow checks it got that pair, and a CI job runs the suite on
+    it."""
+    ci, apk = _read(REPO / ".github/workflows/ci.yml"), _read(REPO / ".github/workflows/android.yml")
+    job = ci.split("  test-android-versions:")[1].split("\n  # ")[0]
+    assert 'python-version: "3.10"' in job and 'pip install --no-deps "numpy==1.26.2" "scipy==1.8.1" "pyyaml==6.0.3"' in job
+    assert "pip install --no-deps -e ." in job and "run: pytest -q" in job
+    assert 'grep -qx "numpy-1.26.2.dist-info" wheels.txt' in apk and 'grep -qx "scipy-1.8.1.dist-info" wheels.txt' in apk

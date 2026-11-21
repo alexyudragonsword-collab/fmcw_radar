@@ -1,7 +1,7 @@
 ---
 type: project_topic
 status: active
-summary: "图形界面的决定与分层:一份网页界面三个宿主(桌面应用窗口 / 浏览器 / Android WebView),描述 guispec / 计算 guiutil / 分发与队列 webhost、appbridge / 画 webui,页面只画不算;界面方案是'方案 A 的风格 + 方案 B 的九处 + 系统框图页'(合并稿)。P1 已做(guispec,0.2.21);P2 已做(guiutil、webhost、工作台页与浏览器测试,0.2.23);P3 已做(系统框图页、频段取舍页、扫描页、基线对比,0.2.24);逐周期引擎的预览与配置文件载入 / 导出已做(0.2.26);测角卡已做(0.2.28);P4 Android 没做。"
+summary: "图形界面的决定与分层:一份网页界面三个宿主(桌面应用窗口 / 浏览器 / Android WebView),描述 guispec / 计算 guiutil / 分发与队列 webhost、appbridge / 画 webui,页面只画不算;界面方案是'方案 A 的风格 + 方案 B 的九处 + 系统框图页'(合并稿)。P1 已做(guispec,0.2.21);P2 已做(guiutil、webhost、工作台页与浏览器测试,0.2.23);P3 已做(系统框图页、频段取舍页、扫描页、基线对比,0.2.24);逐周期引擎的预览与配置文件载入 / 导出已做(0.2.26);测角卡已做(0.2.28);P4 Android 外壳已做(0.2.29:CI 能构建 APK,没有在设备上跑过)。"
 tags: [gui, guispec, web, android, form, provenance]
 contains: [decision, lesson, pitfall]
 created: "2026-11-19"
@@ -28,7 +28,7 @@ authoring_mode: ai_generated
   - 手机宽度(≤ 760 px)底部导航,页面不横向滚动;中英双语;浅色 / 深色。
   没有采用:单独的"运行(统计)"按钮(工作台是实时的)。还没画:MIMO 测角界面(框图里只是一个虚线框)。
 - **分阶段**,每阶段单独 PR:P0 效果图(已做)→ **P1 界面规格层 guispec + "每个旋钮都拨得动"(已做,0.2.21)** → **P2 guiutil(报告 + 图数据 + 引擎行 + 可复现卡)与本地宿主、工作台页(已做,0.2.23)**
-  → **P3 系统框图页、频段取舍页、基线 / 扫描(已做,0.2.24)** → P4 Android。
+  → **P3 系统框图页、频段取舍页、基线 / 扫描(已做,0.2.24)** → **P4 Android(外壳、桥接、APK 工作流已做,0.2.29;设备上未核实)**。
 
 ## P1:`guispec.py`(只描述,不算物理)
 
@@ -183,14 +183,30 @@ polar_tx 的经验:一个摆在那里却不起作用的控件、一个被库静�
 - 帧属于别的参数时不画它的谱、不列它读的角(与距离-多普勒图同一条规矩)。
 - 没做:二维阵列(库里是线阵);多目标时只画主目标的谱;角度不在扫描页的"看哪个数"里(`METRICS` 没有角度类的数)。
 
+## P4:Android(0.2.29)
+
+- **做法照 polar_tx / array_tx**:Chaquopy 15.0.1 + Python 3.10 + AGP 8.1.4;Activity 不含逻辑(WebView 载入 `file:///android_asset/www/`,页面文件就是 `src/fmcw_radar/webui/www/` 那几份;
+  一个异步桥接 `host.call(id, route, json)`,回信走 `window.onHostReply`);`fmcw_radar.appbridge.call(route, args_json)` 就是线程后端的 `webhost.Api`。清单无权限,图标是矢量。
+- **手机上页面不同的三处**:逐周期全量结果点了才算(只有一条 Python 线程);配置文件是可复制 / 可粘贴的文本(WebView 没有下载和文件选择);顶栏给状态栏留位置。
+- **可行性闸门的答案出人意料(contains:pitfall)**:这里够不着 `chaquo.com`,所以让 CI 实际构建。构建**成功**,装进去的是 numpy 1.26.2、**scipy 1.8.1**——
+  而库声明 `scipy>=1.11`,并且这个下限是真的:1.10.1 上 `ncx2.sf` 直接 `Fatal Python error: Aborted`。Chaquopy 的 pip 不按 sdist 的声明拦。**"能构建"不是"能跑"。**
+  在同一组版本上(uv 装的 Python 3.10,`--no-deps` 装那一对)跑全套:没有崩(1.8.1 早于会中止的那个实现),1 条红——scipy 1.8.1 的 `ncx2.sf` 在参数到 1e9 量级时返回 −1.66e-06,
+  于是 MIMO 配置"Pd 0.9 所需 SNR"成了无穷大;每 look 80 dB 的强目标,检测概率本身也会错。修:`processing.detection.ncx2_sf` 只在 scipy 给出的不是概率(NaN、< 0、> 1)时换成正态极限,
+  正常的 scipy 上一个数都不动。
+- **守卫**:CI 的 `test-android-versions` 在 Python 3.10 + numpy 1.26.2 + scipy 1.8.1 上跑全套;APK 工作流核对装进去的就是这一对(Chaquopy 仓库换版本它会红,提醒把测试作业一起挪)。
+  `tests/test_appbridge.py`(桥是线程后端的 Api、永不抛异常、页面的每个调用有路由而每条路由有调用者)、`tests/test_android.py`(无权限、包名三处一致、要一起动的版本在一起、页面为手机备好)、
+  浏览器测试里用一个仿真的桥让页面走手机那条路。
+- **没有核实的(原话照写)**:没有在真机或模拟器上跑过。应用能否启动、首次导入多久、手机上各项计算多久、手势与安全区,都不知道。可复现卡的 vendored pin 在手机上可能不全
+  (`.py` 的文件头在包里编成了 `.pyc`,只有 YAML 的头还读得到)。APK 约 72 MB(两个 ABI)。
+
 ## 还没做的(P4 及页面缺口)
 
-- P4 Android(Chaquopy + WebView;桥调 `webhost.Api`,任务用线程后端)。
+- Android:侧载到真机做一次真实计算(见上一节"没有核实的");手机上各项耗时量出来之后再定默认引擎要不要换。
 - `target.extra_targets`(表)在页面上只读(从 YAML 载入的多目标能算、能画,只是不能在页面上改);多目标时主瓣框是一个包住所有目标的框;泄漏格没有单独的画法。
 - 关掉应用窗口不会停本地服务(Ctrl+C 停)。
 - 预览只管工作台的一次运行:频段表(逐周期引擎下 18 s)和扫描仍是整份整份地算,没有预览。
 - 预览在全量运行期间仍被拖慢(4 核容器上 0.5–1.7 s);没有限制工作进程的线程数,也没有在更多核的机器上量过(未核实)。
-- 导出是浏览器下载(`<a download>`);Android WebView 里这条路不通,P4 要另给出口。`configs/` 不在安装包里。
+- `configs/` 不在安装包里(手机和 wheel 安装都没有随库配置菜单)。
 - 扫描只扫一个控件、看一个数;没有二维扫描,也不能把扫描结果导出。
 
 ## 复现
