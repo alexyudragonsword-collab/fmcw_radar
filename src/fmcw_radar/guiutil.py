@@ -608,6 +608,8 @@ def run_frame(values: dict[str, Any], rows: int = 64, cols: int = 150) -> dict:
     cells = classify_cells(cfg, ghosts, tm.cfar_detections)
     counts = {kind: sum(1 for c in cells if c["kind"] == kind) for kind in CELL_KINDS}
     expected = st.extras.get("snr_cell_expected_db")
+    # the target's own SNR per look: the virtual element's on a MIMO map (summed over K looks), the cell's otherwise
+    local = st.angle["snr_element_cell_db"] if cfg.mimo.n_virtual > 1 and st.angle else st.extras.get("snr_cell_local_db")
     return plain({
         "ok": True, "config_sha256": config_hash(cfg), "seed": cfg.sim.seed, "wall_s": round(wall, 3),
         "rd_map": {"rows": pooled.shape[0], "cols": pooled.shape[1], "full_grid_shape": [rd.shape[0], rd.shape[1]],
@@ -624,6 +626,10 @@ def run_frame(values: dict[str, Any], rows: int = 64, cols: int = 150) -> dict:
                         "peak_velocity_mps": tm.peak_velocity_mps, "snr_cell_db": tm.snr_cell_db,
                         "snr_cell_expected_db": expected,
                         "snr_difference_db": None if expected is None else tm.snr_cell_db - expected,
+                        # the same against the noise in the peak's own neighbourhood (they part when the floor is tilted)
+                        "snr_cell_local_db": tm.snr_cell_local_db, "snr_cell_local_expected_db": local,
+                        "peak_is_target": tm.extras.get("peak_is_target"),
+                        "snr_local_difference_db": None if local is None or not math.isfinite(tm.snr_cell_local_db) else tm.snr_cell_local_db - local,
                         "width_3db_m": tm.width_3db_m, "clipped_fraction": tm.extras.get("clipped_fraction"),
                         "targets_found": tm.extras.get("targets_found"), "angle_deg": tm.extras.get("angle_deg"),
                         "lo_noise_split": tm.extras.get("lo_noise_split")},

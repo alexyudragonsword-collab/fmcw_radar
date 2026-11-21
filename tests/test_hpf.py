@@ -135,3 +135,67 @@ def test_with_the_leakage_on_the_filter_is_counted_once():
     two = apply_overrides(c, {"extra_targets": [{"range_m": 1.0, "velocity_mps": 0.0, "kind": "human"}]})
     rows = run_statistical(two).targets
     assert rows[1]["hpf_db"] > rows[0]["hpf_db"] > 0.0 and rows[1]["range_m"] == 1.0
+
+
+# ---------------------------------------------------------------- 0.2.27: the time engine reads the target's own SNR too
+
+def test_the_local_floor_is_the_noise_beside_the_peak_not_the_maps():
+    from fmcw_radar.processing.rd import local_noise_floor, noise_floor
+
+    rng = np.random.default_rng(3)
+    cols = np.arange(400)
+    tilt = 1.0 + (cols / 100.0) ** 2                                       # a floor 17 times higher at the far end
+    p = rng.exponential(1.0, (64, 400)) * tilt
+    p[10, 120] = 1e4
+    local = local_noise_floor(p, (10, 120), 8, 16, 80)
+    assert local == pytest.approx(np.mean(tilt[[c for c in cols if 16 <= abs(c - 120) <= 80]]), rel=0.03)      # the tilt where the peak is
+    assert noise_floor(p, (10, 120), (8, 25)) > 2.0 * local                                              # the map's mean is the far end's
+    # the peak's own Doppler rows are not looked at (its range sidelobes live there), and a map with no neighbourhood says so
+    q = p.copy()
+    q[2:19, :] = 1e6
+    assert local_noise_floor(q, (10, 120), 8, 16, 80) == pytest.approx(local, rel=0.05)
+    assert np.isnan(local_noise_floor(p[:8], (4, 120), 8, 16, 80)) and np.isnan(local_noise_floor(p, (10, 120), 8, 500, 600))
+
+
+@pytest.mark.parametrize("corner_hz, order", [(0.0, 1), (1.0e6, 2), (2.0e6, 2), (3.0e6, 2)])
+def test_the_time_engine_reads_the_targets_own_snr(corner_hz, order):
+    """Peak over the noise in its own neighbourhood: the statistical
+    engine's local SNR, whatever the filter does to the rest of the band --
+    where the map-wide reading falls away from it by the floor's tilt."""
+    c = _cfg(corner_hz, order, **{"chirp.n_chirps": 32})
+    t, s = run_time(c), run_statistical(c)
+    assert t.extras["peak_is_target"] is True
+    assert t.snr_cell_local_db == pytest.approx(s.extras["snr_cell_local_db"], abs=0.6)
+    assert t.snr_cell_db == pytest.approx(s.extras["snr_cell_expected_db"], abs=0.5)
+    assert t.snr_cell_local_db - t.snr_cell_db == pytest.approx(s.extras["hpf_floor_tilt_db"], abs=0.7)
+    if corner_hz == 2.0e6:
+        assert t.snr_cell_local_db - t.snr_cell_db > 3.5
+
+
+def test_with_the_leakage_the_maps_peak_is_not_the_target_and_the_local_reading_still_is():
+    """The leakage is the highest peak of the map (21 dB above a human at 5 m
+    behind a 2nd-order 200 kHz high-pass).  "Peak over the map's floor" is
+    then the leakage's; the reading at the cell where the target was found
+    is the target's."""
+    c = _cfg(200e3, 2, **{"chirp.n_chirps": 32, "leakage.enabled": True})
+    t, s = run_time(c), run_statistical(c)
+    assert t.extras["peak_is_target"] is False and t.peak_range_m < 0.5
+    assert t.snr_cell_local_db == pytest.approx(s.extras["snr_cell_local_db"], abs=0.6)
+    assert t.snr_cell_db > s.extras["snr_cell_expected_db"] + 15.0
+    i, j = t.extras["local_cell"]
+    assert t.range_axis_m[j] == pytest.approx(5.0, abs=0.05) and t.velocity_axis_mps[i] == pytest.approx(2.0, abs=0.4)
+
+
+def test_on_a_mimo_map_it_is_the_snr_of_one_look():
+    """The cube's map is a sum over the virtual channels; the target's cell
+    over its local floor is then the SNR of one of them -- the statistical
+    engine's per-element cell SNR.  (A clean array: one target at broadside,
+    no leakage, no coupling.  With the bundled config's coupling the engines
+    part by more -- ROADMAP P1.)"""
+    from fmcw_radar.config import load_config
+
+    c = apply_overrides(load_config("configs/radar_60g_mimo.yaml"), {"leakage.enabled": False, "target.angle_deg": 0.0, "extra_targets": [],
+                                                                     "mimo.coupling.source": "none", "lo.engine": "response"})
+    t, s = run_time(c), run_statistical(c)
+    assert t.extras["peak_is_target"] is True and t.extras["n_virtual"] == 8
+    assert t.snr_cell_local_db == pytest.approx(s.angle["snr_element_cell_db"], abs=0.5)

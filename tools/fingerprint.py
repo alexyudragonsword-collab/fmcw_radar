@@ -108,7 +108,7 @@ def stat_values(s) -> dict:
 def time_values(t) -> dict:
     out = {"frame": digest(np.concatenate([t.frame.real.ravel(), t.frame.imag.ravel()])), "rd": digest(t.rd_db),
            "peak_range_m": _scalar(t.peak_range_m), "peak_velocity_mps": _scalar(t.peak_velocity_mps),
-           "snr_cell_db": _scalar(t.snr_cell_db), "width_3db_m": _scalar(t.width_3db_m),
+           "snr_cell_db": _scalar(t.snr_cell_db), "snr_cell_local_db": _scalar(t.snr_cell_local_db), "width_3db_m": _scalar(t.width_3db_m),
            "peak_sidelobe_db": _scalar(t.peak_sidelobe_db), "n_detections": repr(len(t.cfar_detections))}
     for k in ("angle_deg", "clipped_fraction", "clipped_fraction_after_blanking"):
         if k in t.extras:
