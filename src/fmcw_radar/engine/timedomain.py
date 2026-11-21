@@ -187,6 +187,7 @@ def beat_frame(cfg: RadarConfig, chirp: ChirpResult | None, *, noise: bool = Tru
                 ph0 = rng.uniform(0.0, TWOPI)
                 err = err + a * (np.sin(TWOPI * f0 * t_abs + ph0) - np.sin(TWOPI * f0 * (t_abs - tau0) + ph0))
         ys = []
+        noises = []                                         # the receivers' own noise: added after the antennas' coupling below
         for n in range(n_rx):
             x = np.zeros(n_w, dtype=complex)
             for r_t, v_t, th_t, amp in tgt:
@@ -198,13 +199,16 @@ def beat_frame(cfg: RadarConfig, chirp: ChirpResult | None, *, noise: bool = Tru
             for tau_l, amp_l in leaks:
                 # the leakage shares the LO: its error phase is the same curve at a tau of ~0, i.e. nothing
                 x = x + amp_l * np.exp(1j * beat_phase(np.full(n_w, tau_l)))
-            if noise:
-                x = x + (sigma / math.sqrt(2.0)) * (rng.standard_normal(n_w) + 1j * rng.standard_normal(n_w))
+            noises.append((sigma / math.sqrt(2.0)) * (rng.standard_normal(n_w) + 1j * rng.standard_normal(n_w)) if noise else None)
             ys.append(x)
         if multi and va.coupling is not None:
             # the receive array's mutual coupling at the carrier: received_k = a_k + sum_j S_kj a_j
             c = va.c_rx
             ys = [sum(c[k, j] * ys[j] for j in range(n_rx)) if np.any(c[k] != np.eye(n_rx)[k]) else ys[k] for k in range(n_rx)]
+        if noise:
+            # each receiver's noise is its own: it enters after the antenna, so the coupling between the antennas
+            # mixes the echoes and the leakage but not the noise (until 0.2.30 the noise went through the matrix too)
+            ys = [y + nz for y, nz in zip(ys, noises)]
         for n, x in enumerate(ys):
             if use_comp:
                 x = rapp(x, a1_oob, p_rapp)                          # the LNA / mixer: the RF envelope is the beat's

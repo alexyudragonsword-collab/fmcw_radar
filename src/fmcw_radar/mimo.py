@@ -136,6 +136,20 @@ class VirtualArray:
         a = np.exp(1j * TWOPI * self.f0_hz * self.rx.x_m * math.sin(math.radians(theta_deg)) / C0)
         return self.c_rx @ a if coupled else a
 
+    def coupling_power(self, theta_deg: float) -> float:
+        """What the receive coupling does to the echo's power on an element,
+        averaged over the elements (linear; 1 without coupling).
+
+        ``received_k = a_k + sum_j S_kj a_j``: the neighbours' share adds to
+        or takes from each element's own, depending on the direction of
+        arrival -- with the neighbour in anti-phase (the placeholder's 180
+        degrees) a broadside wave loses 3.3 dB per element and a wave from
+        40 degrees gains 1.3 dB.  The receivers' noise is added after the
+        antennas and does not go through the matrix, so this is also what
+        the coupling does to the SNR of one look of the range-Doppler map
+        (a sum of the elements' powers)."""
+        return float(np.mean(np.abs(self.rx_manifold(theta_deg, coupled=True)) ** 2))
+
     def tx_manifold(self, theta_deg: float) -> np.ndarray:
         return np.exp(1j * TWOPI * self.f0_hz * self.tx.x_m * math.sin(math.radians(theta_deg)) / C0)
 

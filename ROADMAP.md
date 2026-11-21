@@ -112,13 +112,12 @@
    但多普勒谱是平的,读出来的速度没有意义:+2 m/s 的目标时域引擎读 −12.49 m/s(rect 读 0.0;两个格本来也只能分到 12.49 m/s)。报表里的速度分辨率照样写 12.49 m/s。
    与 0.2.22 拒绝的"2 个虚拟阵元 + Hann 角窗"同源,但后果轻(SNR 对、只是速度读数无意义),测试里常用 2 个 chirp 的短帧求快,所以没有一并拒绝。
    要做(待定):拒绝、或在报表里对"有效 chirp 数 1"标注。复现:`run_time(apply_overrides(RadarConfig(), {"chirp.n_chirps": 2, "lo.engine": "response"})).peak_velocity_mps`。
-8. **开了互耦的阵列上,两个引擎的每阵元 SNR 随目标角度相差到 3.6 dB**(0.2.27 给时域引擎加"目标处"的 SNR 读数时量出来的;以前被"图上的峰是泄漏"盖住)。
-   MIMO 配置去掉泄漏和第二个目标、线性化引擎,时域的目标格点 SNR 减统计的 `angle.snr_element_cell_db`:互耦 `survey` / `analytic`(两者相同)
-   0° **−3.61 dB**、10° −2.61、20° −0.88、40° +0.87;互耦 `none` 四个角度都在 −0.14 … −0.21 dB。
-   时域引擎把接收互耦矩阵乘在每个阵元收到的信号上(`received_k = a_k + Σ S_kj a_j`),阵元上的回波功率因此随来波方向变;统计引擎的每阵元 SNR 没有这一项
-   (它只算了互耦对角度读数的偏置 `coupling_bias_deg`)。随库 MIMO 配置(20°)差 −0.9 dB,在 1 dB 内,所以铁律 3 的测试没红;0° 时超了。
-   复现:`c = apply_overrides(load_config("configs/radar_60g_mimo.yaml"), {"leakage.enabled": False, "extra_targets": [], "lo.engine": "response", "target.angle_deg": 0.0})`,
-   `run_time(c).snr_cell_local_db - run_statistical(c).angle["snr_element_cell_db"]`。要做:统计侧按来波方向算 `|(I + S) a(θ)|²` 的每阵元功率(以及噪声经同一矩阵后的功率与相关),或说明这是有意的边界。
+8. **用逆矩阵校准互耦之后,测角的散布比期望的大,期望散布里没有这一项**(0.2.30 修两引擎每阵元 SNR 不一致时露出来的)。
+   示例 07(`python examples/07_mimo_angle.py`,32 个 seed):校准后 RMS **0.131°**,估计器的期望散布(`sigma_expected_deg`)0.103°,无耦合时实测 0.110°。
+   逆矩阵把回波摆正,同时把各接收通道独立的噪声搅在一起并放大;未校准时回波在各阵元上的幅度不等(等于多了一层窗)。`VirtualArray.angle_error_budget` 的文档里写明"互耦不在其中"。
+   32 个 seed 的 RMS 自身有约 ±12 % 的不确定度,0.131 对 0.103 约两个标准差,没有用更多 seed 核实(未核实)。
+   要做:期望散布里按是否校准分别加上互耦——校准时噪声协方差 `C⁻¹ C⁻ᴴ`,未校准时幅度 `|(I + S)a|` 当权。
+   同一处还有:多目标的每目标行(`targets[]`)在 MIMO 下既没有阵元方向图也没有互耦因子,是预算口径的数。
 
 ## P2 — 一致性与能力
 

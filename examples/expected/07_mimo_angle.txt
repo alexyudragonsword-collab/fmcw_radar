@@ -13,8 +13,8 @@ RX mutual coupling (array_tx's matrix at the carrier) and the DBF estimate, nois
 time engine, 32 noise seeds x 8 chirps, the estimate at the target's cell (an RMS over 32 seeds is good to +-12 %):
   case                               | mean error [deg] | RMS error [deg] | expected [deg] | bound [deg]
   no coupling, compensated           |           +0.022 |           0.110 |          0.103 |       0.058
-  survey coupling, uncalibrated      |           -0.273 |           0.293 |          0.103 |       0.058
-  survey coupling, calibrated        |           +0.019 |           0.109 |          0.103 |       0.058
+  survey coupling, uncalibrated      |           -0.269 |           0.293 |          0.103 |       0.058
+  survey coupling, calibrated        |           +0.023 |           0.131 |          0.103 |       0.058
   no coupling, NOT compensated       |           +2.736 |           2.738 |          0.102 |       0.058
   the first case's snapshots re-read: with the true Doppler 0.108 deg (expected 0.102); with the true Doppler and uniform weights 0.062 deg (expected 0.067, the bound at the processed SNR); the Doppler estimate itself is off by 3.5 Hz RMS
 
