@@ -13,7 +13,7 @@ android {
         minSdk = 24
         targetSdk = 34
         versionCode = 1
-        versionName = "0.2.29"            // tracks the fmcw_radar version it bundles (tests/test_android.py)
+        versionName = "0.2.30"            // tracks the fmcw_radar version it bundles (tests/test_android.py)
         ndk {
             // arm64 for phones, x86_64 for the emulator; each ABI carries its
             // own CPython + numpy / scipy (tens of MB each)

@@ -650,7 +650,7 @@ def run_frame(values: dict[str, Any], rows: int = 64, cols: int = 150) -> dict:
     counts = {kind: sum(1 for c in cells if c["kind"] == kind) for kind in CELL_KINDS}
     expected = st.extras.get("snr_cell_expected_db")
     # the target's own SNR per look: the virtual element's on a MIMO map (summed over K looks), the cell's otherwise
-    local = st.angle["snr_element_cell_db"] if cfg.mimo.n_virtual > 1 and st.angle else st.extras.get("snr_cell_local_db")
+    local = st.angle["snr_look_db"] if cfg.mimo.n_virtual > 1 and st.angle else st.extras.get("snr_cell_local_db")
     return plain({
         "ok": True, "config_sha256": config_hash(cfg), "seed": cfg.sim.seed, "wall_s": round(wall, 3),
         "rd_map": {"rows": pooled.shape[0], "cols": pooled.shape[1], "full_grid_shape": [rd.shape[0], rd.shape[1]],

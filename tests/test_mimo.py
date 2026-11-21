@@ -211,3 +211,62 @@ def test_config_refuses_a_frame_that_does_not_split_into_tdm_blocks():
         apply_overrides(RadarConfig(), {"mimo.n_tx": 3, "chirp.n_chirps": 64})
     with pytest.raises(ValueError, match="whole number of RX pitches"):
         apply_overrides(RadarConfig(), {"mimo.n_rx": 4, "mimo.tx_spacing_lambda": 0.7})
+
+
+# ---------------------------------------------------------------- 0.2.30: what the coupling does to the echo's power on an element
+
+def _clean_mimo(**ov):
+    from fmcw_radar.config import load_config
+    from conftest import REPO
+
+    return apply_overrides(load_config(REPO / "configs" / "radar_60g_mimo.yaml"),
+                           {"leakage.enabled": False, "extra_targets": [], "lo.engine": "response", **ov})
+
+
+def test_the_coupling_changes_the_echos_power_on_an_element_with_its_direction():
+    """``received_k = a_k + sum_j S_kj a_j``: with the neighbours in
+    anti-phase (the placeholder's 180 degrees) a broadside wave arrives
+    3.3 dB weaker on an element and a wave from 40 degrees 1.3 dB stronger.
+    The statistical engine's SNR of one look of the map carries it; without
+    coupling the factor is exactly one."""
+    from fmcw_radar.mimo import VirtualArray
+
+    va = VirtualArray(_clean_mimo())
+    assert VirtualArray(_clean_mimo(**{"mimo.coupling.source": "none"})).coupling_power(17.0) == 1.0
+    got = {th: 10.0 * math.log10(va.coupling_power(th)) for th in (0.0, 10.0, 20.0, 40.0)}
+    assert got[0.0] == pytest.approx(-3.26, abs=0.02) and got[20.0] == pytest.approx(-0.51, abs=0.02) and got[40.0] == pytest.approx(1.25, abs=0.02)
+    assert got[0.0] < got[10.0] < got[20.0] < got[40.0]
+    # it is the mean over the elements of |(I + S_offdiag) a|^2, a the plane wave on the receive elements
+    a = np.exp(2j * np.pi * va.f0_hz * va.rx.x_m * math.sin(math.radians(10.0)) / 299_792_458.0)
+    assert va.coupling_power(10.0) == pytest.approx(float(np.mean(np.abs(va.c_rx @ a) ** 2)), rel=1e-12)
+    st = run_statistical(_clean_mimo(**{"target.angle_deg": 0.0}))
+    g = st.angle
+    assert g["coupling_power_db"] == pytest.approx(got[0.0], abs=1e-9)
+    assert g["snr_look_db"] == pytest.approx(g["snr_element_cell_db"] + g["coupling_power_db"], abs=1e-12)
+    assert st.cfar["snr_look_db"] == g["snr_look_db"]                           # the map's CFAR sees the looks as they are
+
+
+@pytest.mark.parametrize("angle_deg", [0.0, 20.0, 40.0])
+def test_both_engines_agree_on_the_snr_of_one_look_under_coupling(angle_deg):
+    """Until 0.2.30 they parted by -3.6 dB at broadside and +0.9 dB at 40
+    degrees: the statistical engine did not have the coupling's effect on
+    the echo, and the time engine put the receivers' noise through the
+    coupling matrix as well."""
+    c = _clean_mimo(**{"target.angle_deg": angle_deg})
+    t, s = run_time(c), run_statistical(c)
+    assert t.extras["peak_is_target"] is True
+    assert t.snr_cell_local_db == pytest.approx(s.angle["snr_look_db"], abs=0.5)
+    assert abs(s.angle["coupling_power_db"]) > 0.4                              # and the coupling is not a small thing here
+
+
+def test_the_receivers_noise_does_not_go_through_the_coupling():
+    """Each receiver's noise is its own: it enters after the antenna.  With
+    no echo to speak of, neighbouring channels of the cube are uncorrelated
+    -- through the matrix (-16 dB neighbours in anti-phase) they would be
+    correlated by about -0.3."""
+    c = _clean_mimo(**{"target.rcs_dbsm": -150.0, "chirp.n_chirps": 4})
+    cube = run_time(c, phase_noise=False).frame                                 # (chirps, rx, samples)
+    x = cube.reshape(cube.shape[0], cube.shape[1], -1)
+    rho = [abs(np.vdot(x[:, k], x[:, k + 1]) / math.sqrt(np.vdot(x[:, k], x[:, k]).real * np.vdot(x[:, k + 1], x[:, k + 1]).real))
+           for k in range(x.shape[1] - 1)]
+    assert max(rho) < 0.05

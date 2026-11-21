@@ -368,14 +368,17 @@ def angle_metrics(cfg: RadarConfig, snr_cell_db: float, snr_chirp_db: float | No
     snr_el = snr_cell_db - 10.0 * math.log10(m.n_tx)               # one TX block's Doppler FFT per virtual element
     est = va.estimate(va.snapshot(th, fd, coupled=True), fd)
     sq = va.sweep_squint(th)
+    budget = va.angle_error_budget(snr_chirp_db, th, fd, range_scalloping_db) if snr_chirp_db is not None else {}
+    c_db = 10.0 * math.log10(va.coupling_power(th))
+    # one look of the map: the element's cell SNR as processed, with what the coupling does to the echo on it
+    look = {"coupling_power_db": c_db, **({"snr_look_db": budget["snr_element_cell_db"] + c_db} if budget else {})}
     return {"n_virtual": va.n, "filled": va.filled, "aperture_m": va.aperture_m, "beamwidth_deg": va.beamwidth_deg(th),
             "crlb_sigma_deg": va.crlb_sigma_deg(snr_el, th), "snr_element_db": snr_el,
             "theta_est_deg": est["theta_deg"], "peak_sidelobe_db": est["peak_sidelobe_db"],
             "coupling_bias_deg": va.coupling_bias_deg(th), "tdm_bias_uncompensated_deg": va.tdm_bias_deg(th, fd),
             "coupling_source": m.coupling.source, "coupling_calibrated": m.coupling.calibrated,
             "coupling_max_offdiag_db": (va.coupling.max_offdiag_db() if va.coupling is not None else None),
-            "max_velocity_mps": cfg.max_velocity_mps, **sq,
-            **(va.angle_error_budget(snr_chirp_db, th, fd, range_scalloping_db) if snr_chirp_db is not None else {})}
+            "max_velocity_mps": cfg.max_velocity_mps, **sq, **budget, **look}
 
 
 def cfar_detection(cfg: RadarConfig, res: "StatResult") -> dict:
@@ -390,7 +393,7 @@ def cfar_detection(cfg: RadarConfig, res: "StatResult") -> dict:
     cf = res.cfar
     k = cf["n_looks"]
     # the CFAR's training cells are the target's neighbours: its SNR against the noise where it sits
-    snr_look = res.angle["snr_element_cell_db"] if k > 1 and res.angle else res.extras["snr_cell_local_db"]
+    snr_look = res.angle["snr_look_db"] if k > 1 and res.angle else res.extras["snr_cell_local_db"]
     out = {"snr_look_db": snr_look, "pd_target": float(cfar_pd(snr_look, cf)[0]), "snr_pd90_db": cfar_snr_for_pd(0.9, cf)}
     if k == 1:
         out["cfar_loss_db"] = out["snr_pd90_db"] - snr_for_pd(0.9, cfg.processing.cfar_pfa)

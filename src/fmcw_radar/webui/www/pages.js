@@ -344,6 +344,7 @@ function angleCard(){
     row(L('波束宽(−3 dB)','beamwidth (−3 dB)'), `${f(g.beamwidth_deg,2)}°`, L(`孔径 ${f(a.aperture_lambda,2)} λ`,`aperture ${f(a.aperture_lambda,2)} λ`)),
     row(L('峰旁瓣','peak sidelobe'), `${f(g.peak_sidelobe_db,1)} dB`, `${L('角窗','angle window')} ${v['mimo.angle_window']}`),
     row(L('CRLB σ','CRLB σ'), `${f(g.sigma_crlb_deg!=null?g.sigma_crlb_deg:g.crlb_sigma_deg,3)}°`, L(`每阵元格点 SNR ${f(g.snr_element_cell_db!=null?g.snr_element_cell_db:g.snr_element_db,2)} dB`,`per-element cell SNR ${f(g.snr_element_cell_db!=null?g.snr_element_cell_db:g.snr_element_db,2)} dB`)),
+    g.snr_look_db!=null ? row(L('图上一个 look 的 SNR','SNR of one look of the map'), `${f(g.snr_look_db,2)} dB`, L(`互耦让阵元上的回波功率 ${fs(g.coupling_power_db,2)} dB(随来波方向变)`,`the coupling changes the echo's power on an element by ${fs(g.coupling_power_db,2)} dB (it depends on the direction)`)) : '',
     g.sigma_expected_deg!=null ? row(L('估计器的期望 σ','the estimator\'s expected σ'), `<b>${f(g.sigma_expected_deg,3)}°</b>`, fac) : '',
     row(L('TDM 不模糊速度','TDM unambiguous velocity'), `±${f(g.max_velocity_mps,2)} m/s`, L(`${v['mimo.n_tx']} 路发射轮流`,`${v['mimo.n_tx']} transmitters in turn`)),
   ].join('');
