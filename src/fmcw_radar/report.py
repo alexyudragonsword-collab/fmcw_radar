@@ -9,7 +9,7 @@ is not the config's own carries its source (invariant #5).
 from __future__ import annotations
 
 from .config.schema import RadarConfig
-from .engine.statistical import REPORT_OFFSETS_M, StatResult, run_statistical
+from .engine.statistical import REPORT_OFFSETS_M, StatResult, hpf_map_shift_db, run_statistical
 from .sources import all_entries
 
 
@@ -41,7 +41,12 @@ def report(cfg: RadarConfig, st: StatResult) -> dict:
         "detection": {"snr_cell_db": st.snr_cell_db, "snr_chirp_db": st.snr_chirp_db, "pfa": cfg.processing.cfar_pfa,
                       "pd": st.pd, "quant_share_db": b.quant_share_db},
         "phase_noise": {"lo_rms_rad": st.lo_rms_rad, "residual_rms_rad": st.pn_rms_rad,
-                        "floor": [{"offset_m": dr, "per_bin_dbc": v[0], "per_cell_dbc": v[1]} for dr, v in st.pn_floor.items()],
+                        # the levels are the beat signal's ahead of the IF high-pass; ``map_shift_db`` is what the filter adds
+                        # on the map, the sideband and the target each passing it at their own beat (0 without it)
+                        "floor": [{"offset_m": dr, "per_bin_dbc": v[0], "per_cell_dbc": v[1],
+                                   "map_shift_db": (shift := hpf_map_shift_db(cfg, cfg.target.range_m + dr)),
+                                   "per_cell_map_dbc": v[1] + shift} for dr, v in st.pn_floor.items()],
+                        "local_cell_dbc": st.extras.get("pn_cell_local_dbc"), "mean_cell_dbc": st.extras.get("pn_cell_mean_dbc"),
                         "notes": list(st.extras.get("lo_notes") or []), "parked": st.extras.get("lo_parked")},
         "chirp": st.chirp, "nonlinearity": st.nonlinearity,
         "targets": st.targets, "angle": st.angle, "cfar": {**st.cfar, "range_pad": cfg.processing.range_pad},
@@ -156,12 +161,19 @@ def to_markdown(rep: dict) -> str:
         lines.append(f"| {k} | {v['value']:.4g} | {v['source']} |")
     lines += _compliance_lines(rep.get("compliance") or {})
     P = rep["phase_noise"]
+    filtered = any(row.get("map_shift_db") for row in P["floor"])
     lines += ["", "## LO phase noise after range correlation", "",
               f"LO {P['lo_rms_rad'] * 1e3:.1f} mrad RMS over [1/T_c, IF]; what the beat sees after the round trip "
               f"{P['residual_rms_rad'] * 1e3:.2f} mrad RMS. Sidelobe floor around the target:", "",
-              "| offset [m] | per range bin, one chirp [dBc] | per range-Doppler cell [dBc] |", "|---:|---:|---:|"]
+              "| offset [m] | per range bin, one chirp [dBc] | per range-Doppler cell [dBc] |"
+              + (" on the map, behind the IF high-pass [dBc] |" if filtered else ""), "|---:|---:|---:|" + ("---:|" if filtered else "")]
     for row in P["floor"]:
-        lines.append(f"| {row['offset_m']:g} | {row['per_bin_dbc']:.1f} | {row['per_cell_dbc']:.1f} |")
+        lines.append(f"| {row['offset_m']:g} | {row['per_bin_dbc']:.1f} | {row['per_cell_dbc']:.1f} |"
+                     + (f" {row['per_cell_map_dbc']:.1f} |" if filtered else ""))
+    if filtered:
+        lines += ["", "The levels in dBc are the beat signal's ahead of the IF high-pass. On the map a line and the target have each "
+                  "passed the filter at their own beat, so a line farther out than the target stands higher against its peak and a "
+                  "nearer one lower; the last column is that."]
     lines += _parked_lines(P.get("parked"), P.get("notes") or [])
     C, N = rep["chirp"], rep["nonlinearity"]
     if C:
@@ -255,9 +267,12 @@ def to_markdown(rep: dict) -> str:
                   + f". The chirp's ghost targets add {CF['ghost_detections_per_frame']:.2f} detections per frame"
                   + ("" if CF.get("ghosts_vouched") or not CF.get("ghosts") else " (not vouched: linearised chirp engine)") + "."]
         if CF.get("ghosts"):
-            lines += ["", "| ghost at [m] | level [dBc] | SNR [dB] | Pd | in view |", "|---:|---:|---:|---:|---|"]
-            lines += [f"| {g['range_m']:.2f} | {g['level_dbc']:.1f} | {g['snr_db']:.1f} | {g['pd']:.3f} | {'yes' if g['in_view'] else 'no'} |"
-                      for g in CF["ghosts"]]
+            lines += ["", "| ghost at [m] | level [dBc] | on the map [dBc] | floor where it sits [dBc] | SNR [dB] | Pd | in view |",
+                      "|---:|---:|---:|---:|---:|---:|---|"]
+            lines += [f"| {g['range_m']:.2f} | {g['level_dbc']:.1f} | {g['level_map_dbc']:.1f} | {g['floor_dbc']:.1f} | {g['snr_db']:.1f} | "
+                      f"{g['pd']:.3f} | {'yes' if g['in_view'] else 'no'} |" for g in CF["ghosts"]]
+            lines += ["", "A ghost's SNR is its level on the map (behind the IF high-pass, where one is on) over the floor where it sits: "
+                      "the target's own floor moved to the ghost's beat, plus the target's LO-noise sideband at the ghost's offset."]
     LK = rep.get("leakage")
     if LK:
         lines += ["", "## TX-RX leakage", "", "| term | value | unit |", "|---|---:|---|"]

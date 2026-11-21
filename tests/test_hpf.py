@@ -34,7 +34,9 @@ def test_without_the_filter_the_budget_has_no_line_for_it():
     assert b.hpf_db == 0.0 and not any("high-pass" in row[0] for row in b.as_rows())
     st = run_statistical(_cfg())
     assert hpf_floor_tilt(_cfg(), st.budget) == 1.0 and st.extras["hpf_floor_tilt_db"] == 0.0
-    assert st.extras["snr_cell_local_db"] == st.extras["snr_cell_expected_db"]
+    # the thermal floor is flat, so the two readings differ only by the LO's noise: next to the target the round trip has
+    # cancelled it, the map-wide mean has not (0.2.31; until then both carried the mean and were one number)
+    assert 0.0 < st.extras["snr_cell_local_db"] - st.extras["snr_cell_expected_db"] < 0.05
 
 
 @pytest.mark.parametrize("order", [1, 2, 3, 4])

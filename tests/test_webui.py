@@ -165,6 +165,39 @@ def test_the_time_engine_is_a_job_and_its_frame_knows_its_settings(page):
     assert page.evaluate("document.querySelector('[data-chart=\"rd\"]').classList.contains('dim')")
 
 
+def test_with_the_high_pass_on_the_tables_show_the_levels_on_the_map(page):
+    """A level in dBc is the beat signal's ahead of the IF high-pass; with
+    the filter on the page shows where the map has it: one more column in
+    the phase-noise table, and in the detection list the ghost's level on
+    the map over the floor where it sits (the pre-filter level in the
+    cell's title).  Without the filter neither is there."""
+    hp = {**FAST, "rx.hpf_corner_hz": 1.0e6, "rx.hpf_order": 2}
+    _set(page, "lo.engine", "response")
+    _set(page, "chirp.n_chirps", 8)
+    _settled(page)
+    heads = "[...document.querySelectorAll('[data-tab=pn] .pngrid table')].pop().querySelectorAll('thead th').length"
+    assert page.evaluate(heads) == 3
+    page.evaluate("document.querySelectorAll('details').forEach(d => d.open = true)")
+    _set(page, "rx.hpf_corner_hz", 1000)                                    # the control's unit is kHz
+    _settled(page)                                                          # the order's field wakes with the corner
+    page.evaluate("document.querySelectorAll('details').forEach(d => d.open = true)")
+    _set(page, "rx.hpf_order", 2)
+    _settled(page)
+    ref = guiutil.run_report(hp)["report"]
+    assert page.evaluate(heads) == 4
+    cells = page.evaluate("[...[...document.querySelectorAll('[data-tab=pn] .pngrid table')].pop().querySelectorAll('tbody tr')].map(r => r.lastElementChild.textContent)")
+    minus = lambda t: t.replace("\u2212", "-")                             # noqa: E731  the page writes a typographic minus
+    assert [minus(c) for c in cells] == [f"{row['per_cell_map_dbc']:.2f} dBc" for row in ref["phase_noise"]["floor"]]
+    assert ref["phase_noise"]["floor"][-1]["map_shift_db"] > 1.0
+    page.click("[data-act=frame]")
+    page.wait_for_selector('[data-chart="rd"] svg', timeout=60000)
+    ghosts = ref["cfar"]["ghosts"]
+    assert ghosts and any(abs(g["level_map_dbc"] - g["level_dbc"]) > 1.0 for g in ghosts)
+    assert "图上电平" in page.evaluate("document.querySelector('.dlist thead').textContent")
+    rows = page.evaluate("[...document.querySelectorAll('.dlist tbody tr')].slice(1).map(r => [r.children[2].textContent, r.children[2].title, r.children[3].textContent, r.children[4].textContent])")
+    assert [[minus(c) for c in r] for r in rows] == [[f"{g['level_map_dbc']:.1f}", f"滤波前 {g['level_dbc']:.1f} dBc", f"{g['floor_dbc']:.1f}", f"{g['snr_db']:.1f}"] for g in ghosts]
+
+
 # ---------------------------------------------------------------- P3: the system diagram, the band table, the sweep, the baseline
 
 _OVERFLOW = """() => { const out = []; document.querySelectorAll('svg.sys .blk').forEach(g => { const r = g.querySelector('rect').getBBox();
