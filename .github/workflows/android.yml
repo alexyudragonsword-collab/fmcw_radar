@@ -1,0 +1,53 @@
+name: Android APK
+
+# A Chaquopy build downloads an SDK, a CPython and native wheels per ABI --
+# real runner minutes -- and the APK is a sideload artifact, not a release
+# gate.  So: on demand, and when the Android shell itself changes.  The bridge
+# and the page are tested on every push without Android
+# (tests/test_appbridge.py, tests/test_android.py, tests/test_webui.py).
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"       # must match chaquopy.version in android/app/build.gradle.kts
+      - name: Install build tools
+        run: pip install build
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.2"
+      - name: Build the fmcw_radar sdist the app embeds
+        run: python -m build --sdist --outdir android/app/pysrc .
+      - name: Build the APK
+        run: gradle -p android :app:assembleDebug
+      - name: Check the page went in as assets
+        run: |
+          set -o pipefail
+          unzip -l android/app/build/outputs/apk/debug/app-debug.apk | grep -E "assets/www/(index.html|app.js|pages.js|style.css)" | wc -l | grep -qx 4
+      - name: Which numpy and scipy went in
+        run: |
+          set -o pipefail
+          find android/app/build -path "*python*" -name "*.dist-info" -maxdepth 12 | sed 's|.*/||' | sort -u | grep -iE "numpy|scipy|pyyaml|fmcw" || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fmcw-radar-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

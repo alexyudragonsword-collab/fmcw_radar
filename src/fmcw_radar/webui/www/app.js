@@ -4,7 +4,7 @@
 'use strict';
 const S = {lang:'zh', theme:'auto', spec:null, sources:{}, values:{}, tags:{}, inert:{}, refused:{}, resolved:{}, run:null, frame:null,
            error:null, pending:false, dirty:false, job:null, jobMsg:null, lastWall:null, mtab:'results', open:{}};
-Object.assign(S, {page:'workbench', sys:null, band:'current', sw:{path:'target.range_m', lo:null, hi:null, points:9, metric:'snr_cell_db'}, jobs:{sweep:null, bands:null}, kmsg:{}, baseline:null, bands:null, sweep:null, bandsFor:null, bandsShown:null, finalSeq:0, finalizing:false, yamlMsg:null, bundled:[]});
+Object.assign(S, {page:'workbench', sys:null, band:'current', sw:{path:'target.range_m', lo:null, hi:null, points:9, metric:'snr_cell_db'}, jobs:{sweep:null, bands:null}, kmsg:{}, baseline:null, bands:null, sweep:null, bandsFor:null, bandsShown:null, finalSeq:0, finalizing:false, finalBody:null, yamlMsg:null, yamlPanel:null, bundled:[]});
 try{ const s = JSON.parse(localStorage.getItem('fmcw-ui')||'{}'); if(s.lang) S.lang=s.lang; if(s.theme) S.theme=s.theme; }catch(e){}
 function save(){ try{ localStorage.setItem('fmcw-ui', JSON.stringify({lang:S.lang, theme:S.theme})); }catch(e){} }
 const L = (zh,en) => S.lang==='zh' ? zh : en;
@@ -12,8 +12,13 @@ let RUN = null;                       // the current run in the shape the drawin
 const R = () => RUN;
 
 /* ---------- transport: a host bridge when one is injected (Android), HTTP otherwise ---------- */
+// On the phone the activity's bridge is asynchronous: host.call(id, route, json) returns at once and the reply
+// comes back through window.onHostReply(id, text) -- Python runs on a thread of its own, the page stays alive.
+const ON_DEVICE = !!(window.host && window.host.call);
+let hostSeq=0; const pendingHost={};
+window.onHostReply = (id, text) => { const done=pendingHost[id]; delete pendingHost[id]; if(done) done(text); };
 async function api(route, body){
-  if(window.host && window.host.call){ return JSON.parse(await window.host.call(route, body===undefined?null:JSON.stringify(body))); }
+  if(ON_DEVICE){ const text = await new Promise(res=>{ const id=String(++hostSeq); pendingHost[id]=res; window.host.call(id, route, JSON.stringify(body===undefined?{}:body)); }); return JSON.parse(text); }
   const r = await fetch('api/'+route, body===undefined ? {} : {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
   return r.json();
 }
@@ -69,6 +74,7 @@ function paramsPanel(){
    <div class="ph"><h2>${L('参数','Parameters')}</h2>${n?`<button class="btn sm" data-act="reset">${L(`恢复默认(已改 ${n} 项)`,`Defaults (${n} edited)`)}</button>`:''}</div>
    <div class="yamlrow"><button class="btn sm" data-act="yamlopen">${L('载入 YAML…','Load YAML…')}</button><button class="btn sm" data-act="yamlsave" ${S.error?'disabled':''}>${L('导出 YAML','Export YAML')}</button>${S.bundled.length?`<select data-yaml="bundled" aria-label="${L('随库配置','bundled configs')}"><option value="">${L('随库配置…','Bundled config…')}</option>${S.bundled.map(b=>`<option value="${b}">${b}</option>`).join('')}</select>`:''}<input type="file" id="yamlfile" accept=".yaml,.yml,text/yaml,text/plain" hidden></div>
    ${S.yamlMsg?`<p class="yamlmsg ${S.yamlMsg.ok?'':'bad'}">${esc(S.yamlMsg.text)}</p>`:''}
+   ${S.yamlPanel?`<div class="yamlpanel"><p class="sub" style="margin:0 0 6px">${S.yamlPanel.mode==='out'?L(`${S.yamlPanel.name}:长按全选、复制。`,`${S.yamlPanel.name}: select all and copy.`):L('把配置文件的内容粘贴到这里。','Paste the config file\'s text here.')}</p><textarea id="yamltext" rows="8" spellcheck="false" ${S.yamlPanel.mode==='out'?'readonly':''} aria-label="YAML">${esc(S.yamlPanel.text)}</textarea><div class="yamlrow">${S.yamlPanel.mode==='in'?`<button class="btn sm pri" data-act="yamltake">${L('载入','Load')}</button>`:''}<button class="btn sm" data-act="yamlclose">${L('关闭','Close')}</button></div></div>`:''}
    <p class="sub" style="margin:0">${L(`${cs.length} 个字段,与配置一一对应;留空的字段显示库实际取的数和它的出处。`,`${cs.length} fields, one per config field; an empty field shows the number the library uses and its source.`)}</p>
    <div class="pgrid">${html}</div>
    <div class="psec"><div class="legend-tags">${Object.keys(S.spec.tags).map(k=>`<span>${tag(k,'','legend')} ${L(...S.spec.tags[k])}</span>`).join('')}</div></div>
@@ -449,7 +455,8 @@ async function compute(){
   S.finalSeq++; S.finalizing=false;                       // whatever full run was on its way belongs to older settings
   render();
   if(S.dirty){ compute(); return; }
-  if(res.ok && res.preview) finalize(body);
+  S.finalBody = res.ok && res.preview ? body : null;
+  if(S.finalBody && !ON_DEVICE) finalize(body);
 }
 // the answer above was a preview on the linearised chirp engine: fetch the cycle-accurate run of the same settings
 async function finalize(body){
@@ -500,9 +507,13 @@ document.addEventListener('click', async e=>{
   if(act==='lang'){ S.lang=a.dataset.v; save(); render(); }
   else if(act==='theme'){ S.theme=a.dataset.v; save(); renderTop(); }
   else if(act==='reset'){ S.values=Object.assign({}, S.defaults); S.yamlMsg=null; changed(); render(); }
-  else if(act==='yamlopen'){ document.getElementById('yamlfile').click(); }
+  else if(act==='finalnow'){ if(S.finalBody) finalize(S.finalBody); }
+  else if(act==='yamlopen'){ if(ON_DEVICE){ S.yamlPanel={mode:'in', text:''}; render(); } else document.getElementById('yamlfile').click(); }
+  else if(act==='yamlclose'){ S.yamlPanel=null; render(); }
+  else if(act==='yamltake'){ const text=document.getElementById('yamltext').value; S.yamlPanel=null; await loadYaml({yaml:text}, L('粘贴的文本','the pasted text')); }
   else if(act==='yamlsave'){ const r=await api('yaml/export', {values:S.values});
     if(!r.ok){ S.yamlMsg={ok:false, text:r.error}; render(); return; }
+    if(ON_DEVICE){ S.yamlPanel={mode:'out', text:r.yaml, name:r.filename}; S.yamlMsg=null; render(); return; }      // no downloads in a WebView: the text, to copy
     const u=URL.createObjectURL(new Blob([r.yaml], {type:'text/yaml'})); const l=document.createElement('a'); l.href=u; l.download=r.filename; document.body.appendChild(l); l.click(); l.remove(); setTimeout(()=>URL.revokeObjectURL(u), 1000);
     S.yamlMsg={ok:true, text:L(`已导出 ${r.filename}`,`Exported ${r.filename}`)}; render(); }
   else if(act==='dither'){ S.values['lo.tdc_dither_lsb'] = (S.values['lo.tdc_dither_lsb']||0)>0 ? 0 : 1; if(S.values['lo.tdc_dither_lsb']===0) S.values['lo.tdc_dither_gain_error']=0; changed(); render(); }
