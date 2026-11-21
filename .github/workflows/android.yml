@@ -42,10 +42,14 @@ jobs:
         run: |
           set -o pipefail
           unzip -l android/app/build/outputs/apk/debug/app-debug.apk | grep -E "assets/www/(index.html|app.js|pages.js|style.css)" | wc -l | grep -qx 4
-      - name: Which numpy and scipy went in
+      - name: The binary wheels are the ones CI tests the library on
+        # Chaquopy's pip takes what its repository has and does not hold the sdist to its declared floors; ci.yml's
+        # test-android-versions job runs the suite on exactly this pair.  If the repository moves, move that job with it.
         run: |
           set -o pipefail
-          find android/app/build -path "*python*" -name "*.dist-info" -maxdepth 12 | sed 's|.*/||' | sort -u | grep -iE "numpy|scipy|pyyaml|fmcw" || true
+          find android/app/build -path "*python*" -name "*.dist-info" -maxdepth 12 | sed 's|.*/||' | sort -u | tee wheels.txt
+          grep -qx "numpy-1.26.2.dist-info" wheels.txt
+          grep -qx "scipy-1.8.1.dist-info" wheels.txt
       - uses: actions/upload-artifact@v4
         with:
           name: fmcw-radar-debug-apk

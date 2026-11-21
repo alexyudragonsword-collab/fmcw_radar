@@ -523,3 +523,60 @@ def test_language_theme_and_phone_width(browser):
         ctx.close()
         srv.shutdown()
         srv.server_close()
+
+
+# ---------------------------------------------------------------- the page as the phone runs it
+
+#: the activity's bridge, stood in for: the same asynchronous contract (host.call(id, route, json), the reply through
+#: window.onHostReply), carried over HTTP to a thread-backend host instead of over JNI to appbridge
+_BRIDGE = """window.host = { call(id, route, json) {
+  const get = ['version', 'spec', 'config', 'sources', 'configs'].includes(route) || /^jobs\\/[0-9]+$/.test(route);
+  fetch('api/' + route, get ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: json})
+    .then(r => r.text()).then(t => window.onHostReply(id, t)); } };"""
+
+
+def test_the_page_on_the_phones_bridge(browser):
+    """Through the bridge contract the Android activity implements: the page
+    comes up, a cycle-accurate run is asked for rather than automatic (on the
+    phone it occupies the one Python thread), and a config file is text to
+    copy and paste (a WebView has no downloads and no file chooser)."""
+    srv, url = _serve("thread")
+    ctx = browser.new_context(viewport={"width": 390, "height": 844})
+    ctx.add_init_script(_BRIDGE)
+    p = ctx.new_page()
+    errors = []
+    p.on("pageerror", lambda e: errors.append(str(e)))
+    try:
+        p.goto(url)
+        p.wait_for_selector(".kpi")
+        assert p.evaluate("typeof ON_DEVICE !== 'undefined' && ON_DEVICE") is True
+        p.click('.bnav [data-tab-to="params"]')
+        _set(p, "chirp.n_chirps", 8)
+        p.click('.bnav [data-tab-to="results"]')
+        p.wait_for_selector("[data-act=finalnow]")
+        # the preview stays a preview: nothing is computing, the button is the way to the real run
+        p.wait_for_timeout(1500)
+        assert p.evaluate("!!document.querySelector('.previewbar')") and p.evaluate("document.getElementById('busy').hidden")
+        assert "不自动算" in p.evaluate("document.querySelector('.previewbar').textContent")
+        p.click("[data-act=finalnow]")
+        p.wait_for_selector(".previewbar", state="detached", timeout=60000)
+        final = guiutil.run_report({"chirp.n_chirps": 8})
+        assert p.evaluate("document.querySelectorAll('.kpi .v')[2].textContent.trim()").startswith(f"{final['metrics']['ghost_detections_per_frame']:.2f}")
+        # a config file out: its text, no download
+        p.click('.bnav [data-tab-to="params"]')
+        p.click("[data-act=yamlsave]")
+        p.wait_for_selector(".yamlpanel textarea[readonly]")
+        assert p.evaluate("document.getElementById('yamltext').value") == guiutil.export_yaml({"chirp.n_chirps": 8})["yaml"]
+        p.click("[data-act=yamlclose]")
+        # ... and in: pasted
+        p.click("[data-act=yamlopen]")
+        p.fill("#yamltext", "target: {range_m: 7.0}\nlo: {engine: response}\n")
+        p.click("[data-act=yamltake]")
+        p.wait_for_function("document.querySelector('[data-path=\"target.range_m\"]').value === '7'")
+        assert p.evaluate("document.querySelector('[data-path=\"lo.engine\"]').value") == "response" and not p.evaluate("!!document.querySelector('.yamlpanel')")
+        assert p.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth") == 0
+        assert errors == []
+    finally:
+        ctx.close()
+        srv.shutdown()
+        srv.server_close()

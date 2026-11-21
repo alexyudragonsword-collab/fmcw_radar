@@ -13,7 +13,29 @@ from __future__ import annotations
 import math
 
 import numpy as np
+from scipy.special import ndtr
 from scipy.stats import ncx2
+
+
+def ncx2_sf(x, df, nc):
+    """``scipy.stats.ncx2.sf`` with the one regime an old SciPy gets wrong
+    put right.
+
+    SciPy 1.8.1 -- the newest SciPy Chaquopy's repository has for Android,
+    so the one the phone app runs -- returns -1.66e-06 for the survival
+    function once the argument and the non-centrality are both around 1e9
+    (a target at 80 dB per look), where the answer is 1 or 0.  There a
+    non-central chi-square is a normal distribution to parts in 1e4 of its
+    standard deviation, so a value that is not a probability at all (NaN,
+    below 0, above 1) is replaced by ``Phi((df + nc - x) / sqrt(2 (df + 2
+    nc)))``.  A SciPy that returns probabilities is used untouched: nothing
+    moves where this guard does not fire."""
+    p = ncx2.sf(x, df, nc)
+    bad = ~np.isfinite(p) | (p < -1e-9) | (p > 1.0 + 1e-9)
+    if np.any(bad):
+        x_, nc_ = np.broadcast_arrays(np.asarray(x, dtype=float), np.asarray(nc, dtype=float))
+        p = np.where(bad, ndtr((df + nc_ - x_) / np.sqrt(2.0 * (df + 2.0 * nc_))), p)
+    return p
 
 
 def threshold_for_pfa(pfa: float) -> float:
@@ -30,7 +52,7 @@ def pd_swerling0(snr_db, pfa: float) -> np.ndarray:
     the threshold that gives ``pfa`` with a known noise level."""
     snr = 10.0 ** (np.asarray(snr_db, dtype=float) / 10.0)
     t = threshold_for_pfa(pfa)
-    return ncx2.sf(2.0 * t, 2, 2.0 * snr)
+    return ncx2_sf(2.0 * t, 2, 2.0 * snr)
 
 
 def cfar_threshold_factor(n_train: int, pfa: float) -> float:

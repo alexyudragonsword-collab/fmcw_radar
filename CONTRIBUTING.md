@@ -13,6 +13,7 @@ python tools/budget_report.py configs/radar_60g_sensing.yaml   # 预算一页
 python tools/vendor_check.py --strict       # vendor 漂移(需要 polar_tx 与 array_tx 的 checkout,见下)
 python tools/fingerprint.py record before.json && ... && python tools/fingerprint.py compare before.json after.json
 python tools/run_examples.py --smoke        # 每个示例冒烟(n_chirps 截到 8)
+python -m build --sdist --outdir android/app/pysrc . && gradle -p android :app:assembleDebug   # APK(Java 17、Python 3.10、Android SDK;docs/android.md)
 pip install -e ".[gui-test]" && python -m playwright install chromium   # 图形界面的浏览器测试(tests/test_webui.py;没装就跳过,CI 的 test-gui 作业里跳过即红)
 ```
 

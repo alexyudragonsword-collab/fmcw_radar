@@ -70,6 +70,30 @@ jobs:
       - name: Tests at the floor (no plots)
         run: pytest -q
 
+  # The versions the Android app runs on: Chaquopy's repository has, for Python
+  # 3.10, numpy 1.26.2 and scipy 1.8.1 -- below the scipy >= 1.11 the library
+  # declares, and Chaquopy's pip does not hold the sdist to it.  So that pair
+  # is tested here, installed the way Chaquopy installs it (no dependency
+  # check: scipy 1.8.1 itself asks for numpy < 1.25).  android.yml fails if
+  # the APK ever gets other versions than these.
+  test-android-versions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+      - name: Install what the APK ships
+        run: |
+          python -m pip install --upgrade pip
+          pip install --no-deps "numpy==1.26.2" "scipy==1.8.1" "pyyaml==6.0.3"
+          pip install "pytest>=7"
+          pip install --no-deps -e .
+      - name: Tests on the phone's versions
+        run: pytest -q
+
   # The GUI page in a real browser against the real local host (the page
   # draws what Python computed, a refusal reaches the control it is about,
   # the time engine's job runs and cancels).  The other jobs have no browser

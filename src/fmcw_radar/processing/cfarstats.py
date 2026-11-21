@@ -79,7 +79,7 @@ from scipy.signal import correlate2d
 from scipy.special import roots_genlaguerre
 from scipy.stats import beta as _beta
 from scipy.stats import gamma as _gamma
-from scipy.stats import ncx2 as _ncx2
+from .detection import ncx2_sf as _ncx2_sf
 
 from ..config.schema import RadarConfig
 from .cfar import cfar_window, threshold_factor
@@ -137,7 +137,7 @@ def cfar_pd(snr_db, stats: dict, n_grid: int = 400) -> np.ndarray:
         wq = np.full(n_grid, 1.0 / n_grid)
     s_tot = k * snr[:, None]
     rhs = (a * (c_w * s_tot + (1.0 - c) * k * g[None, :]) + s_tot * a * c / (1.0 - a * c)) / (1.0 - a * c)
-    pd = _ncx2.sf(2.0 * rhs, 2 * k, np.maximum(2.0 * s_tot / (1.0 - a * c) ** 2, 1e-12))
+    pd = _ncx2_sf(2.0 * rhs, 2 * k, np.maximum(2.0 * s_tot / (1.0 - a * c) ** 2, 1e-12))
     return pd @ wq
 
 
