@@ -5,12 +5,14 @@ Skipped where there is no browser driver; CI's ``test-gui`` job installs
 one and sets ``FMCW_REQUIRE_BROWSER=1``, which turns a skip into a failure.
 ``FMCW_BROWSER`` names a Chromium binary to use instead of the driver's own."""
 
+import json
 import os
 import threading
 
 import pytest
 
 from fmcw_radar import guispec, guiutil, webhost
+from fmcw_radar.config import RadarConfig, config_to_dict
 
 try:
     from playwright.sync_api import sync_playwright
@@ -558,6 +560,113 @@ def test_language_theme_and_phone_width(browser):
         srv.server_close()
 
 
+# ---------------------------------------------------------------- 0.2.32: the table of extra targets, previews of the two jobs
+
+def _open_all(p):
+    p.evaluate("document.querySelectorAll('details').forEach(d => d.open = true)")
+
+
+def test_extra_targets_are_edited_as_rows(page):
+    """The one table control is a block per row, drawn from the spec: a row
+    is added as the default target, each cell is the primary target's field
+    of that name, the report has a line per target, the RCS a row leaves
+    empty shows the source table's number for its kind and the tag beside
+    it.  A row the config refuses is marked -- that row, that cell -- with
+    the schema's sentence; the primary target's field is not."""
+    _set(page, "lo.engine", "response")
+    _settled(page)
+    _open_all(page)
+    n_fld = page.evaluate("document.querySelectorAll('.fld').length")
+    assert page.evaluate("document.querySelectorAll('.trow').length") == 0
+    page.click("[data-act=trowadd]")
+    _settled(page)
+    _open_all(page)
+    assert json.loads(page.evaluate("JSON.stringify(S.values.extra_targets)")) == [config_to_dict(RadarConfig())["target"]]
+    page.select_option('[data-row="0"][data-tcol="kind"]', "car")
+    _settled(page)
+    _open_all(page)
+    page.fill('[data-row="0"][data-tcol="range_m"]', "8")
+    page.press('[data-row="0"][data-tcol="range_m"]', "Enter")
+    _settled(page)
+    _open_all(page)
+    ref = guiutil.run_report({"lo.engine": "response", "extra_targets": [{"kind": "car", "range_m": 8.0, "velocity_mps": 2.0, "angle_deg": 0.0, "rcs_dbsm": None}]})
+    assert page.evaluate("S.run.repro.config_sha256") == ref["repro"]["config_sha256"] and page.evaluate("S.run.report.targets.length") == 2
+    rcs = '[data-row="0"][data-tcol="rcs_dbsm"]'
+    assert page.evaluate(f"document.querySelector('{rcs}').value") == "" and page.evaluate(f"document.querySelector('{rcs}').placeholder") == "10"
+    assert page.evaluate(f"document.querySelector('{rcs}').parentElement.querySelector('.tag').textContent") == "derived"
+    page.fill(rcs, "3")
+    page.press(rcs, "Enter")
+    _settled(page)
+    _open_all(page)
+    assert page.evaluate(f"document.querySelector('{rcs}').parentElement.querySelector('.tag').textContent") == "assumed"
+    assert page.evaluate("document.querySelectorAll('.fld').length") == n_fld                       # still one field per control
+    ids = page.evaluate("[...document.querySelectorAll('[id]')].map(e => e.id)")
+    assert len(ids) == len(set(ids))
+    # a second row, refused: the row and its cell, not the primary target's range
+    page.click("[data-act=trowadd]")
+    _settled(page)
+    _open_all(page)
+    page.fill('[data-row="1"][data-tcol="range_m"]', "-3")
+    page.press('[data-row="1"][data-tcol="range_m"]', "Enter")
+    _settled(page)
+    _open_all(page)
+    assert page.evaluate("[...document.querySelectorAll('.trow.bad')].map(e => e.dataset.trow)") == ["1"]
+    assert page.evaluate("[...document.querySelectorAll('.tc.bad input, .tc.bad select')].map(e => e.dataset.tcol)") == ["range_m"]
+    assert "must be finite and > 0" in page.evaluate("document.querySelector('.trow.bad .why').textContent")
+    assert not page.evaluate("document.querySelector('[data-fld=\"target.range_m\"]').classList.contains('bad')")
+    assert not page.evaluate("document.querySelector('[data-fld=\"extra_targets\"]').classList.contains('bad')")
+    page.click('[data-act=trowdel][data-row="1"]')
+    _settled(page)
+    assert page.evaluate("S.values.extra_targets.length") == 1 and page.evaluate("S.error") is None
+    assert page.evaluate("!document.querySelector('.refusal')")
+
+
+def test_a_sweep_and_the_band_table_come_as_previews_first(page):
+    """On the cycle-accurate chirp engine each step of a sweep or of the band
+    table takes seconds.  The page asks for the linearised engine's first --
+    the bar says which numbers are not final and whether any of them is on
+    screen -- and the cycle-accurate pass follows by itself and replaces it.
+    The band table stays on screen meanwhile; its pass can be cancelled and
+    asked for again.  On the linearised engine there is nothing to preview."""
+    _set(page, "chirp.n_chirps", 8)
+    _settled(page)
+    _go(page, "sweep")
+    page.fill("[data-sw=points]", "2")
+    page.press("[data-sw=points]", "Enter")
+    page.click("[data-act=sweeprun]")
+    page.wait_for_selector("[data-kpre=sweep]", timeout=60000)
+    bar = page.evaluate("document.querySelector('[data-kpre=sweep]').textContent")
+    assert "预览" in bar and "鬼目标每帧期望检出" in bar and "这里显示的数都不在其中" in bar
+    assert page.evaluate("S.sweep.preview.steps") == 2 and page.evaluate("!!S.jobs.sweep")          # the second pass is already running
+    page.select_option("[data-sw=metric]", "ghost_detections_per_frame")
+    assert "在其中" in page.evaluate("document.querySelector('[data-kpre=sweep]').textContent") and \
+        "都不在其中" not in page.evaluate("document.querySelector('[data-kpre=sweep]').textContent")
+    pre = page.evaluate("S.sweep.points.map(p => p.metrics.chirp_rms_hz)")
+    page.wait_for_function("S.sweep && !S.sweep.preview && !S.jobs.sweep", timeout=120000)
+    assert page.evaluate("!document.querySelector('[data-kpre=sweep]')")
+    assert page.evaluate("S.sweep.points.map(p => p.metrics.chirp_rms_hz)") != pre                  # the cycle-accurate engine's own numbers
+    # the band table: the preview is drawn while the cycle-accurate pass runs; cancel leaves it with the button
+    _go(page, "bands")
+    page.wait_for_selector("[data-kpre=bands]", timeout=60000)
+    assert page.evaluate("document.querySelectorAll('.btable tbody tr').length") == 5 and page.evaluate("!!S.jobs.bands")
+    assert "这里显示的数都不在其中" in page.evaluate("document.querySelector('[data-kpre=bands]').textContent")
+    page.click("[data-kpre=bands] [data-act=kcancel]")
+    page.wait_for_selector("[data-kpre=bands] [data-act=kfinal]", timeout=30000)
+    assert page.evaluate("document.querySelectorAll('.btable tbody tr').length") == 5 and page.evaluate("!S.jobs.bands")
+    page.click("[data-kpre=bands] [data-act=kfinal]")
+    page.wait_for_function("!!S.jobs.bands && S.kbody.bands.preview === false")
+    page.click("[data-kpre=bands] [data-act=kcancel]")
+    page.wait_for_function("!S.jobs.bands")
+    # the linearised engine: one pass, no bar
+    _go(page, "workbench")
+    _set(page, "lo.engine", "response")
+    _settled(page)
+    _go(page, "bands")
+    page.wait_for_function("S.bands && !S.jobs.bands && S.bandsShown === S.run.repro.config_sha256", timeout=60000)
+    assert page.evaluate("!S.bands.preview && !document.querySelector('[data-kpre=bands]')")
+    assert page.evaluate("document.querySelectorAll('.btable tbody tr').length") == 5
+
+
 # ---------------------------------------------------------------- the page as the phone runs it
 
 #: the activity's bridge, stood in for: the same asynchronous contract (host.call(id, route, json), the reply through
@@ -595,6 +704,17 @@ def test_the_page_on_the_phones_bridge(browser):
         p.wait_for_selector(".previewbar", state="detached", timeout=60000)
         final = guiutil.run_report({"chirp.n_chirps": 8})
         assert p.evaluate("document.querySelectorAll('.kpi .v')[2].textContent.trim()").startswith(f"{final['metrics']['ghost_detections_per_frame']:.2f}")
+        # a sweep on the phone: the preview stays, the cycle-accurate pass is a button
+        p.click("a[data-page=sweep]")
+        p.fill("[data-sw=points]", "2")
+        p.press("[data-sw=points]", "Enter")
+        p.click("[data-act=sweeprun]")
+        p.wait_for_selector("[data-kpre=sweep] [data-act=kfinal]", timeout=60000)
+        p.wait_for_timeout(1000)
+        assert p.evaluate("!S.jobs.sweep && S.sweep.preview.steps === 2")
+        assert p.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth") == 0
+        p.click("a[data-page=workbench]")
+        p.wait_for_selector(".pnav a.on[data-page=workbench]")
         # a config file out: its text, no download
         p.click('.bnav [data-tab-to="params"]')
         p.click("[data-act=yamlsave]")

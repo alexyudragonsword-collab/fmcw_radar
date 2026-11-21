@@ -140,6 +140,27 @@ def test_a_sweep_and_the_band_table_are_jobs_with_progress():
     assert api.call("run", {"values": FAST, "baseline": {"values": FAST}})[0] == 400
 
 
+def test_the_two_jobs_take_a_preview_flag():
+    """The page asks for a sweep and for the band table twice, like a run:
+    as a preview first, then as the config has it.  The flag reaches the
+    job; a frame has no preview."""
+    api = webhost.Api(backend="thread")
+    ev = {"chirp.n_chirps": 8}
+    code, a = api.call("sweep", {"values": ev, "path": "target.range_m", "lo": 4.0, "hi": 6.0, "points": 2, "preview": True})
+    pre = _wait(api.queue, a["id"])["result"]
+    assert pre["preview"]["shown"] == "response" and pre["preview"]["final"] == "event" and pre["preview"]["steps"] == 2
+    code, b = api.call("sweep", {"values": ev, "path": "target.range_m", "lo": 4.0, "hi": 6.0, "points": 2})
+    full = _wait(api.queue, b["id"], timeout=120)["result"]
+    assert "preview" not in full and [p["config_sha256"] for p in full["points"]] == [p["config_sha256"] for p in pre["points"]]
+    assert a["config_sha256"] == b["config_sha256"]
+    code, c = api.call("bands", {"values": ev, "preview": True})
+    assert _wait(api.queue, c["id"])["result"]["preview"]["of"] == 5
+    code, d = api.call("bands", {"values": FAST, "preview": True})                      # not on the cycle-accurate engine: nothing stands in
+    assert "preview" not in _wait(api.queue, d["id"])["result"]
+    code, f = api.call("frame", {"values": FAST, "preview": True})
+    assert "preview" not in _wait(api.queue, f["id"])["result"]
+
+
 def test_a_sweep_in_its_own_process_reports_its_progress():
     api = webhost.Api(backend="process")
     code, job = api.call("sweep", {"values": FAST, "path": "target.range_m", "lo": 2.5, "hi": 10.0, "points": 6})
