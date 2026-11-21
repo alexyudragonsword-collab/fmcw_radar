@@ -519,8 +519,9 @@ def controls(cfg: RadarConfig | None = None) -> list[Control]:
 
 def spec(cfg: RadarConfig | None = None) -> dict:
     """The whole contract as JSON-ready data (what a host serves the page)."""
+    ctrls = controls(cfg)
     return {"groups": [{"id": g, "zh": zh, "en": en} for g, (zh, en) in GROUPS.items()],
-            "controls": [asdict(c) for c in controls(cfg)],
+            "controls": [{**asdict(c), **(table_columns(c, ctrls) if c.kind == "table" else {})} for c in ctrls],
             "hidden": dict(HIDDEN), "engines": ENGINES, "metrics": METRICS,
             "bands": {k: list(v) for k, v in BANDS.items()},
             "lanes": LANES, "stages": [dict(st) for st in STAGES], "band_rows": [dict(r) for r in BAND_ROWS],
@@ -611,6 +612,37 @@ def tags(values: dict[str, Any]) -> dict[str, str]:
             continue
         out[path] = r[1] if v is None or float(v) == float(r[0]) else "assumed"
     return out
+
+
+def row_sources(cfg: RadarConfig) -> list[dict]:
+    """For each extra target (the table control's rows): the RCS the library
+    uses when the row leaves it empty, where that number comes from, and the
+    tag a page shows beside it -- the source table's, or ``assumed`` once
+    the row holds another number.  A ``custom`` target has no table entry."""
+    out = []
+    for t in cfg.extra_targets:
+        r = None
+        if t.kind != "custom":
+            r = resolve(apply_overrides(cfg, {"target.kind": t.kind, "target.rcs_dbsm": None}), "target.rcs_dbsm")
+        if r is None:
+            out.append({"rcs_dbsm": {"value": None, "source": None, "key": None, "tag": None if t.rcs_dbsm is None else "assumed"}})
+        else:
+            own = t.rcs_dbsm is None or float(t.rcs_dbsm) == float(r[0])
+            out.append({"rcs_dbsm": {"value": r[0], "source": r[1], "key": r[2], "tag": r[1] if own else "assumed"}})
+    return out
+
+
+def table_columns(c: Control, ctrls: list[Control]) -> dict:
+    """What a page needs to edit a table control: one spec per column --
+    the primary target's control of the same name gives the label, unit,
+    kind, choices and range -- and the row a new entry starts as."""
+    by = {x.path: x for x in ctrls}
+    cols = []
+    for name in c.columns or ():
+        x = by["target." + name]
+        cols.append({"name": name, "kind": x.kind, "zh": x.zh, "en": x.en, "unit": x.unit, "scale": x.scale, "choices": x.choices,
+                     "lo": x.lo, "hi": x.hi})
+    return {"column_specs": cols, "row_default": config_to_dict(RadarConfig())["target"]}
 
 
 def _holds(atom: dict, flat: dict[str, Any]) -> bool:

@@ -412,3 +412,88 @@ def test_the_angle_plot_is_the_virtual_arrays_own():
     assert abs(f["u"][int(np.argmax(f["spectrum_db"]))] - a["u_read"]) < 2.0 / len(f["u"])
     no_coupling = guiutil.run_report({**flat, "mimo.coupling.source": "none"})["plots"]["angle"]
     assert no_coupling["coupled"] is False and no_coupling["spectrum_db"] == no_coupling["spectrum_no_coupling_db"]
+
+
+# ---------------------------------------------------------------- 0.2.32: the table of extra targets, previews of the two jobs
+
+ROW = {"kind": "car", "range_m": 8.0, "velocity_mps": 0.0, "angle_deg": 0.0, "rcs_dbsm": None}
+
+
+def test_extra_targets_are_rows_of_the_form_and_each_brings_its_own_source():
+    """What the page edits is what a config file would hold: the rows go
+    through the loader, the report has a line per target, and beside each
+    row's RCS stands where the library reads it -- the source table for the
+    row's kind, ``assumed`` once the row holds another number, nothing to
+    look up for a ``custom`` target."""
+    rows = [ROW, {**ROW, "kind": "custom", "range_m": 3.0, "rcs_dbsm": -5.0}, {**ROW, "kind": "human", "range_m": 6.0, "rcs_dbsm": 3.0},
+            {**ROW, "kind": "human", "range_m": 7.0, "rcs_dbsm": -10.0}]
+    r = guiutil.run_report({**FAST, "extra_targets": rows})
+    assert r["ok"] and r["values"]["extra_targets"] == rows and [t["range_m"] for t in r["report"]["targets"]] == [5.0, 8.0, 3.0, 6.0, 7.0]
+    cfg = guispec.values_to_config({**FAST, "extra_targets": rows})
+    assert [t.kind for t in cfg.extra_targets] == ["car", "custom", "human", "human"]
+    src = r["table_rows"]["extra_targets"]
+    assert [x["rcs_dbsm"]["tag"] for x in src] == ["derived", "assumed", "assumed", "spec"]         # -10 dBsm is the table's own number for a human
+    assert src[0]["rcs_dbsm"] == {"value": 10.0, "source": "derived", "key": "rcs.car_dbsm", "tag": "derived"}
+    assert src[1]["rcs_dbsm"]["value"] is None and src[2]["rcs_dbsm"]["value"] == -10.0 and src[2]["rcs_dbsm"]["key"] == "rcs.human_dbsm"
+    assert guiutil.run_report(FAST)["table_rows"] == {"extra_targets": []}
+    # the spec tells the page how to draw a row: the primary target's fields, and what a new row starts as
+    c = next(c for c in guispec.spec()["controls"] if c["path"] == "extra_targets")
+    by = {x.path: x for x in guispec.controls()}
+    assert [col["name"] for col in c["column_specs"]] == list(c["columns"]) == ["kind", "range_m", "velocity_mps", "angle_deg", "rcs_dbsm"]
+    for col in c["column_specs"]:
+        t = by["target." + col["name"]]
+        assert (col["kind"], col["zh"], col["unit"], col["choices"], col["lo"], col["hi"]) == (t.kind, t.zh, t.unit, t.choices, t.lo, t.hi)
+    assert c["row_default"] == config_to_dict(RadarConfig())["target"]
+    assert guiutil.run_report({**FAST, "extra_targets": [c["row_default"]]})["ok"]
+    assert all("column_specs" not in x for x in guispec.spec()["controls"] if x["kind"] != "table")
+    json.dumps(guispec.spec())
+
+
+def test_a_refused_row_is_named_not_the_primary_target():
+    """The schema's sentence for a bad row reads like the primary target's
+    ("target.range_m must be ..."): the refusal names the table, the row and
+    the column, so the page does not mark the wrong field.  A form refused
+    without its rows is still refused by the field it names."""
+    for rows, row, col, part in (([ROW, {**ROW, "range_m": -1.0}], 1, "range_m", "must be finite and > 0"),
+                                 ([{**ROW, "kind": "ufo"}], 0, "kind", "must be one of"),
+                                 ([ROW, ROW, {**ROW, "kind": "custom"}], 2, "kind", "needs target.rcs_dbsm"),
+                                 ([{**ROW, "range_m": "abc"}], 0, "range_m", "cannot convert"),
+                                 ([{**ROW, "bogus": 1}], 0, None, "unknown config key"),
+                                 ("x", None, None, "must be a target mapping")):
+        r = guiutil.run_report({**FAST, "extra_targets": rows})
+        assert r["ok"] is False and (r["field"], r["row"], r["column"]) == ("extra_targets", row, col) and part in r["error"], rows
+        assert "report" not in r and "config" not in r
+        json.dumps(r)
+    own = guiutil.run_report({**FAST, "target.range_m": -2.0, "extra_targets": [ROW]})
+    assert own["field"] == "target.range_m" and "row" not in own
+    assert "row" not in guiutil.run_report({"frontend.tx_backoff_db": -1.0})
+
+
+def test_the_band_table_and_the_sweep_have_previews():
+    """Asked for as previews, every step is ``run_report(preview=True)``: on
+    the cycle-accurate chirp engine the linearised one stands in (the band
+    table of the default config in 1.6 s instead of 15) and the result says
+    so; each row keeps the real config's hash.  The numbers the two engines
+    share are the same either way; on a config that is not on the
+    cycle-accurate engine nothing stands in and nothing is marked."""
+    pre = guiutil.band_tradeoff({}, preview=True)
+    lin = guiutil.band_tradeoff({"lo.engine": "response"})
+    pending = [k for k, m in guispec.METRICS.items() if m.get("chirp_engine")]
+    assert pre["preview"] == {"shown": "response", "final": "event", "pending": pending, "steps": 5, "of": 5} and "preview" not in lin
+    assert len(pending) == 3 and "preview" not in guiutil.band_tradeoff({"lo.engine": "response"}, preview=True)
+    for a, b in zip(pre["rows"], lin["rows"]):
+        assert a["metrics"] == b["metrics"] and a["detection_range_m"] == b["detection_range_m"] and a["config_sha256"] != b["config_sha256"]
+    assert pre["config_sha256"] == guiutil.config_hash(RadarConfig())
+    assert pre["rows"][0]["config_sha256"] == guiutil.run_report(pre["rows"][0]["apply"])["repro"]["config_sha256"]      # the real config's
+    # a sweep: two points on the cycle-accurate engine, previewed and in full
+    sp = guiutil.run_sweep({"chirp.n_chirps": 8}, "target.range_m", 4.0, 6.0, 2, preview=True)
+    full = guiutil.run_sweep({"chirp.n_chirps": 8}, "target.range_m", 4.0, 6.0, 2)
+    assert sp["preview"]["steps"] == 2 and sp["preview"]["of"] == 2 and all(p["preview"] for p in sp["points"])
+    assert "preview" not in full and all("preview" not in p for p in full["points"])
+    for a, b in zip(sp["points"], full["points"]):
+        assert a["config_sha256"] == b["config_sha256"]
+        assert {k: v for k, v in a["metrics"].items() if k not in pending} == {k: v for k, v in b["metrics"].items() if k not in pending}
+        assert a["metrics"]["chirp_rms_hz"] != b["metrics"]["chirp_rms_hz"]
+    # a sweep across the engine's own switch... is not a sweep (an enum); a refused point is no stand-in
+    bo = guiutil.run_sweep({"chirp.n_chirps": 8}, "frontend.tx_backoff_db", -2.0, 2.0, 2, preview=True)
+    assert bo["preview"]["steps"] == 1 and bo["preview"]["of"] == 2 and not bo["points"][0]["ok"]

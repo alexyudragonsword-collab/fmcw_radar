@@ -27,8 +27,10 @@ function kjobHtml(kind){
    <div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>
    <div class="jobtxt"><span>${L('每一步是一份完整的统计引擎报告','every step is a full statistical report')}</span><button class="btn sm" data-act="kcancel" data-kind="${kind}">${L('取消','Cancel')}</button></div>`;
 }
+// a sweep and the band table are asked for twice, like a run: with the linearised chirp engine standing in first (preview),
+// then -- when that result says it was a stand-in -- as the config has it.  On the phone the second is on request.
 async function startJob(kind, body){
-  S.kmsg[kind]=null;
+  S.kmsg[kind]=null; S.kbody[kind]=body;
   const j=await api(kind, body);
   if(j.status==='error' || j.error){ S.kmsg[kind]=j.error||''; S.jobs[kind]=null; render(); return; }
   S.jobs[kind]=j; render(); pollK(kind);
@@ -38,11 +40,27 @@ async function pollK(kind){
   let j; try{ j=await api('jobs/'+j0.id); }catch(e){ return; }
   if(!S.jobs[kind] || S.jobs[kind].id!==j.id) return;
   S.jobs[kind]=j;
-  if(j.status==='done'){ S.jobs[kind]=null; S[kind]=j.result; if(kind==='bands') S.bandsShown=j.config_sha256; render(); return; }
+  if(j.status==='done'){ S.jobs[kind]=null; S[kind]=j.result; if(kind==='bands') S.bandsShown=j.config_sha256;
+    const b=S.kbody[kind];
+    if(j.result && j.result.preview && b && b.preview && !ON_DEVICE && !stale(j.config_sha256)){ startJob(kind, Object.assign({}, b, {preview:false})); return; }
+    render(); return; }
   if(j.status==='cancelled'){ S.jobs[kind]=null; S.kmsg[kind]=L(`已在 ${f(j.elapsed_s||0,1)} s 取消`,`cancelled at ${f(j.elapsed_s||0,1)} s`); render(); return; }
   if(j.status==='error'){ S.jobs[kind]=null; S.kmsg[kind]=j.error||''; render(); return; }
   const slot=document.getElementById('kjob-'+kind); if(slot) slot.innerHTML=kjobHtml(kind);
+  const bar=document.querySelector(`[data-kpre="${kind}"] .num`); if(bar && j.progress) bar.textContent=bar.textContent.replace(/\d+ \/ \d+$/, '')+`${j.progress.done} / ${j.progress.total}`;
   setTimeout(()=>pollK(kind), 250);
+}
+
+// the bar over a sweep or a band table whose steps are the linearised engine's: what is not final, whether what is on screen
+// is among it, and the cycle-accurate pass -- running, or (on the phone, or after a cancel) a button
+function kpreviewBar(kind, shownMetrics){
+  const R0=S[kind]; const p=R0 && R0.preview; if(!p) return '';
+  const M=S.spec.metrics, E=S.spec.engines; const busy=!!S.jobs[kind]; const hit=shownMetrics.filter(k=>p.pending.includes(k));
+  const names=p.pending.map(k=>L(M[k].zh,M[k].en)).join(L('、',', '));
+  return `<div class="previewbar kpre" data-kpre="${kind}"><b>${L('预览','Preview')}</b><span>${L(`每一步的报告是 ${E['chirp:'+p.shown].zh} 的(${p.steps} / ${p.of} 步)。取决于 chirp 引擎、还不是最终值的:${names}。`,`Each step's report is the ${E['chirp:'+p.shown].en}'s (${p.steps} of ${p.of} steps). Not final yet, the chirp engine's own: ${names}.`)}
+    ${hit.length?L(`这里显示的 ${hit.map(k=>M[k].zh).join('、')} 在其中。`,`Of what is shown here: ${hit.map(k=>M[k].en).join(', ')}.`):L('这里显示的数都不在其中。','None of the numbers shown here is among them.')}</span>
+    <span class="spacer"></span>${busy?`<span class="num">${E['chirp:'+p.final][S.lang==='zh'?'zh':'en']} ${S.jobs[kind].progress?`${S.jobs[kind].progress.done} / ${S.jobs[kind].progress.total}`:''}</span>${kind==='bands'?`<button class="btn sm" data-act="kcancel" data-kind="${kind}">${L('取消','Cancel')}</button>`:''}`
+      :`<button class="btn sm" data-act="kfinal" data-kind="${kind}">${L(`算 ${E['chirp:'+p.final].zh} 的`,`Run the ${E['chirp:'+p.final].en}`)}</button>`}</div>`;
 }
 
 /* ---------- the system diagram ---------- */
@@ -181,7 +199,7 @@ function ensureBands(){
   if(!S.run || S.error || S.jobs.bands) return;
   const sha=S.run.repro.config_sha256;
   if(S.bandsFor===sha) return;
-  S.bandsFor=sha; startJob('bands', {values:S.run.values});
+  S.bandsFor=sha; startJob('bands', {values:S.run.values, preview:true});
 }
 const tierName = (r, id) => { const t=(r.tiers||[]).find(x=>x.tier===id); return L(TIERZH[id]||(t?t.label:id), t?t.label:id); };
 function bandsSvg(w){
@@ -206,7 +224,8 @@ function bandsSvg(w){
 }
 function bandsPage(){
   ensureBands();
-  const B=S.bands; const busy=!!S.jobs.bands;
+  const B=S.bands; const second=!!(S.jobs.bands && B && B.preview && !stale(S.bandsShown) && S.kbody.bands && !S.kbody.bands.preview);
+  const busy=!!S.jobs.bands && !second;                 // the first pass (or another config's): only the job; the second: the preview stays
   const head=`<div class="hdr"><div><h2>${L('频段取舍','Band trade-off')} ${B&&!busy&&stale(S.bandsShown)?stalePill()+` <button class="btn sm" data-act="bandsrun">${L('重新计算','Compute again')}</button>`:''}</h2>
     <p class="sub">${L('47 CFR §15.255(c)(2)。每一行是一份真的配置:扫频移进那一段、声明那个场景、发射机回退到刚好压在治理档上限、帧周期拉到够档里要求的关断时间;其余都是当前参数。行里的数是那份配置自己的统计引擎报告。"用这一档"把参数表改成那一行。','47 CFR §15.255(c)(2). Each row is a real config: the sweep moved into that band, that scenario declared, the transmitter backed off just to the governing tier\'s limit, the frame period stretched to the off-time the tier asks; everything else as it is now. The numbers are that config\'s own statistical report. "Use this band" puts the form there.')}</p></div></div>`;
   if(busy || !B) return `<div class="bp">${S.error?refusalBar():''}<div class="card">${head}<div class="job" id="kjob-bands" style="max-width:420px">${busy?kjobHtml('bands'):`<div class="jobtxt"><span>${esc(S.kmsg.bands||L('等一份合法的参数。','waiting for a legal set of parameters.'))}</span></div>${S.run&&!S.error?`<button class="btn sm" data-act="bandsrun">${L('重新计算','Compute again')}</button>`:''}`}</div></div></div>`;
@@ -218,7 +237,7 @@ function bandsPage(){
   const limTag=r=>{ const k='fcc15255.'+r.governing+'.peak_eirp_dbm'; return S.sources[k]?tag(S.sources[k].source,k):''; };
   const use=r=>Object.keys(r.apply).length?`<button class="btn sm" data-act="useband" data-band="${r.id}">${L('用这一档','Use this band')}</button>`:`<span class="pill neu">${L('当前','current')}</span>`;
   const bad=r=>`<tr class="dim"><td><b>${L(r.zh,r.en)}</b></td><td colspan="11"><span class="pill bad">${L('配置层不接受','refused by the config')}</span> ${esc(r.error)}</td></tr>`;
-  return `<div class="bp">${S.error?refusalBar():''}
+  return `<div class="bp">${S.error?refusalBar():''}${kpreviewBar('bands', ['range_res_m','snr_cell_db','max_range_m'])}
    <div class="card">${head}
     <div class="chart" data-chart="bands"></div>
     <div class="legend"><span><span class="sw-line" style="border-color:var(--c4);border-top-width:6px"></span>${L('距离分辨率','range resolution')}</span><span><span class="sw-line" style="border-color:var(--accent);border-top-width:6px"></span>${L('IF 带宽限定的距离','range the IF band allows')}</span><span><span class="sw-line" style="border-color:var(--muted-mark);border-top-style:dashed"></span>${L('SNR 限定的检测距离(Pd 0.9,不计 IF 带限)','SNR-limited detection range (Pd 0.9, the IF band not asked)')}</span></div>
@@ -288,7 +307,7 @@ function sweepPage(){
     const val=p=>{ const v=p.metrics[S.sw.metric]; return typeof v==='boolean' ? (v?'✓':'✕') : f(v,m.digits); };
     const rows=R0.points.map((p,i)=>p.ok?`<tr><td class="n">${numv(p.x/sc)}</td><td class="n">${val(p)}</td>${snr?`<td class="n">${f(p.metrics.snr_cell_db,2)}</td>`:''}<td>${p.metrics.compliant===null?'—':p.metrics.compliant?'✓':'✕'}</td><td>${p.in_if_band?'✓':`<span class="pill warn" style="font-size:11px">${L('IF 带外','outside the IF band')}</span>`}</td><td><button class="btn sm" data-act="usepoint" data-pt="${i}">${L('用这个值','Use this value')}</button></td></tr>`
       :`<tr class="dim"><td class="n">${numv(p.x/sc)}</td><td colspan="${snr?5:4}"><span class="pill bad" style="font-size:11px">${L('配置层不接受','refused')}</span> ${esc(p.error)}</td></tr>`).join('');
-    res=`<div class="chart" data-chart="sweep"></div>
+    res=`${kpreviewBar('sweep', snr?[S.sw.metric,'snr_cell_db']:[S.sw.metric])}<div class="chart" data-chart="sweep"></div>
      <div class="legend"><span><span class="swdot"></span>${L('一个点 = 一份报告','a point = a report')}</span><span><span class="swdot out"></span>${L('目标在 IF 带外','target outside the IF band')}</span><span>× ${L('配置层不接受的值','a value the config refuses')}</span><span><span class="sw-line" style="border-color:var(--ink);border-top-style:dashed"></span>${L('当前值','the current value')}</span></div>
      <div class="tblwrap" style="margin-top:12px"><table class="tbl swtbl"><thead><tr><th class="n">${esc(L(R0.zh,R0.en))}${R0.unit?` [${esc(R0.unit)}]`:''}</th><th class="n">${esc(L(m.zh,m.en))}${m.unit?` [${m.unit}]`:''}</th>${snr?`<th class="n">${L('格点 SNR [dB]','cell SNR [dB]')}</th>`:''}<th>${L('合规','compliant')}</th><th>${L('IF 带内','in the IF band')}</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }

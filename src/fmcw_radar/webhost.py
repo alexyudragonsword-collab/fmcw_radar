@@ -60,10 +60,11 @@ def run_job(kind: str, req: dict, progress=None) -> dict:
     values = req.get("values") or {}
     if kind == "frame":
         return guiutil.run_frame(values)
+    pre = bool(req.get("preview"))                           # the linearised chirp engine first; the page asks again without it
     if kind == "sweep":
-        return guiutil.run_sweep(values, str(req.get("path")), float(req.get("lo")), float(req.get("hi")), int(req.get("points")), progress)
+        return guiutil.run_sweep(values, str(req.get("path")), float(req.get("lo")), float(req.get("hi")), int(req.get("points")), progress, pre)
     if kind == "bands":
-        return guiutil.band_tradeoff(values, progress)
+        return guiutil.band_tradeoff(values, progress, pre)
     raise ValueError(f"no such job kind: {kind}")
 
 
@@ -401,6 +402,8 @@ class Api:
                     extra = {"path": str(req["path"]), "lo": float(req["lo"]), "hi": float(req["hi"]), "points": int(req["points"])}
                 except (KeyError, TypeError, ValueError):
                     return 400, {"error": "a sweep needs path, lo, hi (config units) and points"}
+            if route != "frame":
+                extra["preview"] = bool(req.get("preview"))        # the linearised chirp engine stands in (guiutil.run_report)
             try:
                 return 200, self.queue.submit(values, route, extra)
             except ValueError as e:

@@ -2,7 +2,7 @@
    idle and why, and every number shown come from Python (guispec / guiutil through the host's Api).  What the page
    does itself: unit display (value / scale), layout, and drawing the plot data it is handed. */
 'use strict';
-const S = {lang:'zh', theme:'auto', spec:null, sources:{}, values:{}, tags:{}, inert:{}, refused:{}, resolved:{}, run:null, frame:null,
+const S = {lang:'zh', theme:'auto', spec:null, sources:{}, values:{}, tags:{}, inert:{}, refused:{}, resolved:{}, rowsrc:{}, kbody:{}, run:null, frame:null,
            error:null, pending:false, dirty:false, job:null, jobMsg:null, lastWall:null, mtab:'results', open:{}};
 Object.assign(S, {page:'workbench', sys:null, band:'current', sw:{path:'target.range_m', lo:null, hi:null, points:9, metric:'snr_cell_db'}, jobs:{sweep:null, bands:null}, kmsg:{}, baseline:null, bands:null, sweep:null, bandsFor:null, bandsShown:null, finalSeq:0, finalizing:false, finalBody:null, yamlMsg:null, yamlPanel:null, bundled:[]});
 try{ const s = JSON.parse(localStorage.getItem('fmcw-ui')||'{}'); if(s.lang) S.lang=s.lang; if(s.theme) S.theme=s.theme; }catch(e){}
@@ -54,10 +54,24 @@ const disp = (c,v) => (v===null||v===undefined||typeof v!=='number'||c.scale===1
 function shown(c){ const v=S.values[c.path]; if(v!==null && v!==undefined) return {v:disp(c,v), ph:false}; const r=S.resolved[c.path]; return r ? {v:disp(c,r.value), ph:true} : {v:'', ph:true}; }
 function why(atoms){ return atoms.map(a=>{ const c=S.spec.controls.find(x=>x.path===a.path); const n=c?L(c.zh,c.en):a.path;
   return a.op==='in' ? `${n} = ${a.value.join(' / ')}` : a.op==='gt' ? `${n} > ${a.value}` : L(`${n} 已设置`,`${n} set`); }).join(L(',且 ',' and ')); }
+// a table control (the extra point targets): a block per row, each column drawn from the spec of the primary target's field of that name
+function tableField(c){
+  const rows=S.values[c.path]||[]; const err=S.error && S.error.field===c.path ? S.error : null; const src=S.rowsrc[c.path]||[];
+  const cell=(row,i,col)=>{ const v=row[col.name]; const id=`c-${c.path}-${i}-${col.name}`; const bad=err && err.row===i && (!err.column || err.column===col.name);
+    const lab=`<label for="${id}">${L(col.zh,col.en.split(' (')[0])}${col.unit?` <small>${esc(col.unit)}</small>`:''}</label>`; const at=`data-tpath="${c.path}" data-row="${i}" data-tcol="${col.name}"`;
+    if(col.choices) return `<div class="tc ${bad?'bad':''}">${lab}<select id="${id}" ${at}>${col.choices.map(o=>`<option value="${esc(o)}" ${o===v?'selected':''}>${esc(o)}</option>`).join('')}</select></div>`;
+    const r=(src[i]||{})[col.name]; const empty=v===null||v===undefined; const ph=empty && r && r.value!==null && r.value!==undefined ? disp(col,r.value) : '';
+    return `<div class="tc ${bad?'bad':''}">${lab}<span class="tcv"><input id="${id}" inputmode="decimal" ${at} value="${empty?'':esc(disp(col,v))}" placeholder="${esc(ph)}" ${col.lo!==null?`title="${col.lo} … ${col.hi} ${esc(col.unit)}"`:''}>${r&&r.tag?tag(r.tag, r.tag==='assumed'?'':(r.key||'')):''}</span></div>`; };
+  const blocks=rows.map((row,i)=>`<div class="trow ${err&&err.row===i?'bad':''}" data-trow="${i}"><div class="trh"><b>${L(`目标 ${i+2}`,`Target ${i+2}`)}</b><button class="btn sm" data-act="trowdel" data-tpath="${c.path}" data-row="${i}" aria-label="${L(`删除目标 ${i+2}`,`remove target ${i+2}`)}">${L('删除','Remove')}</button></div>
+     <div class="trg">${c.column_specs.map(col=>cell(row,i,col)).join('')}</div>${err&&err.row===i?`<div class="why">${L('配置层不接受这一行:','The config refuses this row: ')}${esc(err.error)}</div>`:''}</div>`).join('');
+  return `<div class="fld tblfld ${err&&err.row==null?'bad':''}" data-fld="${c.path}"><div class="trh"><span class="tlab">${L(c.zh,c.en)}<small>${c.path}</small></span><span class="num" style="font-size:12px">${rows.length} ${L('行','rows')}</span></div>
+    ${rows.length?'':`<div class="why">${L('主目标是"目标"一组里的那个;这里再加的每一行是同一个点目标模型。','The primary target is the one in the Target group; every row added here is the same point-target model.')}</div>`}${blocks}
+    ${err&&err.row==null?`<div class="why">${esc(err.error)}</div>`:''}<button class="btn sm" data-act="trowadd" data-tpath="${c.path}">+ ${L('加一个目标','Add a target')}</button></div>`;
+}
 function fieldRow(c){
   const cur=shown(c); const idle=S.inert[c.path]; const bad=S.error && S.error.field===c.path; let ctl;
-  if(c.kind==='table'){ ctl=`<span class="num" style="font-size:12px">${(S.values[c.path]||[]).length} ${L('行','rows')}</span>`; }
-  else if(c.kind==='bool' || c.choices){
+  if(c.kind==='table') return tableField(c);
+  if(c.kind==='bool' || c.choices){
     let opts = c.kind==='bool' ? [true,false] : c.choices; if(c.kind.startsWith('opt_') && !opts.includes(null)) opts=[null].concat(opts); const ref=S.refused[c.path]||[];
     ctl=`<select id="c-${c.path}" data-path="${c.path}" aria-label="${esc(c.en)}">${opts.map(o=>`<option value="${o===null?'':esc(String(o))}" ${String(S.values[c.path]??'')===String(o??'')?'selected':''} ${ref.includes(o)?'disabled':''}>${o===null?L('未设置','not set'):esc(String(o).split('/').pop())}</option>`).join('')}</select>`; }
   else { ctl=`<input id="c-${c.path}" inputmode="decimal" data-path="${c.path}" value="${esc(cur.v===null||cur.v===undefined?'':cur.v)}" class="${cur.ph?'ph':''} ${edited(c.path)?'chg':''}" ${c.lo!==null?`title="${c.lo} … ${c.hi} ${esc(c.unit)}"`:''} aria-label="${esc(c.en)}">`; }
@@ -413,12 +427,12 @@ function renderTop(){
 }
 function render(){
   if(!S.spec) return;
-  const act=document.activeElement; const keep = act && act.dataset && act.dataset.path ? {path:act.dataset.path, a:act.selectionStart, b:act.selectionEnd} : null;
+  const act=document.activeElement; const keep = act && act.id && act.dataset && (act.dataset.path || act.dataset.tcol) ? {id:act.id, a:act.selectionStart, b:act.selectionEnd} : null;
   const sc=document.querySelector('.params'); const top=sc?sc.scrollTop:0;
   S.page = route(); renderTop();
   document.getElementById('view').innerHTML = S.page==='system' ? systemPage() : S.page==='bands' ? bandsPage() : S.page==='sweep' ? sweepPage() : workbench();
   const sc2=document.querySelector('.params'); if(sc2) sc2.scrollTop=top;
-  if(keep){ const el=document.querySelector(`[data-path="${keep.path}"]`); if(el){ el.focus(); try{ el.setSelectionRange(keep.a, keep.b); }catch(e){} } }
+  if(keep){ const el=document.getElementById(keep.id); if(el){ el.focus(); try{ el.setSelectionRange(keep.a, keep.b); }catch(e){} } }
   drawCharts();
 }
 function drawCharts(){
@@ -451,8 +465,8 @@ async function compute(){
   let res; try{ res = await api('run', Object.assign({preview:true}, body)); }catch(e){ res={ok:false, error:String(e), field:null, inert:S.inert, refused:S.refused}; }
   S.pending=false;
   S.inert=res.inert||{}; S.refused=res.refused||{};
-  if(res.ok){ S.run=res; S.error=null; S.values=res.values; S.tags=res.tags; S.resolved=res.resolved; RUN=adapt(res, S.frame); }
-  else S.error={error:res.error, field:res.field};
+  if(res.ok){ S.run=res; S.error=null; S.values=res.values; S.tags=res.tags; S.resolved=res.resolved; S.rowsrc=res.table_rows||{}; RUN=adapt(res, S.frame); }
+  else S.error={error:res.error, field:res.field, row:res.row, column:res.column};
   S.finalSeq++; S.finalizing=false;                       // whatever full run was on its way belongs to older settings
   render();
   if(S.dirty){ compute(); return; }
@@ -465,7 +479,7 @@ async function finalize(body){
   let res; try{ res = await api('run', Object.assign({final:true}, body)); }catch(e){ res={ok:false}; }
   if(mine!==S.finalSeq) return;                           // the settings moved on while it ran
   S.finalizing=false;
-  if(res.ok && !res.superseded && S.run && res.repro.config_sha256===S.run.repro.config_sha256){ S.run=res; S.tags=res.tags; S.resolved=res.resolved; RUN=adapt(res, S.frame); render(); }
+  if(res.ok && !res.superseded && S.run && res.repro.config_sha256===S.run.repro.config_sha256){ S.run=res; S.tags=res.tags; S.resolved=res.resolved; S.rowsrc=res.table_rows||{}; RUN=adapt(res, S.frame); render(); }
   else renderTop();
 }
 async function poll(){
@@ -524,8 +538,11 @@ document.addEventListener('click', async e=>{
   else if(act==='sysblk'){ S.sys = S.sys===a.dataset.id ? null : a.dataset.id; const sc=document.querySelector('.sysscroll'); const left=sc?sc.scrollLeft:0; render(); const sc2=document.querySelector('.sysscroll'); if(sc2) sc2.scrollLeft=left; }
   else if(act==='band'){ if(e.target.closest('button')) return; S.band=a.dataset.band; render(); }
   else if(act==='useband'){ const r=S.bands.rows.find(x=>x.id===a.dataset.band); Object.assign(S.values, r.apply); location.hash='#workbench'; changed(); }
+  else if(act==='trowadd'){ const tp=a.dataset.tpath; const c=S.spec.controls.find(x=>x.path===tp); S.values[tp]=(S.values[tp]||[]).concat([Object.assign({}, c.row_default)]); changed(); render(); }
+  else if(act==='trowdel'){ const tp=a.dataset.tpath; S.values[tp]=(S.values[tp]||[]).filter((_,i)=>i!==+a.dataset.row); changed(); render(); }
   else if(act==='bandsrun'){ S.bandsFor=null; render(); }
-  else if(act==='sweeprun'){ const c=swCtl(), E=swEnds(); startJob('sweep', {values:S.run.values, path:S.sw.path, lo:E.lo*c.scale, hi:E.hi*c.scale, points:S.sw.points}); }
+  else if(act==='sweeprun'){ const c=swCtl(), E=swEnds(); startJob('sweep', {values:S.run.values, path:S.sw.path, lo:E.lo*c.scale, hi:E.hi*c.scale, points:S.sw.points, preview:true}); }
+  else if(act==='kfinal'){ const k=a.dataset.kind; if(S.kbody[k] && !S.jobs[k]) startJob(k, Object.assign({}, S.kbody[k], {preview:false})); }
   else if(act==='usepoint'){ S.values[S.sweep.path]=S.sweep.points[+a.dataset.pt].x; location.hash='#workbench'; changed(); }
   else if(act==='kcancel'){ const j=S.jobs[a.dataset.kind]; if(j) await api('jobs/'+j.id+'/cancel', {}); }
   else if(act==='pin'){ if(S.run){ S.baseline={values:Object.assign({}, S.run.values), metrics:S.run.metrics, sha:S.run.repro.config_sha256}; compute(); } }
@@ -541,6 +558,11 @@ document.addEventListener('change', async e=>{
     render(); return; }
   if(el.id==='yamlfile'){ const file=el.files && el.files[0]; if(!file) return; const text=await file.text(); el.value=''; await loadYaml({yaml:text}, file.name); return; }
   if(el.dataset && el.dataset.yaml==='bundled'){ if(el.value) await loadYaml({name:el.value}, el.value+'.yaml'); return; }
+  if(el.dataset && el.dataset.tcol){ const tp=el.dataset.tpath, i=+el.dataset.row; const col=S.spec.controls.find(x=>x.path===tp).column_specs.find(x=>x.name===el.dataset.tcol);
+    let tv=el.value;
+    if(el.tagName!=='SELECT'){ if(tv.trim()===''){ if(!col.kind.startsWith('opt_')){ render(); return; } tv=null; }
+      else { const n=parseFloat(tv.replace('−','-')); if(isNaN(n)){ render(); return; } tv=n*col.scale; } }
+    const rows=(S.values[tp]||[]).map(r=>Object.assign({}, r)); if(!rows[i]) return; rows[i][col.name]=tv; S.values[tp]=rows; changed(); return; }
   const p=el.dataset && el.dataset.path; if(!p) return; const c=S.spec.controls.find(x=>x.path===p);
   let v=el.value;
   if(el.tagName==='SELECT'){ v = c.kind==='bool' ? v==='true' : (v===''?null:v); }
@@ -552,7 +574,7 @@ document.addEventListener('change', async e=>{
   changed();
 });
 document.addEventListener('toggle', e=>{ const d=e.target; if(d.dataset && d.dataset.key) S.open[d.dataset.key]=d.open; }, true);
-document.addEventListener('keydown', e=>{ if(e.key==='Escape') document.getElementById('pop').style.display='none'; if(e.key==='Enter' && e.target.dataset && e.target.dataset.path) e.target.blur(); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') document.getElementById('pop').style.display='none'; if(e.key==='Enter' && e.target.dataset && (e.target.dataset.path || e.target.dataset.tcol)) e.target.blur(); });
 window.addEventListener('hashchange', ()=>{ window.scrollTo(0,0); render(); });
 let rz=null; window.addEventListener('resize', ()=>{ clearTimeout(rz); rz=setTimeout(drawCharts,120); });
 

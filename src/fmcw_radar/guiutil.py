@@ -110,7 +110,37 @@ def validate(values: dict[str, Any]) -> dict:
         field = m.group(1) if m and m.group(1) in paths else None
         if field is None:
             field = next((p for p in sorted(paths, key=len, reverse=True) if p in msg), None)
-        return {"ok": False, "error": msg, "field": field}
+        out = {"ok": False, "error": msg, "field": field}
+        where = _refused_row(values)
+        if where is not None:
+            out.update(field="extra_targets", row=where[0], column=where[1])
+        return out
+
+
+def _refused_row(values: dict[str, Any]) -> tuple[int | None, str | None] | None:
+    """``(row, column)`` when what the config refuses is one of the extra
+    targets (the table control) and not the rest of the form: the schema's
+    sentence for a row reads like the primary target's ("target.range_m
+    must be ..."), so the page could not tell which one it is about.  None
+    when the form is refused without the rows too, or there are none."""
+    rows = values.get("extra_targets")
+    if not rows:
+        return None
+    try:
+        guispec.values_to_config({**values, "extra_targets": []})
+    except (ValueError, TypeError, KeyError):
+        return None
+    if not isinstance(rows, (list, tuple)):
+        return None, None                                    # not a table at all: the control, no row
+    cols = next(c.columns for c in guispec.controls() if c.path == "extra_targets")
+    for i, row in enumerate(rows):
+        try:
+            guispec.values_to_config({**values, "extra_targets": [row]})
+        except (ValueError, TypeError, KeyError) as e:
+            # the column the sentence names first; a sentence that lists them all ("unknown config key ... valid: [...]") names none
+            at = {c: m.start() for c in cols if (m := re.search(rf"\b{c}\b", str(e)))}
+            return i, (min(at, key=at.get) if 0 < len(at) < 3 else None)
+    return None, None
 
 
 # ---------------------------------------------------------------- one run: the statistical report
@@ -206,7 +236,7 @@ def run_report(values: dict[str, Any], baseline: dict | None = None, preview: bo
     the config is not on the cycle-accurate engine, the run is the full one."""
     v = validate(values)
     if not v["ok"]:
-        return {"ok": False, "error": v["error"], "field": v["field"], "inert": guispec.inert(values),
+        return {**{k: val for k, val in v.items() if k != "config"}, "inert": guispec.inert(values),
                 "refused": guispec.refused_choices(values)}
     cfg: RadarConfig = v["config"]
     run_cfg, pre = cfg, None
@@ -259,6 +289,7 @@ def run_report(values: dict[str, Any], baseline: dict | None = None, preview: bo
         "ok": True, "values": plain(flat), "tags": guispec.tags(flat), "inert": guispec.inert(flat),
         "refused": guispec.refused_choices(flat),
         "resolved": {c.path: {"value": c.resolved, "source": c.source, "key": c.sources_key} for c in guispec.controls(cfg) if c.source},
+        "table_rows": {"extra_targets": guispec.row_sources(cfg)},
         "report": rep, "full_power": full, "metrics": plain(metrics), "engines": engines, "plots": plots,
         "warnings": list(chirp.get("notes") or []) + list((rep.get("phase_noise") or {}).get("notes") or []),
         "repro": {"seed": cfg.sim.seed, "config_sha256": config_hash(cfg), "library": "fmcw_radar", "version": __version__,
@@ -369,7 +400,7 @@ def detection_range_m(cfg: RadarConfig, snr_req_db: float) -> float:
     return lo
 
 
-def band_tradeoff(values: dict[str, Any], progress=None) -> dict:
+def band_tradeoff(values: dict[str, Any], progress=None, preview: bool = False) -> dict:
     """``guispec.BAND_ROWS`` for these settings.  Each row is a real config:
     the sweep moved into that band, the scenario declared, the transmitter
     backed off just to the governing tier's limit and the frame period
@@ -377,13 +408,18 @@ def band_tradeoff(values: dict[str, Any], progress=None) -> dict:
     the form to be there, and the row's numbers are that config's own
     statistical report.  Also: the antenna-gain table (the transmit gain
     stops mattering once the EIRP is held to a limit) and the bundled
-    configs as they are."""
+    configs as they are.
+
+    ``preview``: each row's report as ``run_report(preview=True)`` gives it
+    -- the linearised chirp engine standing in for the cycle-accurate one --
+    and the result marked ``preview`` when any row was such a stand-in."""
     v = validate(values)
     if not v["ok"]:
         return {"ok": False, "error": v["error"], "field": v["field"]}
     cfg: RadarConfig = v["config"]
     flat = guispec.values_from_config(cfg)
     t0 = time.perf_counter()
+    stood_in = []
     k_now = compliance_check(cfg)
     if not k_now.applies:
         return {"ok": True, "applies": False, "why": k_now.why, "rule": k_now.rule, "rows": [], "antenna": [], "bundled": _bundled_verdicts()}
@@ -409,10 +445,12 @@ def band_tradeoff(values: dict[str, Any], progress=None) -> dict:
         if g.min_frame_period_s is not None and (period is None or period < g.min_frame_period_s):
             period = math.ceil(g.min_frame_period_s * 1e4) / 1e4            # up to the next 0.1 ms
         apply = {**move, "frontend.tx_backoff_db": over, "chirp.frame_period_s": period}
-        r = run_report({**flat, **apply})
+        r = run_report({**flat, **apply}, preview=preview)
         if not r["ok"]:
             rows.append({**out, "ok": False, "error": r["error"], "field": r["field"]})
             continue
+        if r.get("preview"):
+            stood_in.append(r["preview"])
         at = guispec.values_to_config({**flat, **apply})
         kk = r["report"]["compliance"]
         rows.append({**out, "ok": True, "apply": plain({p: val for p, val in r["values"].items() if val != flat.get(p)}),
@@ -435,7 +473,14 @@ def band_tradeoff(values: dict[str, Any], progress=None) -> dict:
         progress(len(guispec.BAND_ROWS), len(guispec.BAND_ROWS))
     return {"ok": True, "applies": True, "rule": k_now.rule, "config_sha256": config_hash(cfg), "rows": rows, "antenna": plain(antenna),
             "bundled": _bundled_verdicts(), "tx_power_dbm": k_now.conducted_dbm + cfg.frontend_value("tx_backoff_db")[0],
-            "wall_s": round(time.perf_counter() - t0, 3)}
+            **_stood_in(stood_in, len(rows)), "wall_s": round(time.perf_counter() - t0, 3)}
+
+
+def _stood_in(marks: list[dict], total: int) -> dict:
+    """``{"preview": ...}`` for a job whose steps were (some of them)
+    stand-ins of the linearised chirp engine: the mark of one step and how
+    many of the steps carry it.  Empty when every step is final."""
+    return {"preview": {**marks[0], "steps": len(marks), "of": total}} if marks else {}
 
 
 @functools.lru_cache(maxsize=1)
@@ -455,11 +500,15 @@ def _bundled_verdicts() -> tuple[dict, ...]:
 
 # ---------------------------------------------------------------- a sweep of one control
 
-def run_sweep(values: dict[str, Any], path: str, lo: float, hi: float, points: int, progress=None) -> dict:
+def run_sweep(values: dict[str, Any], path: str, lo: float, hi: float, points: int, progress=None, preview: bool = False) -> dict:
     """The headline metrics with one numeric control stepped from ``lo`` to
     ``hi`` (config units), everything else as it is.  Every point is a full
     statistical run of its own config; a value the schema refuses is a point
-    that carries the schema's sentence instead of numbers."""
+    that carries the schema's sentence instead of numbers.
+
+    ``preview``: every point as ``run_report(preview=True)`` gives it; the
+    result is marked ``preview`` when any point was a stand-in (a sweep of
+    the chirp engine's own choice can hold both kinds)."""
     c = next((x for x in guispec.controls() if x.path == path), None)
     if c is None or path not in guispec.sweepable():
         return {"ok": False, "error": f"{path}: not a control a sweep can step", "field": None}
@@ -476,14 +525,16 @@ def run_sweep(values: dict[str, Any], path: str, lo: float, hi: float, points: i
     if c.kind in ("int", "opt_int"):
         xs = sorted({int(round(x)) for x in xs}, reverse=hi < lo)
     t0 = time.perf_counter()
-    out = []
+    out, stood_in = [], []
     for n, x in enumerate(xs):
         if progress is not None:
             progress(n, len(xs))
-        r = run_report({**flat, path: x})
+        r = run_report({**flat, path: x}, preview=preview)
         if r["ok"]:
             out.append({"x": x, "ok": True, "metrics": r["metrics"], "config_sha256": r["repro"]["config_sha256"],
-                        "in_if_band": r["report"]["target"]["in_if_band"]})
+                        "in_if_band": r["report"]["target"]["in_if_band"], **({"preview": True} if r.get("preview") else {})})
+            if r.get("preview"):
+                stood_in.append(r["preview"])
         else:
             out.append({"x": x, "ok": False, "error": r["error"], "field": r["field"]})
     if progress is not None:
@@ -492,7 +543,7 @@ def run_sweep(values: dict[str, Any], path: str, lo: float, hi: float, points: i
     if cur is None:
         cur = next((k.resolved for k in guispec.controls(v["config"]) if k.path == path and k.source), None)
     return {"ok": True, "path": path, "zh": c.zh, "en": c.en, "unit": c.unit, "scale": c.scale, "current": cur, "points": plain(out),
-            "config_sha256": config_hash(v["config"]), "wall_s": round(time.perf_counter() - t0, 3)}
+            "config_sha256": config_hash(v["config"]), **_stood_in(stood_in, len(out)), "wall_s": round(time.perf_counter() - t0, 3)}
 
 
 def _frame_angle(cfg: RadarConfig, tm) -> dict | None:
