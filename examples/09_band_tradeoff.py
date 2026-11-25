@@ -25,7 +25,7 @@ everything else as configured.
 from _common import CONFIG, CONFIGS
 
 from fmcw_radar.config import apply_overrides, load_config
-from fmcw_radar.link import compliance_check, link_budget
+from fmcw_radar.link import compliance_check, detection_range_m, link_budget
 from fmcw_radar.processing.cfarstats import cfar_snr_for_pd, cfar_statistics
 from fmcw_radar.processing.windows import mainlobe_width_bins
 
@@ -43,16 +43,6 @@ ROWS = [("58-62 GHz (the default)", 58.0, 62.0, None),
 def at(lo, hi, scenario, **ov):
     return apply_overrides(base, {"band.center_hz": 0.5e9 * (lo + hi), "band.sweep_hz": 1e9 * (hi - lo),
                                   "regulatory.scenario": scenario, **ov})
-
-
-def detection_range_m(cfg, cap, snr_req):
-    """Where the cell SNR at the capped EIRP falls to what the map's CA-CFAR
-    needs for Pd 0.9 (the radar equation and the oxygen, no IF-band limit)."""
-    lo, hi = 0.5, 5000.0
-    for _ in range(60):
-        mid = (lo * hi) ** 0.5
-        lo, hi = (mid, hi) if link_budget(cfg, range_m=mid, eirp_cap_dbm=cap).snr_cell_db > snr_req else (lo, mid)
-    return lo
 
 
 res0 = compliance_check(base)
@@ -74,7 +64,7 @@ for label, lo, hi, scen in ROWS:
     off = "none" if g.off_time_required_s is None else f">= {g.off_time_required_s * 1e3:g} ms in any 33 ms"
     rate = "no limit" if g.max_frame_rate_hz is None else f"{g.max_frame_rate_hz:.1f}"
     print(f"  {label:28s} | {g.label:58s} | {g.peak_eirp_limit_dbm:11g} | {over:14s} | {cfg.band.sweep_hz / 1e9:7.2f} | {res_cm:15.2f} | "
-          f"{b.snr_cell_db:21.2f} | {detection_range_m(cfg, r.eirp_cap_dbm, need):19.1f} | {cfg.max_range_m:17.2f} | {off:23s} | {rate}")
+          f"{b.snr_cell_db:21.2f} | {detection_range_m(cfg, need, r.eirp_cap_dbm):19.1f} | {cfg.max_range_m:17.2f} | {off:23s} | {rate}")
 print("  (detection range: where the SNR at the limit meets what the map's CA-CFAR needs for Pd 0.9; the IF band cuts the "
       "radar off before that, and the oxygen figure is the band's one value, not the sweep centre's)")
 

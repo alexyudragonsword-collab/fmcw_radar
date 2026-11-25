@@ -59,7 +59,7 @@ def test_every_limit_is_read_from_the_shared_table():
 def test_check_follows_the_table_not_a_literal(monkeypatch):
     """Break-check kept as a test: move one limit in the table the module
     reads and the verdict moves with it."""
-    real = comp.number
+    real = sources.number                                    # check(cfg) reads the library's table through it, at call time
 
     def moved(key):
         e = real(key)
@@ -67,7 +67,7 @@ def test_check_follows_the_table_not_a_literal(monkeypatch):
 
     before = compliance_check(FULL)
     assert _tier(before, "radar_57_64").eirp_margin_db == pytest.approx(-8.0)
-    monkeypatch.setattr(comp, "number", moved)
+    monkeypatch.setattr(sources, "number", moved)
     after = compliance_check(FULL)
     assert _tier(after, "radar_57_64").eirp_margin_db == pytest.approx(+1.0) and after.eirp_cap_dbm == pytest.approx(22.0)
 
@@ -390,3 +390,122 @@ def test_report_carries_the_check_and_the_second_column():
                  "conducted 4.0 dBm (12 dBm, source: spec, backed off 8 dB, source: assumed) + antenna (source: assumed)",
                  "frame period 33.3333 ms"):
         assert want in md_d, want
+
+
+# ---------------------------------------------------------------- 0.2.33 (fmcw_radar#42): the rule on explicit numbers
+
+def _explicit(cfg, **kw):
+    """check(cfg)'s own numbers, taken out by hand."""
+    c = cfg.chirp
+    pt, s_pt = cfg.frontend_value("tx_power_dbm")
+    bo, s_bo = cfg.frontend_value("tx_backoff_db")
+    gt, s_gt = cfg.frontend_value("tx_gain_dbi")
+    args = dict(number=sources.number, tx_backoff_db=bo, frame_period_s=c.frame_period_s, scenario=cfg.regulatory.scenario,
+                n_tx=cfg.mimo.n_tx, occupied_bw_hz=cfg.band.sweep_hz, frame_on_s=c.frame_on_s,
+                sources={"tx_power_dbm": s_pt, "tx_backoff_db": s_bo, "tx_gain_dbi": s_gt})
+    args.update(kw)
+    return comp.check_emission(cfg.band.center_hz - 0.5 * cfg.band.sweep_hz, cfg.band.center_hz + 0.5 * cfg.band.sweep_hz, pt, gt,
+                               comp.frame_intervals(c.n_chirps, c.duration_s, c.pri_s), **args)
+
+
+@pytest.mark.parametrize("name", ["radar_60g_sensing", "radar_60g_mimo", "radar_60g_x10lo", "radar_60g_dither", "radar_77g_automotive"])
+def test_the_rule_on_explicit_numbers_is_the_configs_check(name):
+    """``check(cfg)`` is ``check_emission`` on the config's numbers: the same
+    result, field for field, on every bundled config and at full power with
+    the scenario declared."""
+    for ov in ({}, {"frontend.tx_backoff_db": 0.0}, {"chirp.frame_period_s": None}, {"regulatory.scenario": "outdoor_fixed"}):
+        cfg = apply_overrides(load_config(REPO / "configs" / f"{name}.yaml"), ov)
+        assert _explicit(cfg).as_dict() == compliance_check(cfg).as_dict()
+    assert comp.on_bursts(RadarConfig(), 2e-3) == comp.merge_bursts(comp.frame_intervals(64, 100e-6, 100e-6), 2e-3) == [(0.0, 6.4e-3)]
+
+
+def test_an_emission_that_is_not_a_radar_config():
+    """What another library hands in (jcas60: an 802.11ay sensing frame read
+    under the radar limits): 64 bursts of 3.055 us, one every 100 us, 30
+    frames a second, occupying 59.40-61.56 GHz, 12 dBm into 10 dBi.  The
+    gaps are under 2 ms, so it is one 6.3 ms burst; the band fits the
+    57-61.56 GHz tier, 20 dBm with its off-time -- 6 dB over what the
+    default radar's 58-62 GHz sweep gets (it crosses 61.56 GHz).  Nothing of
+    it is a ``RadarConfig``; the inputs' tags are the caller's to state."""
+    on = comp.frame_intervals(64, 3.055e-6, 100e-6)
+    r = comp.check_emission(59.40e9, 61.56e9, 12.0, 10.0, on, number=sources.number, frame_period_s=1.0 / 30.0)
+    assert r.applies and r.governing == "radar_57_61p56_off_time" and r.tier.peak_eirp_limit_dbm == 20.0
+    assert r.eirp_dbm == 22.0 and r.tier.eirp_margin_db == pytest.approx(-2.0) and r.eirp_cap_dbm == 20.0
+    assert r.tier.off_time == "met" and r.tier.off_time_have_s == pytest.approx(33e-3 - (63 * 100e-6 + 3.055e-6), abs=1e-9)
+    assert r.frame_on_s == pytest.approx(63 * 100e-6 + 3.055e-6) and r.n_tx == 1 and r.scenario is None
+    assert r.sources == {"tx_power_dbm": comp.NOT_STATED, "tx_backoff_db": comp.NOT_STATED, "tx_gain_dbi": comp.NOT_STATED, "band": "spec"}
+    assert compliance_check(apply_overrides(RadarConfig(), {"frontend.tx_backoff_db": 0.0})).tier.peak_eirp_limit_dbm == 14.0
+    # the same bursts 3 ms apart are 64 bursts to the rule: every gap is an off-time of its own
+    apart = comp.check_emission(59.40e9, 61.56e9, 12.0, 10.0, comp.frame_intervals(8, 3.055e-6, 3e-3), number=sources.number, frame_period_s=1.0 / 30.0)
+    assert apart.tier.off_time_have_s > r.tier.off_time_have_s and len(comp.merge_bursts(comp.frame_intervals(8, 3.055e-6, 3e-3), 2e-3)) == 8
+    # no frame period: the power is judged, the off-time is the shortest period that would do
+    open_ = comp.check_emission(59.40e9, 61.56e9, 10.0, 10.0, on, number=sources.number)
+    assert open_.tier.off_time == "frame period not declared" and open_.tier.compliant is None
+    t_min = open_.tier.min_frame_period_s                     # 14.55 ms: two bursts may share a 33 ms window, 8.25 ms of off-time each
+    assert t_min == pytest.approx(63 * 100e-6 + 3.055e-6 + 16.5e-3 / 2, abs=1e-6)
+    at = lambda period: _tier(comp.check_emission(59.40e9, 61.56e9, 10.0, 10.0, on, number=sources.number, frame_period_s=period),     # noqa: E731
+                              "radar_57_61p56_off_time")
+    assert at(t_min * 1.001).off_time == "met" and at(t_min * 1.001).compliant is True
+    assert at(t_min * 0.99).off_time == "not met" and not at(t_min * 0.99).usable      # the radar falls back to a tier without it
+    # the occupied bandwidth is the band's own width unless stated: 61.0-61.5 GHz is the narrow tier's, 501 MHz stated is not
+    narrow = comp.check_emission(61.0e9, 61.5e9, 12.0, 10.0, on, number=sources.number)
+    wide = comp.check_emission(61.0e9, 61.5e9, 12.0, 10.0, on, number=sources.number, occupied_bw_hz=501e6)
+    assert _tier(narrow, "radar_61_61p5").bandwidth_ok is True and _tier(wide, "radar_61_61p5").bandwidth_ok is False
+    assert narrow.governing == "radar_61_61p5" and wide.governing != "radar_61_61p5"
+
+
+def test_the_limits_come_through_the_function_handed_in():
+    """``number`` is a parameter: a caller's own table is the one read (and
+    only it -- the library's is not touched)."""
+    seen = []
+
+    def own(key):
+        seen.append(key)
+        e = sources.number(key)
+        return dataclasses.replace(e, value=17.0, source="assumed") if key == "fcc15255.radar_57_64.peak_eirp_dbm" else e
+
+    r = _explicit(FULL, number=own)
+    t = _tier(r, "radar_57_64")
+    assert t.peak_eirp_limit_dbm == 17.0 and t.sources["peak_eirp_dbm"] == "assumed" and t.eirp_margin_db == pytest.approx(-5.0)
+    assert _tier(compliance_check(FULL), "radar_57_64").peak_eirp_limit_dbm == 14.0
+    assert set(seen) >= {"fcc15255.band_low_hz", "fcc15255.band_high_hz"} and all(k.startswith("fcc15255.") for k in seen)
+    assert {k.split(".")[1] for k in seen if k.count(".") == 2} == set(comp.TIERS)
+
+
+def test_the_module_can_be_vendored_as_it_is(tmp_path):
+    """Nothing of the library is imported when the module loads: its file,
+    copied alone and loaded outside the package, checks an emission against
+    a table handed in.  (Only ``check(cfg)`` reaches into the library, when
+    called.)"""
+    import ast
+    import importlib.util
+    import sys
+    import types
+
+    src = (REPO / "src" / "fmcw_radar" / "link" / "compliance.py").read_text()
+    tree = ast.parse(src)
+    top = [n for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom))]
+    assert all(not (isinstance(n, ast.ImportFrom) and n.level) for n in top)                     # no relative import at load time
+    assert {n.module if isinstance(n, ast.ImportFrom) else n.names[0].name for n in top} == {"__future__", "dataclasses", "typing"}
+    (tmp_path / "compliance_copy.py").write_text(src)
+    spec = importlib.util.spec_from_file_location("compliance_copy", tmp_path / "compliance_copy.py")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["compliance_copy"] = mod
+    try:
+        spec.loader.exec_module(mod)
+        table = {k: types.SimpleNamespace(value=sources.number(k).value, source="vendored") for k in
+                 ["fcc15255.band_low_hz", "fcc15255.band_high_hz"]
+                 + [f"fcc15255.{t}.{f}" for t, (_, _, off, bw, cond) in comp.TIERS.items()
+                    for f in ["band_low_hz", "band_high_hz", "peak_eirp_dbm"] + (["off_time_sum_min_s", "off_time_window_s", "off_time_min_run_s"] if off else [])
+                    + (["max_bandwidth_hz"] if bw else []) + (["peak_conducted_dbm"] if cond else [])]}
+        got = mod.check_emission(58e9, 62e9, 12.0, 10.0, mod.frame_intervals(64, 100e-6, 100e-6), number=table.__getitem__,
+                                 tx_backoff_db=8.0, frame_period_s=1.0 / 30.0, sources={"tx_power_dbm": "spec"})
+    finally:
+        del sys.modules["compliance_copy"]
+    want, have = compliance_check(RadarConfig()).as_dict(), got.as_dict()          # the default: 58-62 GHz, 8 dB backed off, 30 frames a second
+    assert have["sources"] == {"tx_power_dbm": "spec", "tx_backoff_db": "not stated", "tx_gain_dbi": "not stated", "band": "vendored"}
+    assert have.pop("frame_on_s") == pytest.approx(want.pop("frame_on_s"), rel=1e-12)            # first start to last end, not handed in
+    bare = lambda d: {**{k: v for k, v in d.items() if k != "sources"},                           # noqa: E731
+                      "tiers": [{k: v for k, v in t.items() if k != "sources"} for t in d["tiers"]]}
+    assert bare(have) == bare(want) and have["governing"] == "radar_57_64" and have["compliant"] is True
+    assert all(t["sources"]["peak_eirp_dbm"] == "vendored" for t in have["tiers"])

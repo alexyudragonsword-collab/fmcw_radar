@@ -24,7 +24,7 @@ import numpy as np
 from ..chirp import ChirpEngine, ChirpResult, noisy_chirp
 from ..config.loader import apply_overrides
 from ..config.schema import C0, RadarConfig
-from ..link.budget import LinkBudget, link_budget, with_compression
+from ..link.budget import LinkBudget, detection_range_m, link_budget, with_compression
 from ..link.compliance import check as compliance_check
 from ..link.leakage import LeakageBudget, leakage_budget
 from ..lo import LOProfile, parked_lo
@@ -484,6 +484,23 @@ def cfar_detection(cfg: RadarConfig, res: "StatResult", rc: RangeCorrelation | N
     return out
 
 
+def range_at_pd(cfg: RadarConfig, cfar: dict, pd: float = 0.9) -> dict:
+    """How far the configured target can be and still be detected with
+    probability ``pd`` (the report's ``detection.range_at_pd``): the range
+    at which the SNR of one look falls to what the map's CA-CFAR needs for
+    it (``link.detection_range_m``), the IF band's own range, and which of
+    the two is the nearer -- the one that limits the radar."""
+    need = cfar["snr_pd90_db"] if pd == 0.9 else cfar_snr_for_pd(pd, cfar)
+    by_snr, by_if = detection_range_m(cfg, need), cfg.max_range_m
+    return {"pd": pd, "pfa": cfg.processing.cfar_pfa, "n_looks": cfar["n_looks"], "snr_required_db": need,
+            "criterion": "the SNR of one look meets what the map's CA-CFAR needs for this Pd (cfar.snr_pd90_db: its threshold's "
+                         "fluctuation and the target's own leak into its training cells included)",
+            "snr_limited_range_m": by_snr, "if_band_range_m": by_if, "range_m": min(by_snr, by_if),
+            "limited_by": "if_band" if by_if < by_snr else "snr",
+            "not_included": ["scalloping at a particular range", "the LO's noise floor", "mutual coupling",
+                             "the receiver's compression by the TX leakage"]}
+
+
 def hpf_floor_tilt(cfg: RadarConfig, budget: LinkBudget) -> float:
     """The map-wide mean noise floor over the floor at the target's beat
     (linear; 1 without the IF high-pass).  The filter shapes the thermal
@@ -607,6 +624,7 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
                 res.nonlinearity.update({"tdc_dither_lsb": cfg.lo.tdc_dither_lsb, "ghost_noise_on": bool(live.noise)})
         res.extras["nonlinearity_profile"] = (nl["axis_m"], nl["profile_db"])
     res.cfar.update(cfar_detection(cfg, res, rc))
+    res.extras["range_at_pd"] = range_at_pd(cfg, res.cfar)
     comp = compliance_check(cfg)
     res.compliance = comp.as_dict()
     if comp.eirp_cap_dbm is not None:

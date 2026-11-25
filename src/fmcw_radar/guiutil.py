@@ -389,17 +389,6 @@ def compare(baseline: dict, run: dict, cfg: RadarConfig) -> dict:
 
 # ---------------------------------------------------------------- the band trade-off
 
-def detection_range_m(cfg: RadarConfig, snr_req_db: float) -> float:
-    """Where the cell SNR of ``link_budget`` falls to ``snr_req_db`` (the
-    radar equation and the oxygen; the IF band is not asked) -- a bisection
-    on the library's budget, as example 09 does it."""
-    lo, hi = 0.5, 5000.0
-    for _ in range(60):
-        mid = (lo * hi) ** 0.5
-        lo, hi = (mid, hi) if link_budget(cfg, range_m=mid).snr_cell_db > snr_req_db else (lo, mid)
-    return lo
-
-
 def band_tradeoff(values: dict[str, Any], progress=None, preview: bool = False) -> dict:
     """``guispec.BAND_ROWS`` for these settings.  Each row is a real config:
     the sweep moved into that band, the scenario declared, the transmitter
@@ -451,7 +440,6 @@ def band_tradeoff(values: dict[str, Any], progress=None, preview: bool = False) 
             continue
         if r.get("preview"):
             stood_in.append(r["preview"])
-        at = guispec.values_to_config({**flat, **apply})
         kk = r["report"]["compliance"]
         rows.append({**out, "ok": True, "apply": plain({p: val for p, val in r["values"].items() if val != flat.get(p)}),
                      "config_sha256": r["repro"]["config_sha256"], "sweep_ghz": kk["sweep_ghz"], "scenario": kk["scenario"],
@@ -459,7 +447,7 @@ def band_tradeoff(values: dict[str, Any], progress=None, preview: bool = False) 
                      "full_power_over_db": -g.eirp_margin_db, "backoff_db": over, "eirp_dbm": kk["eirp_dbm"],
                      "frame_period_s": period, "off_time_required_s": kk["off_time_required_s"], "max_frame_rate_hz": kk["max_frame_rate_hz"],
                      "compliant": kk["compliant"], "verdict": kk["verdict"], "tiers": kk["tiers"], "metrics": r["metrics"],
-                     "detection_range_m": detection_range_m(at, r["metrics"]["snr_pd90_db"])})
+                     "detection_range_m": r["report"]["detection"]["range_at_pd"]["snr_limited_range_m"]})
     # the antenna gains under the limit: the configured band, the transmitter at full power
     base = apply_overrides(cfg, {"frontend.tx_backoff_db": 0.0})
     gt0, gr0 = cfg.frontend_value("tx_gain_dbi")[0], cfg.frontend_value("rx_gain_dbi")[0]
