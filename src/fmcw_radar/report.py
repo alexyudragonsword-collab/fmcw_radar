@@ -39,7 +39,9 @@ def report(cfg: RadarConfig, st: StatResult) -> dict:
                           else [{"term": lab, "value": v, "unit": u} for lab, v, u in st.budget_capped.as_rows()]),
         "compliance": st.compliance,
         "detection": {"snr_cell_db": st.snr_cell_db, "snr_chirp_db": st.snr_chirp_db, "pfa": cfg.processing.cfar_pfa,
-                      "pd": st.pd, "quant_share_db": b.quant_share_db},
+                      "pd": st.pd, "quant_share_db": b.quant_share_db,
+                      # how far the target can be at Pd 0.9: by SNR, by the IF band, and which of the two limits (0.2.33)
+                      "range_at_pd": st.extras.get("range_at_pd")},
         "phase_noise": {"lo_rms_rad": st.lo_rms_rad, "residual_rms_rad": st.pn_rms_rad,
                         # the levels are the beat signal's ahead of the IF high-pass; ``map_shift_db`` is what the filter adds
                         # on the map, the sideband and the target each passing it at their own beat (0 without it)
@@ -266,6 +268,14 @@ def to_markdown(rep: dict) -> str:
                   + (f" (CFAR loss {CF['cfar_loss_db']:.2f} dB, the target's own leak into its training cells included)" if "cfar_loss_db" in CF else "")
                   + f". The chirp's ghost targets add {CF['ghost_detections_per_frame']:.2f} detections per frame"
                   + ("" if CF.get("ghosts_vouched") or not CF.get("ghosts") else " (not vouched: linearised chirp engine)") + "."]
+        RP = D.get("range_at_pd")
+        if RP:
+            lines += ["", f"How far at Pd {RP['pd']:g}: the SNR of one look falls to the {RP['snr_required_db']:.2f} dB the CA-CFAR needs at "
+                      + (f"{RP['snr_limited_range_m']:.2f} m" if RP["snr_limited_range_m"] > 0.0 else "no range (it is under it from the nearest range on)")
+                      + f"; the IF band holds targets out to {RP['if_band_range_m']:.2f} m. The radar reaches **{RP['range_m']:.2f} m**, limited by "
+                      + ("the IF band (past it the echo is filtered out whatever its SNR)" if RP["limited_by"] == "if_band" else "the SNR")
+                      + ". The SNR here is the link budget's as the target moves out (the radar equation, the oxygen, the IF high-pass at "
+                      "each range's beat); not in it: " + ", ".join(RP["not_included"]) + "."]
         if CF.get("ghosts"):
             lines += ["", "| ghost at [m] | level [dBc] | on the map [dBc] | floor where it sits [dBc] | SNR [dB] | Pd | in view |",
                       "|---:|---:|---:|---:|---:|---:|---|"]

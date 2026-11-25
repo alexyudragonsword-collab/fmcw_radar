@@ -172,6 +172,35 @@ def snr_vs_range(cfg: RadarConfig, ranges_m) -> np.ndarray:
     return np.array([link_budget(cfg, r).snr_cell_db for r in ranges_m])
 
 
+#: the ranges the detection-range search looks between [m]
+DETECTION_RANGE_SEARCH_M = (0.5, 5000.0)
+
+
+def detection_range_m(cfg: RadarConfig, snr_req_db: float, eirp_cap_dbm: float | None = None) -> float:
+    """The range at which the SNR of one look of the map falls to
+    ``snr_req_db``: a bisection on this budget, the target moved out and
+    everything else as configured (``eirp_cap_dbm`` as ``link_budget`` takes
+    it).  0.0 when the SNR is under it already at the nearest range asked.
+
+    One look is one range-Doppler cell of one virtual channel: the budget's
+    cell SNR, less ``10 log n_tx`` where the transmitters take turns (each
+    channel's Doppler FFT has a share of the chirps).  It is the radar
+    equation, the oxygen and the IF high-pass at each range's beat -- not
+    the IF band's own limit (``cfg.max_range_m``: past it the echo is
+    filtered out whatever its SNR), and not what the budget does not hold
+    (scalloping at a particular range, the LO's noise floor, mutual
+    coupling, the receiver's compression by the leakage)."""
+    per_tx = 10.0 * math.log10(cfg.mimo.n_tx)
+    snr = lambda r: link_budget(cfg, range_m=r, eirp_cap_dbm=eirp_cap_dbm).snr_cell_db - per_tx        # noqa: E731
+    lo, hi = DETECTION_RANGE_SEARCH_M
+    if not snr(lo) > snr_req_db:
+        return 0.0
+    for _ in range(60):
+        mid = (lo * hi) ** 0.5
+        lo, hi = (mid, hi) if snr(mid) > snr_req_db else (lo, mid)
+    return lo
+
+
 def adc_amplitudes(cfg: RadarConfig, budget: LinkBudget) -> tuple[float, float, float]:
     """``(signal amplitude, full-scale amplitude, thermal noise sigma per
     sample)`` in volts on 50 ohm for the time engine: a complex tone of
@@ -185,4 +214,5 @@ def adc_amplitudes(cfg: RadarConfig, budget: LinkBudget) -> tuple[float, float, 
     return a_s, a_fs, n0_w * 50.0
 
 
-__all__ = ["LinkBudget", "link_budget", "snr_vs_range", "adc_amplitudes", "with_compression", "db", "dbm_to_w", "w_to_dbm"]
+__all__ = ["LinkBudget", "link_budget", "snr_vs_range", "detection_range_m", "DETECTION_RANGE_SEARCH_M", "adc_amplitudes",
+           "with_compression", "db", "dbm_to_w", "w_to_dbm"]

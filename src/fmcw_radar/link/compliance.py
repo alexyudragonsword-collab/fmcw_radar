@@ -43,14 +43,26 @@ with the result, so nobody takes the reading for the rule):
 
 Outside 57-71 GHz the section does not apply and the check says so (the
 77 GHz band); it does not borrow the 60 GHz limits.
+
+Two entries (0.2.33, fmcw_radar#42):
+
+* ``check_emission(...)`` is the rule on explicit numbers: the occupied
+  band, the transmit power and gain, when the transmitter is on within a
+  frame, the frame period, the scenario -- and ``number``, the function the
+  limits are read through.  It reads no config object and no source table
+  of its own, and this module imports nothing of the library at load time,
+  so another library can vendor the file as it is and hand in its own
+  ``number``.
+* ``check(cfg)`` takes those numbers out of a ``RadarConfig`` and calls it.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Callable, Sequence
 
-from ..config.schema import RadarConfig
-from ..sources import number
+if TYPE_CHECKING:                       # the annotation of check(cfg) only: nothing of the library is imported at load time
+    from ..config.schema import RadarConfig
 
 RULE = "47 CFR 15.255(c)(2)"
 
@@ -69,12 +81,28 @@ TIERS = {
 }
 
 
-def _num(tier: str, name: str) -> float:
-    return float(number(f"fcc15255.{tier}.{name}").value)
+#: the tag of an input whose origin the caller did not state (``check_emission(sources=...)``)
+NOT_STATED = "not stated"
 
 
-def _tag(tier: str, name: str) -> str:
-    return number(f"fcc15255.{tier}.{name}").source
+def frame_intervals(n: int, on_s: float, pri_s: float) -> list[tuple[float, float]]:
+    """``n`` transmissions of ``on_s`` each, one every ``pri_s``: the
+    intervals ``(start, end)`` [s] the transmitter is on within one frame
+    (an FMCW frame's ramps, a train of bursts)."""
+    return [(k * pri_s, k * pri_s + on_s) for k in range(n)]
+
+
+def merge_bursts(on_intervals: Sequence[tuple[float, float]], min_run_s: float) -> list[tuple[float, float]]:
+    """Transmit intervals ``(start, end)`` [s], in order, as the off-time
+    rule sees them: every gap shorter than ``min_run_s`` is counted as
+    transmitting."""
+    out: list[tuple[float, float]] = []
+    for a, b in on_intervals:
+        if out and a - out[-1][1] < min_run_s:
+            out[-1] = (out[-1][0], b)
+        else:
+            out.append((a, b))
+    return out
 
 
 def on_bursts(cfg: RadarConfig, min_run_s: float) -> list[tuple[float, float]]:
@@ -82,15 +110,7 @@ def on_bursts(cfg: RadarConfig, min_run_s: float) -> list[tuple[float, float]]:
     rule sees them: the ramps, with every gap shorter than ``min_run_s``
     counted as transmitting."""
     c = cfg.chirp
-    out: list[tuple[float, float]] = []
-    for k in range(c.n_chirps):
-        a = k * c.pri_s
-        b = a + c.duration_s
-        if out and a - out[-1][1] < min_run_s:
-            out[-1] = (out[-1][0], b)
-        else:
-            out.append((a, b))
-    return out
+    return merge_bursts(frame_intervals(c.n_chirps, c.duration_s, c.pri_s), min_run_s)
 
 
 def min_off_sum(bursts: list[tuple[float, float]], period_s: float, window_s: float, min_run_s: float) -> float:
@@ -246,22 +266,48 @@ READINGS = (
 )
 
 
-def check(cfg: RadarConfig) -> ComplianceResult:
-    """The configuration against 47 CFR 15.255(c)(2).  Reads the sweep, the
-    transmit power and antenna gain, the frame's burst, ``chirp.frame_period_s``
-    and ``regulatory.scenario``; changes nothing."""
-    f_lo = cfg.band.center_hz - 0.5 * cfg.band.sweep_hz
-    f_hi = cfg.band.center_hz + 0.5 * cfg.band.sweep_hz
-    pt0, s_pt = cfg.frontend_value("tx_power_dbm")
-    bo, s_bo = cfg.frontend_value("tx_backoff_db")
+def check_emission(f_lo_hz: float, f_hi_hz: float, tx_power_dbm: float, tx_gain_dbi: float,
+                   on_intervals: Sequence[tuple[float, float]], *, number: Callable, tx_backoff_db: float = 0.0,
+                   frame_period_s: float | None = None, scenario: str | None = None, n_tx: int = 1,
+                   occupied_bw_hz: float | None = None, frame_on_s: float | None = None,
+                   sources: dict | None = None) -> ComplianceResult:
+    """An emission against 47 CFR 15.255(c)(2), on explicit numbers.
+
+    ``f_lo_hz``, ``f_hi_hz``: the band the emission occupies (how it is
+    measured is the caller's reading; ``READINGS`` states this library's).
+    ``tx_power_dbm - tx_backoff_db`` is taken as the peak conducted power,
+    that plus ``tx_gain_dbi`` as the peak EIRP.
+    ``on_intervals``: when the transmitter is on within one frame,
+    ``(start, end)`` in seconds, in order, as they are -- each tier merges
+    the gaps shorter than its own minimum off-time (``frame_intervals``
+    builds a regular train).  ``frame_period_s``: the frame repeats with
+    it; ``None`` = not declared, and an off-time condition is then reported
+    with the shortest period that would meet it instead of a verdict.
+    ``scenario``: one of the words in ``TIERS``, or ``None`` = not declared.
+    ``occupied_bw_hz``: for the tier with a bandwidth condition; the band's
+    own width when not given.  ``frame_on_s``: reported only; first start to
+    last end when not given.  ``sources``: the tags of ``tx_power_dbm``,
+    ``tx_backoff_db`` and ``tx_gain_dbi``, reported with the result
+    (``NOT_STATED`` for those left out).
+
+    ``number``: the function every limit is read through --
+    ``number("fcc15255.<tier>.<field>")`` and ``number("fcc15255.band_low_hz"
+    / "band_high_hz")`` give an object with ``.value`` and ``.source``.  The
+    keys are spec_sources' ``fcc15255.<tier>#<field>`` written with a dot."""
+    num = lambda tier, name: float(number(f"fcc15255.{tier}.{name}").value)       # noqa: E731
+    tag = lambda tier, name: number(f"fcc15255.{tier}.{name}").source             # noqa: E731
+    f_lo, f_hi = f_lo_hz, f_hi_hz
+    on = list(on_intervals)
+    bw = f_hi - f_lo if occupied_bw_hz is None else occupied_bw_hz
+    pt0, bo, gt = tx_power_dbm, tx_backoff_db, tx_gain_dbi
     pt = pt0 - bo                               # the transmitter as it runs
-    gt, s_gt = cfg.frontend_value("tx_gain_dbi")
+    given = dict(sources or {})
     lo, hi = float(number("fcc15255.band_low_hz").value), float(number("fcc15255.band_high_hz").value)
     res = ComplianceResult(rule=RULE, applies=False, why="", sweep_ghz=(f_lo / 1e9, f_hi / 1e9), eirp_dbm=pt + gt, conducted_dbm=pt,
-                           n_tx=cfg.mimo.n_tx, frame_on_s=cfg.chirp.frame_on_s, frame_period_s=cfg.chirp.frame_period_s,
-                           scenario=cfg.regulatory.scenario,
+                           n_tx=n_tx, frame_on_s=(on[-1][1] - on[0][0] if on else 0.0) if frame_on_s is None else frame_on_s,
+                           frame_period_s=frame_period_s, scenario=scenario,
                            tx_power_dbm=pt0, tx_backoff_db=bo,
-                           sources={"tx_power_dbm": s_pt, "tx_backoff_db": s_bo, "tx_gain_dbi": s_gt,
+                           sources={**{k: given.get(k, NOT_STATED) for k in ("tx_power_dbm", "tx_backoff_db", "tx_gain_dbi")},
                                     "band": number("fcc15255.band_low_hz").source})
     if f_hi <= lo or f_lo >= hi:
         res.why = (f"the sweep {f_lo / 1e9:g}-{f_hi / 1e9:g} GHz lies outside the {lo / 1e9:g}-{hi / 1e9:g} GHz band this section "
@@ -275,24 +321,24 @@ def check(cfg: RadarConfig) -> ComplianceResult:
         return res
     res.why = f"the sweep {f_lo / 1e9:g}-{f_hi / 1e9:g} GHz lies inside the {lo / 1e9:g}-{hi / 1e9:g} GHz band"
     for tier, (label, scenarios, has_off, has_bw, has_cond) in TIERS.items():
-        b_lo, b_hi = _num(tier, "band_low_hz"), _num(tier, "band_high_hz")
-        limit = _num(tier, "peak_eirp_dbm")
-        cond = _num(tier, "peak_conducted_dbm") if has_cond else None
+        b_lo, b_hi = num(tier, "band_low_hz"), num(tier, "band_high_hz")
+        limit = num(tier, "peak_eirp_dbm")
+        cond = num(tier, "peak_conducted_dbm") if has_cond else None
         in_band = f_lo >= b_lo and f_hi <= b_hi
-        bw_ok = (cfg.band.sweep_hz <= _num(tier, "max_bandwidth_hz")) if has_bw else None
-        scen = ("any" if scenarios is None else "not declared" if cfg.regulatory.scenario is None
-                else "met" if cfg.regulatory.scenario in scenarios else "not met")
+        bw_ok = (bw <= num(tier, "max_bandwidth_hz")) if has_bw else None
+        scen = ("any" if scenarios is None else "not declared" if scenario is None
+                else "met" if scenario in scenarios else "not met")
         off, need, have, t_min = "none required", None, None, None
         if has_off:
-            need, win, run = _num(tier, "off_time_sum_min_s"), _num(tier, "off_time_window_s"), _num(tier, "off_time_min_run_s")
-            bursts = on_bursts(cfg, run)
+            need, win, run = num(tier, "off_time_sum_min_s"), num(tier, "off_time_window_s"), num(tier, "off_time_min_run_s")
+            bursts = merge_bursts(on, run)
             t_min = min_frame_period(bursts, win, need, run)
             if t_min is None:
                 off = "cannot be met"
-            elif cfg.chirp.frame_period_s is None:
+            elif frame_period_s is None:
                 off = "frame period not declared"
             else:
-                have = min_off_sum(bursts, cfg.chirp.frame_period_s, win, run)
+                have = min_off_sum(bursts, frame_period_s, win, run)
                 off = "met" if have >= need - 1e-12 else "not met"
         usable = in_band and bw_ok is not False and scen in ("any", "met") and off in ("none required", "met", "frame period not declared")
         power_ok = res.eirp_dbm <= limit + 1e-12 and (cond is None or res.conducted_dbm <= cond + 1e-12)
@@ -303,9 +349,9 @@ def check(cfg: RadarConfig) -> ComplianceResult:
             min_frame_period_s=t_min, eirp_margin_db=limit - res.eirp_dbm,
             conducted_margin_db=None if cond is None else cond - res.conducted_dbm, usable=usable, power_ok=power_ok,
             compliant=compliant,
-            sources={"peak_eirp_dbm": _tag(tier, "peak_eirp_dbm"), "band": _tag(tier, "band_low_hz"),
-                     **({"off_time": _tag(tier, "off_time_sum_min_s")} if has_off else {}),
-                     **({"peak_conducted_dbm": _tag(tier, "peak_conducted_dbm")} if has_cond else {})}))
+            sources={"peak_eirp_dbm": tag(tier, "peak_eirp_dbm"), "band": tag(tier, "band_low_hz"),
+                     **({"off_time": tag(tier, "off_time_sum_min_s")} if has_off else {}),
+                     **({"peak_conducted_dbm": tag(tier, "peak_conducted_dbm")} if has_cond else {})}))
     usable = [t for t in res.tiers if t.usable]
     if usable:
         # the highest limit; between two equal ones the tier that asks for no off-time
@@ -317,4 +363,23 @@ def check(cfg: RadarConfig) -> ComplianceResult:
     return res
 
 
-__all__ = ["RULE", "TIERS", "READINGS", "TierResult", "ComplianceResult", "check", "on_bursts", "min_off_sum", "min_frame_period"]
+def check(cfg: RadarConfig) -> ComplianceResult:
+    """The configuration against 47 CFR 15.255(c)(2).  Reads the sweep, the
+    transmit power and antenna gain, the frame's burst, ``chirp.frame_period_s``
+    and ``regulatory.scenario``; changes nothing.  ``check_emission`` on the
+    config's numbers, the limits read from this library's source table."""
+    from ..sources import number
+
+    pt0, s_pt = cfg.frontend_value("tx_power_dbm")
+    bo, s_bo = cfg.frontend_value("tx_backoff_db")
+    gt, s_gt = cfg.frontend_value("tx_gain_dbi")
+    c = cfg.chirp
+    return check_emission(
+        cfg.band.center_hz - 0.5 * cfg.band.sweep_hz, cfg.band.center_hz + 0.5 * cfg.band.sweep_hz, pt0, gt,
+        frame_intervals(c.n_chirps, c.duration_s, c.pri_s), number=number, tx_backoff_db=bo, frame_period_s=c.frame_period_s,
+        scenario=cfg.regulatory.scenario, n_tx=cfg.mimo.n_tx, occupied_bw_hz=cfg.band.sweep_hz, frame_on_s=c.frame_on_s,
+        sources={"tx_power_dbm": s_pt, "tx_backoff_db": s_bo, "tx_gain_dbi": s_gt})
+
+
+__all__ = ["RULE", "TIERS", "READINGS", "NOT_STATED", "TierResult", "ComplianceResult", "check", "check_emission", "frame_intervals",
+           "merge_bursts", "on_bursts", "min_off_sum", "min_frame_period"]

@@ -90,9 +90,9 @@ authoring_mode: ai_generated
 
 ## 实现
 
-- `link/compliance.py`:`check(cfg)` → `ComplianceResult`(每档一个 `TierResult`:频段包不包得住扫频、场景、关断、余量、最短帧周期、能不能用;`governing`、`eirp_cap_dbm`、`verdict`)。
+- `link/compliance.py`:`check(cfg)`(0.2.33 起是 `check_emission` 套一层取数,见下一节)→ `ComplianceResult`(每档一个 `TierResult`:频段包不包得住扫频、场景、关断、余量、最短帧周期、能不能用;`governing`、`eirp_cap_dbm`、`verdict`)。
   模块只有条文的结构(哪一档有哪些条件),**没有一个限值**:全从 `sources.number("fcc15255.<档>.<字段>")` 读(44 条,`source: spec`,加载时与 spec_sources 逐值核对)。
-  测试用 monkeypatch 改表里的一个上限,判定跟着变。
+  测试用 monkeypatch 改表里的一个上限,判定跟着变(0.2.33 起 patch 的是 `sources.number`:模块自己不再持有它)。
 - 治理档 = 能用的档里上限最高的;上限相同取不要求关断的。"能用" = 频段包得住、带宽条件满足、场景满足或不依赖场景、关断满足或还能满足(帧周期没声明)。
 - 关断:`on_bursts`(把短于 2 ms 的间隙并进发射段)、`min_off_sum`(滑动窗口里计入的关断的最小值:它对窗口起点分段线性,只在窗口边沿对上发射段边沿时取极值,测试对照细网格暴力搜索)、
   `min_frame_period`(二分)。
@@ -103,6 +103,32 @@ authoring_mode: ai_generated
 - 机制类测试(泄漏、压缩、鬼目标进虚警账、dither、检查本身的各档逻辑)固定在满功率上跑(`frontend.tx_backoff_db: 0`,`tests/test_compliance.py::FULL` 等),阈值保持原义;
   默认配置的新结论另有断言(`test_default_config_is_compliant_at_the_limit`、`test_backed_off_default_keeps_the_leakage_under_the_out_of_band_point` 等)。
 - 指纹:原有 2153 个值逐位不变,新增 247 个 `compliance.*` 键。break-check(手工改坏再恢复):去掉关断判据 → 10 条红;上限不作用到预算 → 3 条红;57–64 档读成室外档的上限 → 红。
+
+## 两个入口:显式参数的规则,和从配置取数的那一个(0.2.33,fmcw_radar#42,contains:decision)
+
+- **起因**:jcas60(60 GHz 通感一体)想把这个文件逐字 vendor,拿同一套规则去读一个不是 `RadarConfig` 的发射(802.11ay 的感知帧)。原来 `check(cfg)` 直接读配置对象的属性、
+  模块顶部导入本库的来源表:它只能改两行 import 再喂一个假对象,靠的是 `check()` 恰好只读那几个属性。
+- **`check_emission(f_lo_hz, f_hi_hz, tx_power_dbm, tx_gain_dbi, on_intervals, *, number, ...)`** 是规则本身:占用频段、发射功率与增益、一帧里发射机开着的区间、帧周期、场景,
+  以及取限值的函数 `number`(给键返回带 `.value` / `.source` 的对象)。`check(cfg)` 只是从配置里取出这些数再调它。
+  模块加载时**不导入本库任何东西**(`RadarConfig` 只在 `TYPE_CHECKING` 下,来源表在 `check(cfg)` 里才导入):文件单独拷出去、在包外加载、给一张自己的表,结果与本库逐项相同(测试守着)。
+- **取舍**:(1) 传的是**原始的发射区间**(`frame_intervals(n, on_s, pri_s)` 造规则的一串),不是合并好的突发——"短于 2 ms 的间隙算连续发射"的阈值是每一档自己的数,
+  合并在函数里按档做(`merge_bursts`)。jcas60 提议的参数是 `bursts`,没照做,理由是这个。
+  (2) `occupied_bw_hz` 单列:只有 61.0–61.5 GHz 档用,不给就取频段自己的宽度;`check(cfg)` 传配置的扫频(与 `f_hi − f_lo` 在浮点上可能差一个 ulp,要逐位不变就得传原数)。
+  (3) 输入的出处标签由调用方给(`sources=`),没给的记 `not stated`——本库不替别人的数标出处。
+- **逐位不变**:重构前后在 2646 组配置(9 个频段 × 7 个帧周期 × 6 个场景 × 4 种帧 × 3 档回退,加随库配置)上 `as_dict()` 的 JSON 逐字节相同;指纹 2476 个值逐位不变。
+- 例:64 个 3.055 µs 的突发、每 100 µs 一个、30 帧/秒、占 59.40–61.56 GHz、12 dBm + 10 dBi → 57–61.56 GHz 带关断的档,上限 20 dBm(本库默认扫 58–62 GHz 跨过 61.56,是 14 dBm);
+  间隙都短于 2 ms,规则眼里是一个 6.3 ms 的突发,最短帧周期 14.55 ms。**这只是规则在这组数上的结果**;"通信设备顺带做感知适用哪一款"是 jcas60 自己在 spec_sources#54 问的,不是本库的结论。
+
+## 最远探测距离进了报告(0.2.33,fmcw_radar#42)
+
+- `link.detection_range_m(cfg, snr_req_db, eirp_cap_dbm=None)`:目标往外移,一个 look 的 SNR 落到给定值的距离(对 `link_budget` 二分,0.5–5000 m;最近处就不够时返回 0.0)。
+  原来示例 09 和界面的频段表各有一份同样的二分,现在都读它。
+- 报告的 `detection.range_at_pd`:`snr_required_db`(图上 CA-CFAR Pd 0.9 要的每 look SNR,即 `cfar.snr_pd90_db`)、`snr_limited_range_m`、`if_band_range_m`、
+  `range_m`(两者取近)、`limited_by`(`snr` / `if_band`)、`criterion`、`not_included`。默认配置:SNR 限 28.78 m,IF 带宽限 14.99 m,**受 IF 带宽限制**;
+  −30 dBsm 的目标 9.40 m,受 SNR 限制。jcas60 自己按"噪声电平已知"的 11.75 dB 外推的 29.56 m,用同一个函数给出 29.56 m——差的是判据(CFAR 损失 0.49 dB),不是算法。
+- **更正(contains:pitfall)**:TDM-MIMO 下 CFAR 要的 SNR 是每 look 的,而一个 look(一个虚拟通道的距离-多普勒格)只有 1 / n_tx 的 chirp,比预算的格点 SNR 低 10 log n_tx。
+  界面频段表原来拿整格的 SNR 去比每 look 的门限,随库 MIMO 配置(2 TX)的探测距离给的是 43.2 m,应为 **36.3 m**。单通道配置不受影响(28.78 m 没变)。
+- 它是什么、不是什么:雷达方程 + 氧气 + 每个距离自己拍频处的 IF 高通;不含某个具体距离上的格点失配、LO 相噪底、互耦、泄漏造成的接收机压缩(报告里逐项写明)。
 
 ## 没做的(ROADMAP)
 
