@@ -1,4 +1,4 @@
-# Vendored from spec_sources@18241cd698facbc745ff73c7e7b267d915436acc: src/spec_sources/data/atmosphere.yaml
+# Vendored from spec_sources@98b1d1b33d091ccd3133775610ced59e8bf72c16: src/spec_sources/data/atmosphere.yaml
 # Adapted-copy policy: see src/fmcw_radar/vendor/__init__.py
 # atmosphere —— 大气衰减：ITU-R P.676 的逐线法与它推出的海平面比衰减。
 #
@@ -88,11 +88,11 @@ entries:
 
   # ------------------------------------------------------------ 推导：海平面干大气的氧气比衰减
   itu_p676.gamma_o_dry_sea_level:
-    value: {f_ghz: [57.0, 60.0, 64.0, 76.0, 77.0, 77.5, 81.0], db_per_km: [10.079, 14.651, 6.836, 0.108, 0.096, 0.091, 0.065]}
+    value: {f_ghz: [57.0, 60.0, 60.48, 64.0, 76.0, 77.0, 77.5, 81.0], db_per_km: [10.079, 14.651, 14.993, 6.836, 0.108, 0.096, 0.091, 0.065]}
     unit: "GHz, dB/km"
     source: derived
     cite: "itu_p676.method 用 itu_p676.oxygen_lines，在 itu_p676.figure1_conditions 的干大气（1013.25 hPa、15 °C、ρ = 0）下逐线求和；保留三位小数"
-    note: "公式：γo = 0.1820·f·(Σ Si·Fi + N″D)，各项见 itu_p676.method。频点取 fmcw_radar 两个频段的上下沿与中心（57–64 GHz、76–81 GHz）。独立核对：Python 包 itur 0.4.0（P.676-12，氧气部分与 -13 相同）的 gamma0_exact 在 60 / 61 / 77 GHz 给 14.6511 / 15.0369 / 0.0962 dB/km，与本条一致。77 GHz 的 0.096 只有 fmcw_radar 原记 0.4 dB/km 的四分之一左右：标准大气（7.5 g/m³）下水汽另有 0.251 dB/km，合计 0.348 dB/km，0.4 应是总气体衰减而不是氧气。"
+    note: "公式：γo = 0.1820·f·(Σ Si·Fi + N″D)，各项见 itu_p676.method。频点取 fmcw_radar 两个频段的上下沿与中心（57–64 GHz、76–81 GHz），另加 60.48 GHz（802.11ad / ay 信道 2 的中心，jcas60 在 #54 请求）。独立核对：Python 包 itur 0.4.0（P.676-12，氧气部分与 -13 相同）的 gamma0_exact 在 60 / 60.48 / 61 / 77 GHz 给 14.6511 / 14.9925 / 15.0369 / 0.0962 dB/km，与本条一致。77 GHz 的 0.096 只有 fmcw_radar 原记 0.4 dB/km 的四分之一左右：标准大气（7.5 g/m³）下水汽另有 0.251 dB/km，合计 0.348 dB/km，0.4 应是总气体衰减而不是氧气。"
 
   itu_p676.gamma_o_dry_sea_level_peak:
     value: {f_ghz: 60.81, db_per_km: 15.06}
