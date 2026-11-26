@@ -26,7 +26,7 @@ from ..config.loader import apply_overrides
 from ..config.schema import C0, RadarConfig
 from ..link.budget import LinkBudget, detection_range_m, link_budget, with_compression
 from ..link.compliance import check as compliance_check
-from ..link.leakage import LeakageBudget, leakage_budget
+from ..link.leakage import LeakageBudget, leakage_budget, leakage_need
 from ..lo import LOProfile, parked_lo
 from ..mimo import VirtualArray
 from ..phase_noise import RangeCorrelation
@@ -575,6 +575,7 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
     res.targets = target_rows(cfg, rc, cfg.mimo.n_tx, squeeze)
     res.angle = angle_metrics(cfg, budget.snr_cell_db, budget.snr_chirp_db, sc_r)
     res.leakage = leak
+    res.extras["leakage_need"] = leakage_need(cfg) if leak is not None else None
     res.cfar = cfar_statistics(cfg)
     if cfg.mimo.n_tx > 1:
         res.extras["snr_cell_per_tx_db"] = budget.snr_cell_db - 10.0 * math.log10(cfg.mimo.n_tx)

@@ -5,9 +5,12 @@ import math
 import numpy as np
 import pytest
 
-from fmcw_radar.config import RadarConfig, apply_overrides
+from conftest import REPO
+
+from fmcw_radar import report as rpt
+from fmcw_radar.config import RadarConfig, apply_overrides, config_to_dict, load_config
 from fmcw_radar.engine import run_statistical, run_time
-from fmcw_radar.link import leakage_budget
+from fmcw_radar.link import isolation_for_snr_loss, leakage_budget, leakage_need, leakage_snr_loss_db, link_budget
 from fmcw_radar.processing import apply_hpf, cfar_pd_monte_carlo, cfar_pd_swerling1, hpf_attenuation_db, pd_swerling0
 from fmcw_radar.processing.windows import coherent_gain_db, mainlobe_width_bins, peak_sidelobe_db, range_window
 
@@ -298,3 +301,107 @@ def test_blanking_zero_is_the_old_path_bit_for_bit():
     st = run_statistical(apply_overrides(cfg, {"rx.blank_s": 4e-6}))
     assert st.range_res_m / run_statistical(cfg).range_res_m == pytest.approx(1000 / 960, rel=0.01)
     assert st.snr_cell_db == pytest.approx(run_statistical(cfg).snr_cell_db - 10 * math.log10(1000 / 960), abs=0.02)
+
+
+# ---------------------------------------------------------------- 0.2.34 (fmcw_radar#44): what the leakage costs, for a reader comparing radars
+
+HP2 = {"leakage.enabled": True, "rx.hpf_corner_hz": 200e3, "rx.hpf_order": 2}
+
+
+def _flat(d, pre=""):
+    out = {}
+    for k, v in d.items():
+        out.update(_flat(v, pre + k + ".") if isinstance(v, dict) else {pre + k: v})
+    return out
+
+
+def test_the_leakage_config_is_the_default_with_the_model_and_its_filter_on():
+    """``radar_60g_sensing_leakage.yaml``: three fields away from the default
+    and nothing else -- the leakage model, and the second-order 200 kHz
+    high-pass an FMCW radar meets it with.  What does not see the leakage is
+    the default's, value for value; the SNR moves by the 0.02 dB the
+    leakage costs (and the filter's 0.002 dB at the target's beat)."""
+    a, b = load_config(REPO / "configs" / "radar_60g_sensing.yaml"), load_config(REPO / "configs" / "radar_60g_sensing_leakage.yaml")
+    fa, fb = _flat(config_to_dict(a)), _flat(config_to_dict(b))
+    assert {k: (fa[k], fb[k]) for k in fa if fa[k] != fb[k]} == {"leakage.enabled": (False, True), "rx.hpf_corner_hz": (0.0, 200e3), "rx.hpf_order": (1, 2)}
+    assert set(fa) == set(fb) and a == RadarConfig() and b == apply_overrides(RadarConfig(), HP2)
+    lin = {"lo.engine": "response"}
+    ra, rb = rpt.build(apply_overrides(a, lin)), rpt.build(apply_overrides(b, lin))
+    assert ra["leakage"] is None and rb["leakage"]["isolation_db"] == 20.0
+    for key in ("radar", "inputs", "target", "chirp", "nonlinearity", "angle"):          # what does not see the leakage or the filter
+        assert ra[key] == rb[key], key
+    snr = ("snr_cell_capped_db", "snr_cell_configured_db")                               # the check itself; the SNRs quoted beside it move
+    assert {k: v for k, v in ra["compliance"].items() if k not in snr} == {k: v for k, v in rb["compliance"].items() if k not in snr}
+    assert all(0.015 < ra["compliance"][k] - rb["compliance"][k] < 0.025 for k in snr)
+    # the LO's noise: the levels ahead of the filter are the default's; what the filter does to them on the map is its own column
+    pa, pb = ra["phase_noise"], rb["phase_noise"]
+    assert (pa["lo_rms_rad"], pa["residual_rms_rad"]) == (pb["lo_rms_rad"], pb["residual_rms_rad"])
+    assert [(r["offset_m"], r["per_bin_dbc"], r["per_cell_dbc"]) for r in pa["floor"]] == [(r["offset_m"], r["per_bin_dbc"], r["per_cell_dbc"]) for r in pb["floor"]]
+    assert all(r["map_shift_db"] == 0.0 for r in pa["floor"]) and all(0.0 < r["map_shift_db"] < 0.01 for r in pb["floor"])
+    assert ra["detection"]["range_at_pd"]["if_band_range_m"] == rb["detection"]["range_at_pd"]["if_band_range_m"]
+    assert 0.015 < ra["detection"]["snr_cell_db"] - rb["detection"]["snr_cell_db"] < 0.025
+    assert rb["detection"]["range_at_pd"]["snr_limited_range_m"] == pytest.approx(ra["detection"]["range_at_pd"]["snr_limited_range_m"], abs=0.01)
+
+
+def test_what_the_leakage_costs_and_the_isolation_it_would_take():
+    """The default radar, 20 dB of isolation (the band's sourced figure: a
+    board array without an isolation structure), -16 dBm of leakage at the
+    receiver, a beat of 8 kHz.
+
+    Behind a second-order 200 kHz high-pass the leakage is gone ahead of the
+    stages that would compress on it: 0.02 dB off the SNR, 4 dB under the
+    out-of-band compression point, and it would take the isolation down to
+    13.6 dB to cost 1 dB.  Without the filter it is an in-band signal 18 dB
+    over the in-band point: 7.2 dB off the SNR, 1 dB only from 35.6 dB of
+    isolation up.  The filter is worth 22 dB of isolation -- the number a
+    comparison with a waveform that cannot filter its leakage needs."""
+    cfg = apply_overrides(RadarConfig(), HP2)
+    bare = apply_overrides(RadarConfig(), {"leakage.enabled": True})
+    assert leakage_snr_loss_db(cfg) == pytest.approx(0.018, abs=0.002) and leakage_snr_loss_db(bare) == pytest.approx(7.19, abs=0.02)
+    assert leakage_snr_loss_db(RadarConfig()) == 0.0                                    # the model off: nothing
+    # the loss is the budget's own: with and without the receiver's compression by the leakage
+    st = run_statistical(apply_overrides(cfg, {"lo.engine": "response"}))
+    off = link_budget(cfg).snr_cell_db
+    assert off - st.snr_cell_db == pytest.approx(leakage_snr_loss_db(cfg), abs=1e-9)
+    need, need_bare = isolation_for_snr_loss(cfg), isolation_for_snr_loss(bare)
+    assert need == pytest.approx(13.58, abs=0.02) and need_bare == pytest.approx(35.58, abs=0.02)
+    for c, n in ((cfg, need), (bare, need_bare)):
+        at = lambda iso: leakage_snr_loss_db(apply_overrides(c, {"leakage.isolation_db": iso}))    # noqa: E731
+        assert at(n) == pytest.approx(1.0, abs=1e-6) and at(n - 3.0) > 1.5 > 1.0 > at(n + 3.0)
+    assert isolation_for_snr_loss(cfg, 3.0) < need < isolation_for_snr_loss(cfg, 0.1)
+    d = leakage_need(cfg)
+    assert (d["isolation_db"], d["isolation_source"], d["level_rx_dbm"], d["beat_hz"], d["hpf"]) == (20.0, "spec", -16.0, 8000.0, True)
+    assert (d["path_delay_s"], d["path_delay_source"]) == (0.2e-9, "assumed")
+    assert (d["p1db_kind"], d["without_hpf"]["p1db_kind"]) == ("out of band", "in band")
+    assert d["p1db_margin_db"] == pytest.approx(4.0) and d["without_hpf"]["p1db_margin_db"] == pytest.approx(-18.0)
+    assert d["isolation_needed_db"] == need and d["isolation_spare_db"] == pytest.approx(20.0 - need) and d["isolation_spare_db"] > 6.0
+    assert d["without_hpf"]["isolation_needed_db"] == need_bare and d["without_hpf"]["isolation_spare_db"] == pytest.approx(20.0 - need_bare)
+    assert d["without_hpf"]["isolation_needed_db"] - d["isolation_needed_db"] == pytest.approx(22.0, abs=0.1)
+    assert d["snr_loss_db"] == leakage_snr_loss_db(cfg) and d["without_hpf"]["snr_loss_db"] == leakage_snr_loss_db(bare)
+    assert leakage_need(RadarConfig()) is None
+    # a config with no filter of its own: both sides are the same radar
+    nb = leakage_need(bare)
+    assert nb["hpf"] is False and {k: nb[k] for k in nb["without_hpf"]} == nb["without_hpf"]
+    # at 40 dB (the isolation structure of the same paper) even the bare receiver is within 0.1 dB
+    assert leakage_snr_loss_db(apply_overrides(bare, {"leakage.isolation_db": 40.0})) < 0.1
+
+
+def test_the_report_says_what_the_leakage_costs_and_tags_the_path_delay():
+    cfg = apply_overrides(RadarConfig(), {**HP2, "lo.engine": "response"})
+    rep = rpt.build(cfg)
+    lk = rep["leakage"]
+    want = leakage_need(cfg)
+    assert {k: lk[k] for k in want} == want and lk["p1db_kind"] == "out of band" and lk["adc_headroom_db"] > 30.0
+    rows = {r["term"]: r for r in lk["rows"]}
+    assert rows["direct leakage: path delay"]["value"] == pytest.approx(0.2) and rows["direct leakage: path delay"]["unit"] == "ns (source: assumed)"
+    assert rows["TX-RX isolation"]["unit"] == "dB (source: spec)"
+    md = rpt.to_markdown(rep)
+    assert "takes **0.02 dB** off the SNR" in md and "It would cost 1 dB at 13.6 dB of isolation: 6.4 dB to spare" in md
+    assert "Without the IF high-pass the same leakage is an in-band signal: 7.19 dB off the SNR" in md and "(15.6 dB short)" in md
+    assert "The filter is worth 22.0 dB of isolation" in md and "path delay of 0.2 ns, source: assumed" in md
+    bare = rpt.to_markdown(rpt.build(apply_overrides(RadarConfig(), {"leakage.enabled": True, "lo.engine": "response"})))
+    assert "There is no IF high-pass in this configuration" in bare and "takes **7.19 dB** off the SNR" in bare
+    # a reflector's delay follows its range: only the direct path's is a number of its own
+    two = leakage_budget(apply_overrides(cfg, {"leakage.reflector_range_m": 0.02})).as_rows()
+    assert [lab for lab, _, _ in two if "path delay" in lab] == ["direct leakage: path delay"]
+    assert "leakage" in rep and rpt.build(apply_overrides(RadarConfig(), {"lo.engine": "response"}))["leakage"] is None

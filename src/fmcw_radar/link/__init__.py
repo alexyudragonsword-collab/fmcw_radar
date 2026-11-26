@@ -1,7 +1,9 @@
 from .budget import LinkBudget, adc_amplitudes, detection_range_m, link_budget, snr_vs_range
 from .compliance import ComplianceResult, TierResult, check_emission
 from .compliance import check as compliance_check
-from .leakage import LeakageBudget, LeakageTerm, leakage_budget, leakage_tones
+from .leakage import (LeakageBudget, LeakageTerm, isolation_for_snr_loss, leakage_budget, leakage_need, leakage_snr_loss_db,
+                      leakage_tones)
 
 __all__ = ["LinkBudget", "link_budget", "snr_vs_range", "detection_range_m", "adc_amplitudes", "LeakageBudget", "LeakageTerm",
-           "leakage_budget", "leakage_tones", "ComplianceResult", "TierResult", "compliance_check", "check_emission"]
+           "leakage_budget", "leakage_tones", "ComplianceResult", "TierResult", "compliance_check", "check_emission",
+           "leakage_snr_loss_db", "isolation_for_snr_loss", "leakage_need"]

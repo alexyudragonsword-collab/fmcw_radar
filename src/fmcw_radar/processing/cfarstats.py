@@ -73,6 +73,7 @@ length ``L = sum_k |R(k)|^2`` padded cells per axis (the pad factor times
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 
 import numpy as np
 from scipy.signal import correlate2d
@@ -81,9 +82,11 @@ from scipy.stats import beta as _beta
 from scipy.stats import gamma as _gamma
 from .detection import ncx2_sf as _ncx2_sf
 
-from ..config.schema import RadarConfig
 from .cfar import cfar_window, threshold_factor
 from .windows import range_window, window
+
+if TYPE_CHECKING:                       # cfar_statistics(cfg)'s annotation only: nothing of the config layer is imported at
+    from ..config.schema import RadarConfig     # load time, so the file can be vendored as it is (0.2.34, fmcw_radar#44)
 
 
 def cell_correlation(w: np.ndarray, pad: int, lags) -> np.ndarray:

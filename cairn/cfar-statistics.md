@@ -61,6 +61,15 @@ authoring_mode: ai_generated
 - 默认图上 Pd 0.9 要 **12.24 dB**(已知噪底 11.75 dB):CFAR 损失 0.49 dB,含自漏。独立格 N = 16 时回到里程碑 2 的 1.35 dB。
   对注入单音的蒙卡:N_eff ≥ 24 时 ±0.03;很短的帧(N_eff 5–12)±0.07(ROADMAP P1 #3)。2 × 4 MIMO、每 TX 16 chirp:每 look 5.0 dB 到 Pd 0.9。
 
+## 统计函数不带配置层也能用(0.2.34,fmcw_radar#44)
+
+- `processing/cfarstats.py` 与 `processing/rd.py` 加载时不再导入 `config.schema`(`RadarConfig` 只在 `TYPE_CHECKING` 下;`rd.py` 的 `C0` 在唯一用它的 `range_axis_m(cfg, …)` 里才导入)。
+  只吃窗、补零倍数、保护格与训练格数的那些函数(`cfar_statistics_2d`、`cfar_pd`、`cfar_snr_for_pd`、`cell_correlation` …)连同它们依赖的 `cfar.py` / `windows.py` / `detection.py`
+  可以整份拷进别的包。测试把这五个文件拷成另一个名字的包、在里面复算。
+- **CFAR 损失是图的性质,不是常数**:默认图(Hann × Hann、距离 4 倍补零、保护 2 训练 8)Pd 0.9 要 12.24 dB,比噪声电平已知时的 11.75 dB 多 0.49 dB;
+  不加窗、不补零的图同样的保护 / 训练格数只多 **0.05 dB**(11.80 dB)。差在目标自己漏进训练格的多少(窗把主瓣加宽、补零把它铺到更多格上)。
+  别的库借本库的 0.49 dB 去算一张不加窗的图,会把门限估高 0.44 dB。
+
 ## TDC 鬼目标进虚警账(P1 #1(c),0.2.4)
 
 - 鬼目标 = chirp 误差里每个 ramp 都相同的那部分:和目标同多普勒、相干累积,当作 SNR = 目标每 look SNR + 电平(dBc)的稳态目标(0.2.31 起是"图上电平 − 所在处噪底",见本节末条),`cfar_pd` 给它的 Pd,

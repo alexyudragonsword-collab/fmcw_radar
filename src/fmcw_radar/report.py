@@ -58,7 +58,10 @@ def report(cfg: RadarConfig, st: StatResult) -> dict:
                                                      "required_hpf_atten_db": st.leakage.required_hpf_atten_db,
                                                      "blank_recommended_s": st.leakage.blank_recommended_s,
                                                      "steady_clipping": st.leakage.steady_clipping,
-                                                     "blank_s": st.leakage.blank_s},
+                                                     "blank_s": st.leakage.blank_s,
+                                                     # for a reader comparing radars (0.2.34): level, which compression point,
+                                                     # the SNR it costs, the isolation it would take, and all of it without the filter
+                                                     **(st.extras.get("leakage_need") or {})},
     }
     return out
 
@@ -287,6 +290,21 @@ def to_markdown(rep: dict) -> str:
     if LK:
         lines += ["", "## TX-RX leakage", "", "| term | value | unit |", "|---|---:|---|"]
         lines += [f"| {row['term']} | {row['value']:.2f} | {row['unit']} |" for row in LK["rows"]]
+        if "snr_loss_db" in LK:
+            W, crit = LK["without_hpf"], LK["snr_loss_criterion_db"]
+            need = lambda d: ("under any isolation asked" if d["isolation_needed_db"] == 0.0                     # noqa: E731
+                              else f"{d['isolation_needed_db']:.1f} dB")
+            spare = lambda d: (f"{d['isolation_spare_db']:.1f} dB to spare" if d["isolation_spare_db"] >= 0.0    # noqa: E731
+                               else f"{-d['isolation_spare_db']:.1f} dB short")
+            lines += ["", f"What it costs: the leakage ({LK['level_rx_dbm']:.1f} dBm at the receiver, {LK['isolation_db']:g} dB of isolation, "
+                      f"source: {LK['isolation_source']}; a beat of {LK['beat_hz'] / 1e3:g} kHz from a path delay of "
+                      f"{LK['path_delay_s'] * 1e9:g} ns, source: {LK['path_delay_source']}) takes **{LK['snr_loss_db']:.2f} dB** off the SNR; it meets the "
+                      f"{LK['p1db_kind']} compression point with {LK['p1db_margin_db']:+.1f} dB of margin. It would cost {crit:g} dB at "
+                      f"{need(LK)} of isolation: {spare(LK)}."
+                      + (f" Without the IF high-pass the same leakage is an in-band signal: {W['snr_loss_db']:.2f} dB off the SNR, "
+                         f"{W['p1db_margin_db']:+.1f} dB against the {W['p1db_kind']} point, and {crit:g} dB at {need(W)} of isolation "
+                         f"({spare(W)}). The filter is worth {W['isolation_needed_db'] - LK['isolation_needed_db']:.1f} dB of isolation."
+                         if LK["hpf"] else " There is no IF high-pass in this configuration: the leakage is an in-band signal.")]
     return "\n".join(lines) + "\n"
 
 

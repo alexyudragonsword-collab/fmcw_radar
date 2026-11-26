@@ -51,7 +51,7 @@ from ..config.schema import RadarConfig
 from ..processing.iffilter import hpf_attenuation_db
 from ..processing.windows import enbw_bins, range_window, spectrum_db
 from .compression import rapp, small_signal
-from .budget import LinkBudget, link_budget
+from .budget import LinkBudget, link_budget, with_compression
 
 
 @dataclass(frozen=True)
@@ -93,7 +93,9 @@ class LeakageBudget:
 
     def as_rows(self) -> list[tuple[str, float, str]]:
         rows = [("TX-RX isolation", self.isolation_db, f"dB (source: {self.isolation_source})")]
-        for t in self.terms:
+        for k, t in enumerate(self.terms):
+            if k == 0:                          # the direct path's delay is a config number of its own; a reflector's follows its range
+                rows.append((f"{t.name}: path delay", t.delay_s * 1e9, f"ns (source: {PATH_DELAY_SOURCE})"))
             rows += [(f"{t.name}: beat", t.beat_hz / 1e3, "kHz"), (f"{t.name}: level at the receiver", t.level_rx_dbm, "dBm"),
                      (f"{t.name}: level at the ADC", t.level_adc_dbm, "dBm"),
                      (f"{t.name}: high-pass attenuation", t.hpf_atten_db, "dB"),
@@ -223,6 +225,75 @@ def leakage_budget(cfg: RadarConfig, budget: LinkBudget | None = None) -> Leakag
                          strong1, sig_db, noise_db, image_dbc)
 
 
+#: the leakage's path delay has no source: the schema's default (0.2 ns, a beat of 8 kHz on the default chirp) is a
+#: placeholder for "a few centimetres of board", and a number set in a config is the config's
+PATH_DELAY_SOURCE = "assumed"
+#: the isolations ``isolation_for_snr_loss`` looks between [dB]
+ISOLATION_SEARCH_DB = (0.5, 100.0)
+
+
+def leakage_snr_loss_db(cfg: RadarConfig, budget: LinkBudget | None = None) -> float:
+    """What the leakage costs the SNR of one cell [dB, >= 0]: the link
+    budget's cell SNR with the receiver compressed by the leakage against
+    the same budget without it.  The echo loses gain in the stage the
+    leakage drives, the thermal noise nearly as much, and the ADC's
+    quantisation noise nothing -- so the loss is the difference of the
+    first two plus what the quantisation noise then adds.  The leakage's
+    own skirt at the target's cell is not in it (``leakage_at_target_cell_dbc``)."""
+    b = link_budget(cfg) if budget is None else budget
+    lk = leakage_budget(cfg, b)
+    if lk is None:
+        return 0.0
+    return b.snr_cell_db - with_compression(b, lk.compression_signal_db, lk.compression_noise_db).snr_cell_db
+
+
+def isolation_for_snr_loss(cfg: RadarConfig, loss_db: float = 1.0) -> float:
+    """The TX-RX isolation at which the leakage costs ``loss_db`` of SNR
+    (``leakage_snr_loss_db``), everything else as configured: a bisection
+    over ``leakage.isolation_db``.  0.0 when it costs less than that even at
+    the least isolation asked."""
+    import dataclasses
+
+    b = link_budget(cfg)
+    at = lambda iso: leakage_snr_loss_db(                                                           # noqa: E731
+        dataclasses.replace(cfg, leakage=dataclasses.replace(cfg.leakage, enabled=True, isolation_db=iso)), b)
+    lo, hi = ISOLATION_SEARCH_DB
+    if not at(lo) > loss_db:
+        return 0.0
+    for _ in range(40):
+        mid = 0.5 * (lo + hi)
+        lo, hi = (mid, hi) if at(mid) > loss_db else (lo, mid)
+    return hi
+
+
+def leakage_need(cfg: RadarConfig, budget: LinkBudget | None = None, loss_db: float = 1.0) -> dict | None:
+    """What a reader comparing radars asks of the leakage (the report's
+    ``leakage`` keys, fmcw_radar#44): its level at the receiver, which
+    compression point it meets and with what margin, what it costs the SNR,
+    the isolation at which it would cost ``loss_db`` and how much the
+    configured one has to spare over that -- and the same without the IF
+    high-pass, which is what makes the difference: under the corner the
+    leakage's beat is filtered out ahead of the stages that would compress
+    on it.  None when the leakage model is off."""
+    import dataclasses
+
+    lk = leakage_budget(cfg, budget)
+    if lk is None:
+        return None
+
+    def side(c: RadarConfig, k: LeakageBudget) -> dict:
+        need = isolation_for_snr_loss(c, loss_db)
+        return {"snr_loss_db": leakage_snr_loss_db(c), "p1db_kind": k.p1db_kind, "p1db_margin_db": k.p1db_margin_db,
+                "adc_headroom_db": k.adc_headroom_db, "isolation_needed_db": need, "isolation_spare_db": k.isolation_db - need}
+
+    bare = dataclasses.replace(cfg, rx=dataclasses.replace(cfg.rx, hpf_corner_hz=0.0))
+    return {"isolation_db": lk.isolation_db, "isolation_source": lk.isolation_source,
+            "path_delay_s": cfg.leakage.path_delay_s, "path_delay_source": PATH_DELAY_SOURCE,
+            "beat_hz": lk.terms[0].beat_hz, "level_rx_dbm": lk.terms[0].level_rx_dbm,
+            "snr_loss_criterion_db": loss_db, "hpf": cfg.rx.hpf_corner_hz > 0.0, **side(cfg, lk),
+            "without_hpf": side(bare, leakage_budget(bare))}
+
+
 def leakage_tones(cfg: RadarConfig) -> list[tuple[float, float]]:
     """``(delay [s], amplitude [V])`` of every leakage term for the time engine, at the receiver input
     referred to the ADC's scale through the receive gain: the engine applies the compression stages itself."""
@@ -233,4 +304,5 @@ def leakage_tones(cfg: RadarConfig) -> list[tuple[float, float]]:
     return [(t.delay_s, math.sqrt(10.0 ** ((t.level_rx_dbm + g_rx - 30.0) / 10.0) * 50.0)) for t in lb.terms]
 
 
-__all__ = ["LeakageBudget", "LeakageTerm", "leakage_budget", "leakage_tones"]
+__all__ = ["LeakageBudget", "LeakageTerm", "leakage_budget", "leakage_tones", "leakage_snr_loss_db", "isolation_for_snr_loss",
+           "leakage_need", "PATH_DELAY_SOURCE", "ISOLATION_SEARCH_DB"]
