@@ -1,4 +1,4 @@
-# Vendored from spec_sources@18241cd698facbc745ff73c7e7b267d915436acc: src/spec_sources/data/frontend60.yaml
+# Vendored from spec_sources@98b1d1b33d091ccd3133775610ced59e8bf72c16: src/spec_sources/data/frontend60.yaml
 # Adapted-copy policy: see src/fmcw_radar/vendor/__init__.py
 # frontend60 —— 60 GHz 收发前端的测量值：接收机（通信 / 雷达）、收发隔离、封装内天线。
 #
@@ -88,3 +88,30 @@ entries:
     section: "Abstract；II.A System Requirements；III.D Measurement Results of the RF Front-End"
     quote: "The entire system including both RF and BB using a 6-dBi antenna built in the organic package can transmit 3.1 Gb/s over 1.8 m in QPSK and 6.3 Gb/s over 0.05 m in 16QAM. [...] The PA has a 4-to-5 dB back-off from a saturated output power of 6.0 dBm and the transmitter and receiver antennas have a gain of 6.0 dBi. [...] The transmitter and receiver have two independent 6-dBi antennas, which are embedded in a generic organic ball-grid array (BGA) package [...] The RF chip is implemented in a BGA package, and two 6-dBi antennas embedded in the package for Tx and Rx [19], [20] are used for the measurement."
     note: "65 nm 四信道 60 GHz 收发机，收、发各用一个内嵌在有机 BGA 封装里的 6 dBi 天线（封装 16.3 × 14.4 mm，芯片经 270 µm 键合线接天线，板上没有 60 GHz 连线）。原文的系统设计按 PA 从 Psat 6.0 dBm 回退 4–5 dB、收发天线各 6.0 dBi 算，目标是 QPSK 1.5 m、16QAM 0.5 m；实测 QPSK 3.1 Gb/s 传 1.8 m、16QAM 6.3 Gb/s 传 0.05 m。通信收发机用的封装内天线，作灵敏度档；基准档取的是读过原文的 rx60.comm_asada2011 的 2 dBi。阵列增益是里程碑 2 的事，不在这里。迁入时就是 6.0，读原文后值不变。"
+
+  rx60.amp_spasaro2024_compression:
+    value: {pin_dbm: [-40.0, -38.0, -36.0, -34.0, -32.0, -30.0, -28.0, -26.0, -25.0, -24.0, -23.0, -22.0, -21.0, -20.0, -19.0, -18.5], gt_db: [9.92, 9.91, 9.89, 9.86, 9.82, 9.76, 9.65, 9.51, 9.41, 9.3, 9.16, 8.99, 8.79, 8.55, 8.29, 8.15], ip1db_dbm: -21.8, f0_ghz: 57.25, s21_db: 9.9, nf_min_db: 7.1, vdd_v: 0.88, ip1db_dbm_vdd_0p8: -20.2}
+    unit: "dBm, dB, dBm, GHz, dB, dB, V, dBm"
+    source: spec
+    cite: "M. Spasaro, S. Bonen, G. Cooke, T. Jager, T. D. Nhut, M. Sufrà, S. P. Voinigescu, D. Zito, 'Cryogenic Compact Low-Power 60GHz Amplifier for Spin Qubit Control in Monolithic Silicon Quantum Processors', IMS 2022 的作者稿，arXiv:2406.12115（CC BY-NC-ND 4.0）；2026-11-26 读原文，Fig. 5(b) 渲染后按像素读图"
+    section: "IV.A Room Temperature（Fig. 5(b) Measured transducer gain GT vs. input power）"
+    quote: "(arXiv:2406.12115) This paper presents a cryogenic compact low-power 60GHz amplifier (AMP) in 22nm fully-depleted silicon-on-insulator (FDSOI) CMOS technology [...] Fig. 5 reports the measurement results for VDD = 0. 88 V. [...] AMP exhibits a center frequency f0 of 57.25 GHz, S21 of 9.9 dB and a minimum NF of 7.1 dB in its 3dB bandwidth. Fig. 5(b) reports the measured transducer gain (GT) as a function of the input power (Pin) at f0. The AMP exhibits an input-referred P1dB (IP1dB) of -21.8 dBm. For VDD = 0.8 V, f0 = 57.25 GHz, S21 = 7.3 dB and IP1dB = -20.2 dBm. [...] Fig. 5. Room-temperature performances of AMP for VDD = 0.88 V: (a) Sparameters (measured) and NF (measured and simulated). (b) Measured transducer gain GT vs. input power (Pin) and P1dB at center frequency f0."
+    note: "22 nm FDSOI CMOS 的 60 GHz 放大器在室温、VDD 0.88 V 下的增益压缩曲线。**读图值，不是表**：pin_dbm / gt_db 是本库把 Fig. 5(b)（722 × 384 像素）逐列取迹线中心读的（x 轴以 −35、−20 dBm 两条刻度、y 轴以 9.5、8.5 dB 两条刻度定标），读数误差约 ±0.02 dB（增益）、±0.05 dB（输入功率）；迹线在 −18.1 dBm 处出图（8.0 dB 轴）。文中的 ip1db_dbm、f0_ghz、s21_db、nf_min_db 是原文的数；读图的迹线在 −21.8 dBm 处为 8.96 dB，比 −40 dBm 处的 9.92 dB 低 0.96 dB，与文中的 IP1dB 相符（tests/test_iron_rules.py 核对）。它是给自旋量子比特驱动用的放大器，不是接收机 LNA，但 50 Ω、测了噪声系数，压缩的形状可作 60 GHz CMOS 前端的参照。AM/PM 原文没有。"
+
+  rx60.rx_moody2023_compression:
+    value: {pin_dbm: [-27.5, -26.5, -25.5, -24.5, -23.5, -22.5, -21.5, -20.5, -19.5, -18.5, -17.5], conversion_gain_db: [25.5, 25.5, 25.39, 25.2, 25.19, 24.98, 24.58, 24.07, 23.76, 23.28, 22.77], ip1db_dbm: -21.5, gain_at_ip1db_db: 24.5, op1db_dbm: 3.0, f_rf_ghz: 67.0, rf_band_ghz: [60.0, 75.0], nf_dsb_min_db: 3.6, power_mw: 23.0}
+    unit: "dBm, dB, dBm, dB, dBm, GHz, GHz, dB, mW"
+    source: spec
+    cite: "J. Moody, S. Lepanowski, T. Forbes (Sandia National Laboratories), 'A 67GHz 23mW Receiver Utilizing Complementary Current Reuse Techniques', SAND2025-02836C，OSTI 3022982（www.osti.gov 公开全文；EuMIC 2022 论文的会议版本）；2026-11-26 读原文，Fig. 7(b) 渲染后按像素读图"
+    section: "Abstract；III. Measurement Results（Fig. 7(b) measured receiver P1dB）"
+    quote: "(OSTI 3022982) operating between 60 GHz and 75 GHz for an RF bandwidth of 15 GHz. [...] The receiver achieves 3.6 dB of NF, -21.5 dB P1dB and 15 GHz BW while consuming only 23 mW power consumption. [...] The receiver is implimented in a 45nm RF SOI CMOS process [...] and the input 1dB compression point (Fig 7) is found to be -21.5dBm for a conversion gain of 24.5dB showing an overall output 1dB compression of 3dBm. [...] Fig. 7. (a) Measured receiver IF gain across operating frequency showing IF bandwidth of 2.5GHz, (b) measured receiver P1dB"
+    note: "45 nm RF SOI CMOS 直接变频接收机（LNA → 混频器 → 基带，60–75 GHz）在 67 GHz 测的 SSB 变频增益压缩曲线。**读图值，不是表**：pin_dbm / conversion_gain_db 是本库从 Fig. 7(b)（474 × 754 像素）读的折线各顶点（x 轴以 −26、−16 dBm、y 轴以 25.5、22.5 dB 定标）；图上的数据看来按约 0.1 dB 量化，读数按 ±0.1 dB 用。文中的 IP1dB −21.5 dBm 对应增益 24.5 dB（小信号 25.5 dB 低 1 dB），OP1dB 3 dBm；读图在 −21.5 dBm 处为 24.58 dB，相符（tests/test_iron_rules.py 核对）。同一工作的两页摘要（OSTI 2004749）写 IP1dB −20.4 dBm，与这里不一致，这里按全文。作者的报告（OSTI 2004750）说 IP1dB 受混频器跨导级限制。测量频率 67 GHz，比 57–66 GHz 略高；AM/PM 原文没有。"
+
+  rx60.radar_bgt60tr13c:
+    value: {f_rf_ghz: [58.0, 63.5], rx_p1db_dbm_min: -10.0, rx_p1db_dbm_typ: -5.0, tx_rx_isolation_db_typ: 50.0, rx_to_rx_isolation_db_typ: 40.0, rx_conversion_gain_db: [12.0, 14.0, 16.0], rx_nf_ssb_db_typ: 12.0, rx_nf_ssb_db_max: 14.0, tx_power_dbm: [1.0, 4.0, 8.0]}
+    unit: "GHz, dBm, dBm, dB, dB, dB (min, typ, max), dB, dB, dBm (min, typ, max)"
+    source: spec
+    cite: "Infineon BGT60TR13C Datasheet V2.4.9（2023-11-21），www.infineon.com 公开 PDF；2026-11-26 读原文"
+    section: "Analog-RF Domain Functional Specification，Table 55 RF FE Specifications 及其脚注"
+    quote: "(BGT60TR13C V2.4.9) Table 55 RF FE Specifications, min and max values cover the specified frequency range, fRF = 58.0 to 63.5 GHz. [...] Transmit Output Power1) PTX dBm 1.0 4.0 8.0 Conductive Power [...] Receiver Conversion Gain2) CGRX dB 12 14 16 [...] Receiver Single Sideband Noise Figure NFssbRX dB 12 14 @100kHz offset Receiver 1-dB Compression Point P-1dBRX dBm -10 -5 Channel-to-Channel RX Isolation 3) IsoRX dB 40 LO feedthrough at the RX port3) LOfeedRX dBm -30 TX-to-RX Isolation 3) IsoTXRX dB 50 [...] : at die pad [...] : not including the package"
+    note: "英飞凌 60 GHz FMCW 雷达芯片 BGT60TR13C（1 发 3 收）数据手册的射频前端表。接收机 1 dB 压缩点 min −10、typ −5 dBm，TX 到 RX 的隔离 typ 50 dB、通道间隔离 typ 40 dB——这两个隔离**不含封装**（脚注 3），发射功率是芯片焊盘处的传导功率（脚注 1）。它只给压缩点一个数、没有压缩曲线，也没有 IIP3。与 rx60.radar_iwr6843（TI 同频段，带外 P1dB −12 dBm）可作对照。"

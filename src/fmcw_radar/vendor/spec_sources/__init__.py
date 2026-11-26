@@ -3,7 +3,7 @@
 spec_sources is the siblings' shared table of numbers about the outside
 world (specification clauses, datasheet and paper figures, and what is
 derived from them alone), each with its provenance.  Vendored here at
-``18241cd698facbc745ff73c7e7b267d915436acc`` (its main, spec_sources#50):
+``98b1d1b33d091ccd3133775610ced59e8bf72c16`` (its main, spec_sources#61):
 ``reader.py`` and the six domain tables fmcw_radar reads --
 ``data/frontend60.yaml`` (the 60 GHz radar chip's figures, its Figure 7-2,
 the TX-RX isolation and its derived no-EBG figure), ``data/atmosphere.yaml``
