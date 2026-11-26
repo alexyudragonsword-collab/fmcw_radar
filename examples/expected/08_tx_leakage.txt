@@ -1,5 +1,6 @@
 leakage budget (TX 12 dBm backed off 8 dB, isolation 20 dB (source: spec), reflector at 0.02 m -10 dB; high-pass order 2 at 200 kHz):
   TX-RX isolation                                                    20.00 dB (source: spec)
+  direct leakage: path delay                                          0.20 ns (source: assumed)
   direct leakage: beat                                                8.00 kHz
   direct leakage: level at the receiver                             -16.00 dBm
   direct leakage: level at the ADC                                   23.50 dBm

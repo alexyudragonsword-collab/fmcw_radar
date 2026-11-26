@@ -259,3 +259,48 @@ def test_time_engine_noise_only_frame_false_alarms_at_the_exact_rate():
     rate = det[:, band].sum() / (pw.shape[0] * band.sum())
     clusters = count_clusters(det[:, band])
     assert clusters > 150 and rate == pytest.approx(s["pfa_cell"], rel=5.0 / math.sqrt(clusters) + 0.02)
+
+
+# ---------------------------------------------------------------- 0.2.34 (fmcw_radar#44): the statistics stand without the config layer
+
+def test_the_statistics_can_be_vendored_without_the_config_layer(tmp_path):
+    """``cfarstats.py`` and ``rd.py`` import nothing of the config layer when
+    they load: copied with the three modules they stand on into a package of
+    another name, they load and compute -- the 12.24 dB the default radar's
+    CA-CFAR needs for Pd 0.9 (Hann windows, range padded four times: 0.49 dB
+    over a known noise level), and the 11.80 dB of a map with no window and
+    no padding (0.05 dB).  The loss is the map's, not a constant."""
+    import ast
+    import importlib
+    import sys
+    from conftest import REPO
+
+    src = REPO / "src" / "fmcw_radar" / "processing"
+    for name in ("cfarstats.py", "rd.py"):
+        top = [n for n in ast.parse((src / name).read_text()).body if isinstance(n, ast.ImportFrom)]
+        assert all(n.level <= 1 for n in top), name                                  # siblings only; the config layer is two dots up
+        assert {n.module for n in top if n.level == 1} <= {"detection", "cfar", "windows"}
+    pkg = tmp_path / "vend_proc"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("")
+    for name in ("cfarstats.py", "rd.py", "cfar.py", "windows.py", "detection.py"):
+        (pkg / name).write_text((src / name).read_text())
+    sys.path.insert(0, str(tmp_path))
+    try:
+        cs, rd, win = (importlib.import_module(f"vend_proc.{m}") for m in ("cfarstats", "rd", "windows"))
+        assert cs.__file__.startswith(str(tmp_path)) and not any(k.startswith("vend_proc.config") for k in sys.modules)
+        cfg = RadarConfig()
+        p = cfg.processing
+        ours = cs.cfar_statistics_2d(win.window(p.window_doppler, cfg.chirp.n_chirps), p.doppler_pad,
+                                     win.range_window(p.window_range, cfg.n_samples, 0), p.range_pad, p.cfar_guard, p.cfar_train, p.cfar_pfa)
+        need = cs.cfar_snr_for_pd(0.9, ours)
+        bare = cs.cfar_snr_for_pd(0.9, cs.cfar_statistics_2d(win.window("rect", 64), 1, win.window("rect", 512), 1, p.cfar_guard, p.cfar_train, p.cfar_pfa))
+        frame = np.exp(2j * np.pi * 0.25 * np.arange(64))[None, :] * np.ones((8, 1))
+        assert rd.power_db(rd.doppler_fft(rd.range_fft(frame, "hann"), "hann")).shape == (8, 64)
+    finally:
+        sys.path.remove(str(tmp_path))
+        for k in [k for k in sys.modules if k == "vend_proc" or k.startswith("vend_proc.")]:
+            del sys.modules[k]
+    assert need == cfar_snr_for_pd(0.9, cfar_statistics(cfg)) == pytest.approx(12.24, abs=0.005)
+    assert need - snr_for_pd(0.9, p.cfar_pfa) == pytest.approx(0.49, abs=0.005)
+    assert bare == pytest.approx(11.80, abs=0.005) and bare - snr_for_pd(0.9, p.cfar_pfa) == pytest.approx(0.05, abs=0.005)

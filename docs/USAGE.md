@@ -36,7 +36,8 @@ blanking 的时长,0.2.1:距离窗按剩下的样本重配,`cfg.n_blank` 是样�
   最后一个 chirp 的距离剖面与宽度、CFAR 检测;`extras["targets_found"]`(每目标 `(距离, 速度, 相对电平[, 角度])` 或 None)、`clipped_fraction`;
   MIMO 时 `frame` 是 (chirp, RX, 样本) 立方,`extras` 多 `angle_deg`、`angle_spectrum`、`snapshot`、`doppler_fine_hz`。开关只为一致性检查,config 里没有。
 - `VirtualArray(cfg)`:`x_v`、`filled`、`snapshot(theta, doppler)`、`estimate(snapshot, doppler)`、`beamwidth_deg`、`crlb_sigma_deg`、`angle_error_budget(snr_chirp_db, theta, doppler)`、`coupling_bias_deg`、
-  `tdm_bias_deg`、`sweep_squint`。`leakage_budget(cfg)` 与 `leakage_tones(cfg)`;`cfar_pd_monte_carlo(snr_db, pfa, n_train, trials, swerling=0|1)`、
+  `tdm_bias_deg`、`sweep_squint`。`leakage_budget(cfg)` 与 `leakage_tones(cfg)`;0.2.34:`leakage_snr_loss_db(cfg)`(泄漏让格点 SNR 掉多少)、`isolation_for_snr_loss(cfg, loss_db=1.0)`(掉这么多所需的隔离)、
+  `leakage_need(cfg)`(报告 `leakage` 里的那组:电平、压缩点与余量、SNR 损失、所需隔离与余量,以及不开高通时的同一组;路径时延带 `assumed` 标签);`cfar_pd_monte_carlo(snr_db, pfa, n_train, trials, swerling=0|1)`、
   `cfar_pd_swerling1`、`cfar_statistics(cfg)` / `cfar_statistics_2d(..., n_looks)` / `cfar_pd(snr_db, stats)` / `cfar_snr_for_pd`(`processing.cfarstats`)、
   `threshold_factor(n, pfa, n_looks)` / `ca_cfar_2d(..., n_looks)` / `cfar_window(shape, guard, train)`、`hpf_attenuation_db` / `apply_hpf`;`range_window(name, n, n_blank)` 是 blanking 后的距离窗(所有距离 FFT 与窗统计都走它)。
 - `compliance_check(cfg)`(`fmcw_radar.link`)→ `ComplianceResult`:发射端对 47 CFR §15.255(c)(2)。`applies` / `why`、`tiers`(每档:`in_band`、`scenario`、`off_time`、

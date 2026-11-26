@@ -1,0 +1,60 @@
+# The default 60 GHz sensing radar (radar_60g_sensing.yaml) with the TX-RX leakage
+# model on, and the IF high-pass an FMCW radar meets it with: second order,
+# 200 kHz (the filter of radar_60g_mimo.yaml and example 08).  Everything else is
+# the default's, number for number (tests/test_leakage.py holds the two files to
+# that).  For a reader comparing radars: the report's "TX-RX leakage" section
+# says what the leakage costs, which compression point it meets, the isolation
+# it would take, and the same without the filter (fmcw_radar#44).
+# The isolation is the band's sourced 20 dB (a board array without an isolation
+# structure); the path delay, 0.2 ns, is a placeholder (source: assumed).
+# No near reflector: the direct path only.  rx.blank_s stays 0 as in the default:
+# the report recommends 3.9 us for the flyback transient the filter lets through
+# (the time engine clips 3 % of the samples without it; the budget does not).
+schema_version: 1
+band:
+  kind: 60g_sensing
+  center_hz: 60.0e9
+  sweep_hz: 4.0e9
+chirp:
+  shape: sawtooth
+  duration_s: 100.0e-6
+  idle_s: 0.0
+  n_chirps: 64
+  frame_period_s: 0.03333333333333333   # 30 frames a second; only the regulatory check reads it (47 CFR 15.255: at least 31.9 ms)
+lo:
+  fref_hz: 100.0e6
+  loop_bw_hz: 1.0e6
+  phase_margin_deg: 60.0
+  kdco_hz: 50.0e3
+  dp_gain: 1.0
+  dp_cal: offline
+  dp_cal_iterations: 2
+  engine: event
+frontend: {}
+channel:
+  extra_loss_db: 0.0
+target:
+  kind: human
+  range_m: 5.0
+  velocity_mps: 2.0
+leakage:
+  enabled: true
+rx:
+  if_bw_hz: 4.0e6
+  adc_fs_hz: 10.0e6
+  adc_bits: 12
+  adc_fullscale_dbm: 4.0
+  hpf_corner_hz: 200.0e3
+  hpf_order: 2
+processing:
+  window_range: hann
+  window_doppler: hann
+  range_pad: 4
+  doppler_pad: 1
+  cfar_guard: 2
+  cfar_train: 8
+  cfar_pfa: 1.0e-4
+sim:
+  seed: 1
+  engine: statistical
+  time_osr: 1.25

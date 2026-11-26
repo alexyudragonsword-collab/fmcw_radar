@@ -5,14 +5,23 @@ along the samples (zero-padded ``range_pad`` times for a finer read of the
 profile; the resolution is the window's, not the padding's), the Doppler
 FFT along the chirps, centred with ``fftshift`` so the velocity axis runs
 ``-v_max .. +v_max``.
+
+Nothing of the config layer is imported when this module loads (0.2.34,
+fmcw_radar#44): the functions that take frames, windows and maps stand on
+numpy and ``windows`` alone, so another library can vendor the file as it
+is.  Only the three that take a ``RadarConfig`` read one.
 """
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 
-from ..config.schema import C0, RadarConfig
 from .windows import peak_sidelobe_of, range_window, width_at_level, window
+
+if TYPE_CHECKING:                       # annotations only
+    from ..config.schema import RadarConfig
 
 
 def range_fft(frame: np.ndarray, name: str, pad: int = 1, n_blank: int = 0) -> np.ndarray:
@@ -45,6 +54,8 @@ def range_doppler_map(frame: np.ndarray, cfg: RadarConfig) -> np.ndarray:
 
 def range_axis_m(cfg: RadarConfig, n_fft: int) -> np.ndarray:
     """Range of each range bin: ``f c / (2 S)`` with f the FFT bin frequency (0 .. fs)."""
+    from ..config.schema import C0      # with the config it is given: not at load time
+
     f = np.fft.fftfreq(n_fft, d=1.0 / cfg.rx.adc_fs_hz)
     return f * C0 / (2.0 * cfg.slope_hz_per_s)
 

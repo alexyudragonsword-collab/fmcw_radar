@@ -4,6 +4,19 @@
 
 ---
 
+## [0.2.34] — 2026-11-26 — 泄漏的代价进报告、一份开着泄漏的对照配置;CFAR 统计函数不带配置层也能拷走(fmcw_radar#44,jcas60 的请求;原有数字不动)
+
+- **`configs/radar_60g_sensing_leakage.yaml`**:默认配置 + 泄漏模型 + 2 阶 200 kHz 高通,三个字段,别的逐项相同。请求原话是"只打开泄漏、别的都不动";没照字面做:
+  默认配置没有高通,只开泄漏得到的是一台带内被泄漏压 18 dB 的接收机(SNR 掉 7.19 dB),不是 FMCW 雷达实际的样子。
+- **报告的 `leakage` 多一组键**(`link.leakage_need`):泄漏电平、撞上哪个压缩点与余量、`snr_loss_db`、`isolation_needed_db`(掉 1 dB 所需的隔离)、`isolation_spare_db`,
+  以及 `without_hpf` 下的同一组;Markdown 多一段。默认雷达:开高通 0.02 dB / 需 13.6 dB / 余 6.4 dB;不开 7.19 dB / 需 35.6 dB / 缺 15.6 dB。高通值 22 dB 的隔离。
+- 泄漏的路径时延在报告里带出处标签(`assumed`):泄漏表多一行 `direct leakage: path delay`。
+- **`processing/cfarstats.py`、`processing/rd.py` 加载时不导入配置层**:只吃窗和格数的统计函数可以连同 `cfar.py` / `windows.py` / `detection.py` 整份拷进别的包。函数签名与数值不动。
+- **哪些数动了**:原有值一个没动。指纹多 171 个新键(新配置 168 个;三个开泄漏的用例各多一行路径时延)。示例 08 多一行。
+- 测试 +4(全套 472 条,原 468);break-check 九处各自变红。
+
+---
+
 ## [0.2.33] — 2026-11-25 — 合规检查的显式参数入口;报告给最远探测距离(fmcw_radar#42,jcas60 的请求;原有数字不动)
 
 - **`check_emission(...)`**(`fmcw_radar.link`):§15.255(c)(2) 的规则在显式参数上——占用频段、发射功率与增益、一帧里发射机开着的区间、帧周期、场景,以及取限值的函数 `number`。
