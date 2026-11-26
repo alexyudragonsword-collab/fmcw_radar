@@ -34,7 +34,11 @@ def test_api_serves_the_spec_and_runs_the_report():
     assert code == 200 and cfg["values"]["target.range_m"] == 5.0 and cfg["tags"]["frontend.tx_power_dbm"] == "spec"
     assert "leakage.isolation_db" in cfg["inert"] and cfg["refused"] == {}
     code, src = api.call("sources")
-    assert len(src["entries"]) == 85 and src["entries"]["60g_sensing.tx_power_dbm"]["source"] == "spec"
+    from fmcw_radar.sources import all_entries
+
+    assert set(src["entries"]) == set(all_entries()) and src["entries"]["60g_sensing.tx_power_dbm"]["source"] == "spec"
+    # text entries too (0.2.35: two statements read word for word from spec_sources) -- the page shows an entry as it is
+    assert src["entries"]["fcc15255.radar_occupied_bandwidth.quantity"]["value"] == "occupied bandwidth (47 CFR 2.1049)"
     # a run is guiutil's, value for value (the wall time aside)
     code, run = api.call("run", {"values": FAST})
     direct = guiutil.run_report(FAST)

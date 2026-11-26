@@ -43,10 +43,14 @@ def test_every_limit_is_read_from_the_shared_table():
     from fmcw_radar.vendor import spec_sources as ss
 
     mine = {k: e for k, e in sources.all_entries().items() if k.startswith("fcc15255.")}
-    assert len(mine) == 44
+    # 44 numbers, and (0.2.35) two statements read word for word: what is measured, and where that requirement stands
+    said = {k: e for k, e in mine.items() if k.startswith("fcc15255.radar_occupied_bandwidth.")}
+    assert len(mine) == 46 and sorted(said) == ["fcc15255.radar_occupied_bandwidth.codified", "fcc15255.radar_occupied_bandwidth.quantity"]
+    assert all(isinstance(e.value, str) for e in said.values()) and all(not isinstance(e.value, str) for k, e in mine.items() if k not in said)
     for key, e in mine.items():
         assert e.source == "spec" and e.quote and e.section and e.upstream.startswith("spec_sources:fcc15255."), key
-        assert float(e.value) == float(ss.ref(e.upstream.split(":", 1)[1])), key
+        up = ss.ref(e.upstream.split(":", 1)[1])
+        assert (e.value == up) if key in said else (float(e.value) == float(up)), key
     for tier, (_, _, has_off, has_bw, has_cond) in comp.TIERS.items():
         assert f"fcc15255.{tier}.peak_eirp_dbm" in mine and f"fcc15255.{tier}.band_low_hz" in mine
         assert (f"fcc15255.{tier}.off_time_sum_min_s" in mine) == has_off
@@ -153,7 +157,7 @@ def test_full_power_radar_is_8_db_over_and_its_frame_rate_is_capped():
     d = _tier(res, "radar_default")
     assert d.eirp_margin_db == pytest.approx(-12.0) and d.conducted_margin_db == pytest.approx(-22.0)
     assert _tier(res, "radar_57_64_outdoor").scenario == "not declared" and _tier(res, "radar_57_59p4_indoor").in_band is False
-    assert len(res.readings) == 5 and res.sources == {"tx_power_dbm": "spec", "tx_backoff_db": "config", "tx_gain_dbi": "assumed", "band": "spec"}
+    assert len(res.readings) == 6 and res.sources == {"tx_power_dbm": "spec", "tx_backoff_db": "config", "tx_gain_dbi": "assumed", "band": "spec"}
 
 
 def test_off_time_follows_the_frame_period():

@@ -27,9 +27,22 @@ with the result, so nobody takes the reading for the rule):
 * "Indoor", "outdoor", "fixed", "vehicular" are not defined.  The config
   declares one (``regulatory.scenario``) or nothing; undeclared, the tiers
   that depend on it are reported as "scenario not declared" and not used.
-* How the occupied band is measured: taken as the commanded sweep,
-  ``center +- sweep / 2``.  No margin for temperature or supply, which
+* Which band decides whether an emission is "within" a tier's band.  The
+  tiers are judged here on the commanded sweep, ``center +- sweep / 2``.
+  FCC 23-35 para. 62 has the occupied bandwidth of 47 CFR 2.1049 measured
+  as part of the compliance measurements -- a statement of the Report and
+  Order, not of the rule's text -- and neither says that this measured band
+  is what a tier's band is compared with (spec_sources' reading,
+  fmcw_radar#46).  The measured band is reported beside the verdict
+  (``link/occupied.py``; ``check_emission(occupied_band_hz=...)``): for a
+  linear sweep it lies inside the commanded one, so the commanded sweep is
+  the stricter of the two.  No margin for temperature or supply, which
   paragraph (f) wants the fundamental kept inside the band under.
+* Whether the transmitter is on between ramps: taken as off (the ramps are
+  the transmit intervals).  If it stays on through ``chirp.idle_s`` the
+  flyback's transient is part of the emission and its occupied band can
+  reach the commanded edge or pass it; the report gives that band too
+  whenever there is idle time.
 * Which part of an off-time counts when the 33 ms interval cuts it: the
   part inside the interval, of an off-time that is itself at least 2 ms
   long.  (Counting only pieces that are 2 ms long *inside* the interval
@@ -180,6 +193,9 @@ class TierResult:
     compliant: bool | None              # as configured; None = the power is within the limit but the off-time cannot be
                                         # judged (the frame period is not declared)
     sources: dict = field(default_factory=dict)
+    # with a measured occupied band handed in (47 CFR 2.1049; reported, the verdict above stays on the commanded sweep):
+    in_band_measured: bool | None = None        # the measured band lies inside this tier's band
+    bandwidth_ok_measured: bool | None = None   # the measured bandwidth meets the tier's bandwidth condition (None: it has none)
 
     @property
     def max_frame_rate_hz(self) -> float | None:
@@ -205,6 +221,7 @@ class ComplianceResult:
     eirp_cap_dbm: float | None = None   # what the EIRP has to come down to under the governing tier (its conducted limit too)
     readings: tuple = ()                # what the rule leaves open and how it was read here
     sources: dict = field(default_factory=dict)
+    occupied_ghz: tuple[float, float] | None = None    # the measured occupied band handed in (None: none was)
 
     @property
     def tier(self) -> TierResult | None:
@@ -238,7 +255,7 @@ class ComplianceResult:
              "tx_power_dbm": self.tx_power_dbm, "tx_backoff_db": self.tx_backoff_db,
              "frame_on_s": self.frame_on_s, "frame_period_s": self.frame_period_s, "scenario": self.scenario,
              "governing": self.governing, "eirp_cap_dbm": self.eirp_cap_dbm, "readings": list(self.readings),
-             "sources": dict(self.sources), "tiers": []}
+             "sources": dict(self.sources), "occupied_ghz": None if self.occupied_ghz is None else list(self.occupied_ghz), "tiers": []}
         for t in self.tiers:
             d["tiers"].append({"tier": t.tier, "label": t.label, "band_ghz": list(t.band_ghz),
                                "peak_eirp_limit_dbm": t.peak_eirp_limit_dbm, "conducted_limit_dbm": t.conducted_limit_dbm,
@@ -246,7 +263,8 @@ class ComplianceResult:
                                "off_time_required_s": t.off_time_required_s, "off_time_have_s": t.off_time_have_s,
                                "min_frame_period_s": t.min_frame_period_s, "max_frame_rate_hz": t.max_frame_rate_hz,
                                "eirp_margin_db": t.eirp_margin_db, "conducted_margin_db": t.conducted_margin_db,
-                               "usable": t.usable, "power_ok": t.power_ok, "compliant": t.compliant, "sources": dict(t.sources)})
+                               "usable": t.usable, "power_ok": t.power_ok, "compliant": t.compliant, "sources": dict(t.sources),
+                               "in_band_measured": t.in_band_measured, "bandwidth_ok_measured": t.bandwidth_ok_measured})
         g = self.tier
         if g is not None:
             d.update({"limit_dbm": g.peak_eirp_limit_dbm, "eirp_margin_db": g.eirp_margin_db,
@@ -257,8 +275,13 @@ class ComplianceResult:
 
 READINGS = (
     "'Indoor', 'outdoor', 'fixed' and 'vehicular' are not defined in the rule: the config's regulatory.scenario is taken at its word.",
-    "The occupied band is taken as the commanded sweep (center +- sweep / 2); the rule does not say how it is measured, and no "
-    "margin is kept for the temperature and supply range of paragraph (f).",
+    "The tiers are judged on the commanded sweep (center +- sweep / 2).  FCC 23-35 para. 62 has the occupied bandwidth of 47 CFR "
+    "2.1049 measured as part of the compliance measurements -- in the Report and Order, not in the rule's text -- and neither says "
+    "that the measured band is what a tier's band is compared with.  The measured band is reported beside the verdict; for a linear "
+    "sweep it lies inside the commanded one, which makes the commanded sweep the stricter reading.  No margin is kept for the "
+    "temperature and supply range of paragraph (f).",
+    "The transmitter is taken to be on during the ramps only.  If it stays on through the idle time between ramps, the flyback's "
+    "transient is part of the emission and the occupied band can reach the commanded edge or pass it (reported when there is idle time).",
     "An off-time counts if it is continuous for at least 2 ms; of one the 33 ms interval cuts, the part inside the interval counts.",
     "The rule does not say how several transmit channels add.  TDM: one transmitter is on at a time, the EIRP is one transmitter's.",
     "Peak EIRP is taken as tx_power_dbm - tx_backoff_db + tx_gain_dbi, peak conducted power as tx_power_dbm - tx_backoff_db; the "
@@ -270,7 +293,7 @@ def check_emission(f_lo_hz: float, f_hi_hz: float, tx_power_dbm: float, tx_gain_
                    on_intervals: Sequence[tuple[float, float]], *, number: Callable, tx_backoff_db: float = 0.0,
                    frame_period_s: float | None = None, scenario: str | None = None, n_tx: int = 1,
                    occupied_bw_hz: float | None = None, frame_on_s: float | None = None,
-                   sources: dict | None = None) -> ComplianceResult:
+                   sources: dict | None = None, occupied_band_hz: tuple[float, float] | None = None) -> ComplianceResult:
     """An emission against 47 CFR 15.255(c)(2), on explicit numbers.
 
     ``f_lo_hz``, ``f_hi_hz``: the band the emission occupies (how it is
@@ -288,7 +311,13 @@ def check_emission(f_lo_hz: float, f_hi_hz: float, tx_power_dbm: float, tx_gain_
     own width when not given.  ``frame_on_s``: reported only; first start to
     last end when not given.  ``sources``: the tags of ``tx_power_dbm``,
     ``tx_backoff_db`` and ``tx_gain_dbi``, reported with the result
-    (``NOT_STATED`` for those left out).
+    (``NOT_STATED`` for those left out).  ``occupied_band_hz``: the
+    emission's *measured* occupied band ``(lower, upper)`` (47 CFR 2.1049),
+    when the caller has one: each tier then also says whether that band lies
+    inside its own and meets its bandwidth condition
+    (``in_band_measured``, ``bandwidth_ok_measured``).  The verdict does not
+    change with it: it stays on ``f_lo_hz .. f_hi_hz`` (see the module's
+    note on which band decides).
 
     ``number``: the function every limit is read through --
     ``number("fcc15255.<tier>.<field>")`` and ``number("fcc15255.band_low_hz"
@@ -309,6 +338,8 @@ def check_emission(f_lo_hz: float, f_hi_hz: float, tx_power_dbm: float, tx_gain_
                            tx_power_dbm=pt0, tx_backoff_db=bo,
                            sources={**{k: given.get(k, NOT_STATED) for k in ("tx_power_dbm", "tx_backoff_db", "tx_gain_dbi")},
                                     "band": number("fcc15255.band_low_hz").source})
+    if occupied_band_hz is not None:
+        res.occupied_ghz = (occupied_band_hz[0] / 1e9, occupied_band_hz[1] / 1e9)
     if f_hi <= lo or f_lo >= hi:
         res.why = (f"the sweep {f_lo / 1e9:g}-{f_hi / 1e9:g} GHz lies outside the {lo / 1e9:g}-{hi / 1e9:g} GHz band this section "
                    f"governs; its limits are not applied to it")
@@ -351,7 +382,10 @@ def check_emission(f_lo_hz: float, f_hi_hz: float, tx_power_dbm: float, tx_gain_
             compliant=compliant,
             sources={"peak_eirp_dbm": tag(tier, "peak_eirp_dbm"), "band": tag(tier, "band_low_hz"),
                      **({"off_time": tag(tier, "off_time_sum_min_s")} if has_off else {}),
-                     **({"peak_conducted_dbm": tag(tier, "peak_conducted_dbm")} if has_cond else {})}))
+                     **({"peak_conducted_dbm": tag(tier, "peak_conducted_dbm")} if has_cond else {})},
+            in_band_measured=None if occupied_band_hz is None else bool(occupied_band_hz[0] >= b_lo and occupied_band_hz[1] <= b_hi),
+            bandwidth_ok_measured=(None if occupied_band_hz is None or not has_bw
+                                   else bool(occupied_band_hz[1] - occupied_band_hz[0] <= num(tier, "max_bandwidth_hz")))))
     usable = [t for t in res.tiers if t.usable]
     if usable:
         # the highest limit; between two equal ones the tier that asks for no off-time
@@ -363,11 +397,13 @@ def check_emission(f_lo_hz: float, f_hi_hz: float, tx_power_dbm: float, tx_gain_
     return res
 
 
-def check(cfg: RadarConfig) -> ComplianceResult:
+def check(cfg: RadarConfig, occupied_band_hz: tuple[float, float] | None = None) -> ComplianceResult:
     """The configuration against 47 CFR 15.255(c)(2).  Reads the sweep, the
     transmit power and antenna gain, the frame's burst, ``chirp.frame_period_s``
     and ``regulatory.scenario``; changes nothing.  ``check_emission`` on the
-    config's numbers, the limits read from this library's source table."""
+    config's numbers, the limits read from this library's source table.
+    ``occupied_band_hz``: the chirp's measured occupied band, when the caller
+    has run the chirp engine (``link.occupied.chirp_occupied_band``)."""
     from ..sources import number
 
     pt0, s_pt = cfg.frontend_value("tx_power_dbm")
@@ -378,7 +414,7 @@ def check(cfg: RadarConfig) -> ComplianceResult:
         cfg.band.center_hz - 0.5 * cfg.band.sweep_hz, cfg.band.center_hz + 0.5 * cfg.band.sweep_hz, pt0, gt,
         frame_intervals(c.n_chirps, c.duration_s, c.pri_s), number=number, tx_backoff_db=bo, frame_period_s=c.frame_period_s,
         scenario=cfg.regulatory.scenario, n_tx=cfg.mimo.n_tx, occupied_bw_hz=cfg.band.sweep_hz, frame_on_s=c.frame_on_s,
-        sources={"tx_power_dbm": s_pt, "tx_backoff_db": s_bo, "tx_gain_dbi": s_gt})
+        sources={"tx_power_dbm": s_pt, "tx_backoff_db": s_bo, "tx_gain_dbi": s_gt}, occupied_band_hz=occupied_band_hz)
 
 
 __all__ = ["RULE", "TIERS", "READINGS", "NOT_STATED", "TierResult", "ComplianceResult", "check", "check_emission", "frame_intervals",
