@@ -708,3 +708,30 @@ entries:
     section: "§15.255(b)(3)；(c)(2) 首句"
     quote: "(2) Field disturbance sensors/radars shall not exceed −10 dBm peak conducted output power and 10 dBm peak EIRP except that field disturbance sensors/radars that limit their operation to all or part of the specified frequency band may operate without being subject to a transmitter conducted output power limit if they operate in compliance with paragraph (b)(3) of this section or with one or more of the provisions below:"
     note: "装在无人机上、工作频率限制在 60–64 GHz 之内(离地 ≤ 121.92 m,本库不建模高度):计入关断的最短连续时长;更短的空闲(chirp 之间的回扫)不算关断。"
+  fcc2.occupied_bandwidth.power_outside_each_limit_pct:
+    value: 0.5
+    unit: "%"
+    source: spec
+    upstream: "spec_sources:fcc2.occupied_bandwidth#power_outside_each_limit_pct"
+    cite: "47 CFR 2.202, 2.1049 and 2.1041, eCFR current text (2026-11-20); read in the original by spec_sources (2026-11-26, fmcw_radar#46 / spec_sources#61)"
+    section: "§2.202(a); §2.1049"
+    quote: "The occupied bandwidth, that is the frequency bandwidth such that, below its lower and above its upper frequency limits, the mean powers radiated are each equal to 0.5 percent of the total mean power radiated by a given emission shall be measured under the following conditions as applicable"
+    note: "占用带宽的定义:上限以上、下限以下的平均功率各占该发射总平均功率的份额(每侧,%)。本库用它从 chirp 的实际频率轨迹算 99 % 占用频段(link/occupied.py),只报告、不改判定。"
+  fcc15255.radar_occupied_bandwidth.quantity:
+    value: "occupied bandwidth (47 CFR 2.1049)"
+    unit: ""
+    source: spec
+    upstream: "spec_sources:fcc15255.radar_occupied_bandwidth#quantity"
+    cite: "FCC 23-35, Report and Order 'Amendment of Section 15.255 of the Commission's Rules', ET Docket No. 21-264 (adopted 2023-05-18), and 47 CFR 15.255, 15.31 (eCFR 2026-11-20); read in the original by spec_sources (2026-11-25 / 2026-11-26, fmcw_radar#46 / spec_sources#61)"
+    section: "FCC 23-35 ¶61, ¶62, fn 160, 163, 167"
+    quote: "(FCC 23-35 para. 62) With respect to transmission bandwidth, we agree with Valeo that the occupied bandwidth be measured as part of the compliance measurements. Doing so will ensure fidelity to the requirements specified in section 2.1049 as required by section 15.201(b)."
+    note: "雷达合规测量里要测的带宽是哪一种:文字条目,原样引 spec_sources 的字段,报告照印。"
+  fcc15255.radar_occupied_bandwidth.codified:
+    value: "only the sweep condition (15.255(i)(2); 15.31(c) excepts 15.255); the occupied-bandwidth sentence is in R&O para. 62, not in the rule text"
+    unit: ""
+    source: spec
+    upstream: "spec_sources:fcc15255.radar_occupied_bandwidth#codified"
+    cite: "FCC 23-35, Report and Order 'Amendment of Section 15.255 of the Commission's Rules', ET Docket No. 21-264 (adopted 2023-05-18), and 47 CFR 15.255, 15.31 (eCFR 2026-11-20); read in the original by spec_sources (2026-11-25 / 2026-11-26, fmcw_radar#46 / spec_sources#61)"
+    section: "FCC 23-35 ¶62 and Appendix B (Final Rules); 47 CFR §15.255(i)(2), §15.31(c)"
+    quote: "(FCC 23-35 para. 62) With respect to transmission bandwidth, we agree with Valeo that the occupied bandwidth be measured as part of the compliance measurements. Doing so will ensure fidelity to the requirements specified in section 2.1049 as required by section 15.201(b)."
+    note: "第 62 段的效力:写进条文的只有'扫频开着测';占用带宽那句是委员会在 R&O 正文里的说法,不在 §15.255 的条文里。文字条目,报告照印。"

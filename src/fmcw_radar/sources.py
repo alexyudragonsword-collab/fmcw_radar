@@ -69,18 +69,21 @@ class SourcedNumber:
         return f"{self.value} {self.unit} (source: {self.source})".replace("  ", " ")
 
 
-def upstream_value(ref: str) -> float:
-    """The number ``ref`` names in spec_sources (``spec_sources:<reference>``; the
-    reader's ref(): ``<key>[#<field>[@<axis>=<value>]]``, lookup only)."""
+def upstream_value(ref: str) -> float | str:
+    """What ``ref`` names in spec_sources (``spec_sources:<reference>``; the
+    reader's ref(): ``<key>[#<field>[@<axis>=<value>]]``, lookup only): a
+    number, or -- for a field that is a statement about the source, not a
+    quantity -- its text as it stands there."""
     repo, _, rest = ref.partition(":")
     if repo != "spec_sources" or not rest:
         raise ValueError(f"upstream {ref!r}: expected 'spec_sources:<reference>'")
     from .vendor.spec_sources import ref as lookup
 
     try:
-        return float(lookup(rest))
+        v = lookup(rest)
     except KeyError as e:                       # keep this module's contract: a bad reference is a ValueError
         raise ValueError(f"upstream {ref!r}: {e}") from e
+    return v if isinstance(v, str) else float(v)
 
 
 def load_sources(path: Path | str = SOURCES_FILE) -> dict[str, SourcedNumber]:
@@ -102,7 +105,9 @@ def load_sources(path: Path | str = SOURCES_FILE) -> dict[str, SourcedNumber]:
                                  section=str(e.get("section", "")), upstream=str(e.get("upstream", "")))
         if out[key].upstream:
             up = upstream_value(out[key].upstream)
-            if abs(float(out[key].value) - up) > 1e-9:
+            same = (out[key].value == up if isinstance(up, str) or isinstance(out[key].value, str)        # text: word for word
+                    else abs(float(out[key].value) - up) <= 1e-9)
+            if not same:
                 raise ValueError(f"entry {key!r}: value {out[key].value} is not its upstream's "
                                  f"({out[key].upstream} = {up}); the sibling's table moved, or this one did")
     return out

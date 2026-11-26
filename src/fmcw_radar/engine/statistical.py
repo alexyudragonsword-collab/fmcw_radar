@@ -27,6 +27,7 @@ from ..config.schema import C0, RadarConfig
 from ..link.budget import LinkBudget, detection_range_m, link_budget, with_compression
 from ..link.compliance import check as compliance_check
 from ..link.leakage import LeakageBudget, leakage_budget, leakage_need
+from ..link.occupied import chirp_occupied_band
 from ..lo import LOProfile, parked_lo
 from ..mimo import VirtualArray
 from ..phase_noise import RangeCorrelation
@@ -626,8 +627,12 @@ def run_statistical(cfg: RadarConfig, chirp: ChirpResult | None = None) -> StatR
         res.extras["nonlinearity_profile"] = (nl["axis_m"], nl["profile_db"])
     res.cfar.update(cfar_detection(cfg, res, rc))
     res.extras["range_at_pd"] = range_at_pd(cfg, res.cfar)
-    comp = compliance_check(cfg)
+    # the chirp's occupied band as its LO made it (47 CFR 2.1049, FCC 23-35 para. 62): reported with the check, which
+    # still judges the tiers on the commanded sweep -- the wider of the two for a linear sweep (link/occupied.py)
+    occ = chirp_occupied_band(cfg, chirp)
+    comp = compliance_check(cfg, occupied_band_hz=(occ["lo_hz"], occ["hi_hz"]))
     res.compliance = comp.as_dict()
+    res.compliance["occupied_band"] = occ
     if comp.eirp_cap_dbm is not None:
         # the same budget at the governing tier's limit: EIRP = min(configured, limit), nothing else changed
         # (the leakage and the compression it causes are the configured transmitter's)

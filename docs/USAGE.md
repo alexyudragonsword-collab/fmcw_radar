@@ -47,6 +47,9 @@ blanking 的时长,0.2.1:距离窗按剩下的样本重配,`cfg.n_blank` 是样�
   0.2.33:`check_emission(f_lo_hz, f_hi_hz, tx_power_dbm, tx_gain_dbi, on_intervals, *, number, ...)`(`fmcw_radar.link`)是同一套规则在显式参数上的入口,不读配置对象;
   `number` 是取限值的函数(键 `fcc15255.<档>.<字段>` → 带 `.value` / `.source` 的对象),`on_intervals` 是一帧里发射机开着的区间(`compliance.frame_intervals(n, on_s, pri_s)`)。
   `link/compliance.py` 加载时不导入本库的其它模块,可以单独拷走。
+- `chirp_occupied_band(cfg, chirp=None)`、`occupied_band(freq_hz, outside_each_limit_pct)`(`fmcw_radar.link`,0.2.35):chirp 实际频率轨迹的 99 % 占用频段(47 CFR §2.1049)。
+  报告的 `compliance.occupied_band` 给两条边、带宽、相对指令边的余量、过冲与越界时间;有空闲段时另给 `with_idle`。判定仍按指令扫频;
+  每档多 `in_band_measured` / `bandwidth_ok_measured`。`check_emission(..., occupied_band_hz=(lo, hi))` 可以交进一个实测频段。
 - `detection_range_m(cfg, snr_req_db, eirp_cap_dbm=None)`(`fmcw_radar.link`):一个 look 的 SNR 落到给定值的距离。报告的 `detection.range_at_pd` 给 Pd 0.9 的:
   `snr_limited_range_m`、`if_band_range_m`、`range_m`(取近的)、`limited_by`。
   `frontend.tx_backoff_db`(0.2.20):发射机从 `tx_power_dbm` 回退多少 dB,≥ 0;留空取频段的占位(60 GHz 档 8 dB:回退到这一节 14 dBm 的上限;77 GHz 档 0)。

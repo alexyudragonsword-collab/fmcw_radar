@@ -24,7 +24,8 @@ def report(cfg: RadarConfig, st: StatResult) -> dict:
                   "lo_loop_bw_mhz": cfg.lo.loop_bw_hz / 1e6, "lo_engine": cfg.lo.engine, "lo_source": st.extras.get("lo_source"),
                   "if_bw_mhz": cfg.rx.if_bw_hz / 1e6, "adc_fs_msps": cfg.rx.adc_fs_hz / 1e6, "adc_bits": cfg.rx.adc_bits,
                   "range_res_rect_m": st.range_res_rect_m, "range_res_m": st.range_res_m,
-                  "range_window": cfg.processing.window_range, "window_sidelobe_db": st.window_sidelobe_db,
+                  "range_window": cfg.processing.window_range, "doppler_window": cfg.processing.window_doppler,
+                  "window_sidelobe_db": st.window_sidelobe_db,
                   "max_range_m": st.extras["max_range_m"], "velocity_res_mps": st.velocity_res_mps,
                   "max_velocity_mps": st.extras["max_velocity_mps"]},
         "target": {"kind": cfg.target.kind, "range_m": cfg.target.range_m, "velocity_mps": cfg.target.velocity_mps,
@@ -101,9 +102,43 @@ def _compliance_lines(K: dict) -> list:
         lines.append(f"| {t['label']} | {t['band_ghz'][0]:g}-{t['band_ghz'][1]:g} | {t['peak_eirp_limit_dbm']:g} | "
                      f"{'yes' if t['in_band'] else 'no'} | {t['scenario']} | {t['off_time']}{need} | {t['eirp_margin_db']:+.1f} | "
                      f"{tmin} | {'yes' if t['usable'] else 'no'} |")
+    lines += _occupied_lines(K)
     lines += ["", "Every limit, band edge and off-time figure above is `source: spec` (the rule's current text, through "
               "spec_sources). What the rule leaves open, and how it is read here:", ""]
     return lines + [f"- {r}" for r in K["readings"]]
+
+
+def _occupied_lines(K: dict) -> list:
+    """The chirp's measured occupied band beside the verdict (the verdict itself is on the commanded sweep)."""
+    O = K.get("occupied_band")
+    if not O:
+        return []
+    ghz = lambda hz: f"{hz / 1e9:.4f}"                                                               # noqa: E731
+    where = lambda d: ("inside the commanded edges by "                                              # noqa: E731
+                       f"{d['margin_lo_hz'] / 1e6:.2f} / {d['margin_hi_hz'] / 1e6:.2f} MHz" if d["inside_commanded"]
+                       else f"**past a commanded edge** (low {-d['margin_lo_hz'] / 1e6:+.2f} MHz, high {-d['margin_hi_hz'] / 1e6:+.2f} MHz)")
+    lines = ["", f"Occupied band, measured ({O['quantity']}: {O['outside_each_limit_pct']:g} % of the mean power outside each limit, "
+             f"source: {O['source']}), from the `{O['engine']}` chirp engine's frequency over the ramps: "
+             f"**{ghz(O['lo_hz'])}-{ghz(O['hi_hz'])} GHz, {O['bandwidth_hz'] / 1e9:.4f} GHz** "
+             f"({100.0 * O['bandwidth_hz'] / O['commanded_bw_hz']:.2f} % of the commanded {O['commanded_bw_hz'] / 1e9:g} GHz), {where(O)}. "
+             f"The frequency passes a commanded edge by at most {O['excursion_lo_hz'] / 1e6:.2f} / {O['excursion_hi_hz'] / 1e6:.2f} MHz, for "
+             f"{O['time_outside_lo_pct']:.3f} / {O['time_outside_hi_pct']:.3f} % of the time (low / high). "
+             "The tiers above are judged on the commanded sweep, the wider band."]
+    meas = [t for t in K["tiers"] if t.get("in_band_measured") is not None]
+    moved = [t["label"] for t in meas if t["in_band_measured"] != t["in_band"]]
+    bw = [t for t in meas if t.get("bandwidth_ok_measured") is not None]
+    lines[-1] += (" Judged on the measured band instead, " + ("no tier's \"sweep inside\" would change" if not moved
+                                                              else "these tiers' \"sweep inside\" would change: " + "; ".join(moved))
+                  + "".join(f"; the bandwidth condition of {t['label']} is {'met' if t['bandwidth_ok_measured'] else 'not met'} by it" for t in bw
+                            if t["in_band_measured"]) + ".")
+    lines[-1] += f" Where the requirement to measure it stands: {O['codified']}."
+    W = O.get("with_idle")
+    if W:
+        lines += ["", f"If the transmitter stays on through the idle time between ramps, the emission is {ghz(W['lo_hz'])}-{ghz(W['hi_hz'])} GHz "
+                  f"({W['bandwidth_hz'] / 1e9:.4f} GHz), {where(W)}; the frequency is under the commanded low edge for "
+                  f"{W['time_outside_lo_pct']:.2f} % of the time, by up to {W['excursion_lo_hz'] / 1e6:.2f} MHz. Whether the PA is keyed off "
+                  "there is not modelled."]
+    return lines
 
 
 def _parked_lines(K: dict | None, notes: list) -> list:
